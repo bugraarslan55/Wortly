@@ -85,6 +85,7 @@ export default function YazmaScreen() {
   const [phase, setPhase] = useState<Phase>('input');
   const [isCorrect, setIsCorrect] = useState(false);
   const [score, setScore] = useState(0);
+  const [wrongWordIds, setWrongWordIds] = useState<string[]>([]);
   const inputRef = useRef<TextInput>(null);
 
   const currentWord = sessionWords[currentIndex];
@@ -104,13 +105,14 @@ export default function YazmaScreen() {
     const correct = getAcceptedAnswers(currentWord).includes(given);
     updateMastery(currentWord.id, correct);
     if (correct) setScore(s => s + 1);
+    else setWrongWordIds(current => [...current, currentWord.id]);
     setIsCorrect(correct);
     setPhase('result');
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (currentIndex + 1 >= sessionWords.length) {
-      saveSession({
+      await saveSession({
         id: Date.now().toString(36),
         date: Date.now(),
         type: 'yazma',
@@ -119,7 +121,16 @@ export default function YazmaScreen() {
         total: sessionWords.length,
         topicId,
       });
-      router.replace(`/alistirma/sonuc?score=${score}&total=${sessionWords.length}&type=yazma` as any);
+      router.replace({
+        pathname: '/alistirma/sonuc',
+        params: {
+          score: String(score),
+          total: String(sessionWords.length),
+          type: 'yazma',
+          topicId: topicId ?? '',
+          wrongIds: wrongWordIds.join(','),
+        },
+      } as any);
     } else {
       setCurrentIndex(i => i + 1);
       setInput('');
@@ -266,7 +277,7 @@ export default function YazmaScreen() {
           <Text style={styles.ctaBtnText}>Kontrol Et</Text>
         </TouchableOpacity>
       ) : (
-        <TouchableOpacity style={styles.ctaBtn} onPress={handleNext} activeOpacity={0.85}>
+        <TouchableOpacity style={styles.ctaBtn} onPress={() => void handleNext()} activeOpacity={0.85}>
           <Text style={styles.ctaBtnText}>
             {currentIndex + 1 >= sessionWords.length ? 'Sonuçları Gör' : 'Devam Et'}
           </Text>

@@ -17,12 +17,35 @@ const TYPE_LABELS: Record<string, string> = {
 
 export default function SonucScreen() {
   const router = useRouter();
-  const { score, total, type } = useLocalSearchParams<{ score: string; total: string; type: string }>();
+  const { score, total, type, topicId, wrongIds } = useLocalSearchParams<{
+    score: string;
+    total: string;
+    type: string;
+    topicId?: string;
+    wrongIds?: string;
+  }>();
   const { profile, updateStreak } = useUserStore();
 
   const scoreNum = parseInt(score || '0');
   const totalNum = parseInt(total || '1');
   const percentage = totalNum > 0 ? (scoreNum / totalNum) * 100 : 0;
+  const canRetryWrongAnswers = (
+    type === 'dinle-yaz' || type === 'dinle-sec' || type === 'yazma'
+  ) && Boolean(topicId && wrongIds);
+
+  const retryWrongAnswers = () => {
+    if (!canRetryWrongAnswers) return;
+
+    const pathname = type === 'dinle-sec'
+      ? '/alistirma/dinle-sec'
+      : type === 'yazma'
+        ? '/alistirma/yazma'
+        : '/alistirma/dinle-yaz';
+    router.replace({
+      pathname,
+      params: { topicId, wordIds: wrongIds },
+    } as any);
+  };
 
   useEffect(() => {
     updateStreak();
@@ -88,6 +111,17 @@ export default function SonucScreen() {
 
         {/* Buttons */}
         <View style={styles.buttonGroup}>
+          {canRetryWrongAnswers && (
+            <TouchableOpacity
+              style={styles.retryBtn}
+              onPress={retryWrongAnswers}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Yanlış cevaplanan kelimeleri tekrar çalış"
+            >
+              <Text style={styles.retryBtnText}>Yanlışları Tekrarla</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={styles.homeBtn}
             onPress={() => router.replace('/(tabs)' as any)}
@@ -137,6 +171,8 @@ const styles = StyleSheet.create({
   tipBox: { backgroundColor: Colors.surfaceContainerLow, borderRadius: 12, padding: Spacing.md, width: '100%' },
   tipText: { fontSize: 13, color: Colors.onSurfaceVariant, lineHeight: 20 },
   buttonGroup: { width: '100%', gap: Spacing.sm },
+  retryBtn: { backgroundColor: Colors.secondary, borderRadius: BorderRadius.lg, height: 54, alignItems: 'center', justifyContent: 'center' },
+  retryBtnText: { fontSize: 16, fontWeight: '700', color: Colors.surfaceContainerLowest },
   homeBtn: { backgroundColor: Colors.golden, borderRadius: BorderRadius.lg, height: 54, alignItems: 'center', justifyContent: 'center' },
   homeBtnText: { fontSize: 16, fontWeight: '700', color: Colors.primary },
   topicsBtn: { borderRadius: BorderRadius.lg, height: 50, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: Colors.outlineVariant },

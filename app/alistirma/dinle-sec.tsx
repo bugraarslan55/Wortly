@@ -40,7 +40,7 @@ function createQuestion(word: Word, wordPool: Word[]): ListenQuestion | undefine
 
 export default function DinleSecScreen() {
   const router = useRouter();
-  const { topicId } = useLocalSearchParams<{ topicId?: string }>();
+  const { topicId, wordIds } = useLocalSearchParams<{ topicId?: string; wordIds?: string }>();
   const topic = topicId ? getTopicById(topicId) : undefined;
   const { startSession, saveSession } = useSessionStore();
   const [speakingRate, setSpeakingRate] = useState<'normal' | 'slow' | null>(null);
@@ -48,6 +48,7 @@ export default function DinleSecScreen() {
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [score, setScore] = useState(0);
+  const [wrongWordIds, setWrongWordIds] = useState<string[]>([]);
   const [isCompleting, setIsCompleting] = useState(false);
   const speechRunRef = useRef(0);
 
@@ -56,11 +57,18 @@ export default function DinleSecScreen() {
       return [];
     }
 
-    return shuffle(topic.words)
+    const retryIds = wordIds?.split(',').filter(Boolean) ?? [];
+    const questionPool = retryIds.length > 0
+      ? retryIds
+          .map(id => topic.words.find(word => word.id === id))
+          .filter((word): word is Word => Boolean(word))
+      : topic.words;
+
+    return shuffle(questionPool)
       .slice(0, SESSION_SIZE)
       .map(word => createQuestion(word, topic.words))
       .filter((question): question is ListenQuestion => Boolean(question));
-  }, [topic?.id]);
+  }, [topic?.id, wordIds]);
 
   const question = sessionQuestions[currentIndex];
   const totalQuestions = sessionQuestions.length;
@@ -127,6 +135,7 @@ export default function DinleSecScreen() {
     if (selectedOptionId || !question) return;
     setSelectedOptionId(optionId);
     if (optionId === question.word.id) setScore(current => current + 1);
+    else setWrongWordIds(current => [...current, question.word.id]);
   };
 
   const handleNext = async () => {
@@ -143,7 +152,16 @@ export default function DinleSecScreen() {
         total: totalQuestions,
         topicId,
       });
-      router.replace(`/alistirma/sonuc?score=${score}&total=${totalQuestions}&type=dinle-sec` as any);
+      router.replace({
+        pathname: '/alistirma/sonuc',
+        params: {
+          score: String(score),
+          total: String(totalQuestions),
+          type: 'dinle-sec',
+          topicId: topicId ?? '',
+          wrongIds: wrongWordIds.join(','),
+        },
+      } as any);
       return;
     }
 

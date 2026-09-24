@@ -54,16 +54,25 @@ function shuffle<T>(items: T[]): T[] {
 
 export default function DinleYazScreen() {
   const router = useRouter();
-  const { topicId } = useLocalSearchParams<{ topicId?: string }>();
+  const { topicId, wordIds } = useLocalSearchParams<{ topicId?: string; wordIds?: string }>();
   const topic = topicId ? getTopicById(topicId) : undefined;
   const isSupportedTopic = topic?.level === 'A1' || topic?.level === 'A2';
   const { startSession, saveSession } = useSessionStore();
-  const sessionWords = useMemo(
-    () => isSupportedTopic ? shuffle(topic.words).slice(0, SESSION_SIZE) : [],
-    [isSupportedTopic, topic?.id],
-  );
+  const sessionWords = useMemo(() => {
+    if (!isSupportedTopic) return [];
+
+    const retryIds = wordIds?.split(',').filter(Boolean) ?? [];
+    const wordPool = retryIds.length > 0
+      ? retryIds
+          .map((id) => topic.words.find((word) => word.id === id))
+          .filter((word): word is Word => Boolean(word))
+      : topic.words;
+
+    return shuffle(wordPool).slice(0, SESSION_SIZE);
+  }, [isSupportedTopic, topic?.id, wordIds]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [score, setScore] = useState(0);
+  const [wrongWordIds, setWrongWordIds] = useState<string[]>([]);
   const [isCompleting, setIsCompleting] = useState(false);
   const currentWord = sessionWords[currentIndex];
   const totalQuestions = sessionWords.length;
@@ -134,6 +143,7 @@ export default function DinleYazScreen() {
     Keyboard.dismiss();
     const isCorrect = getAcceptedAnswers(currentWord).includes(normalizeGermanAnswer(answer));
     if (isCorrect) setScore((current) => current + 1);
+    else setWrongWordIds((current) => [...current, currentWord.id]);
     setAnswerResult(isCorrect);
   };
 
@@ -151,7 +161,16 @@ export default function DinleYazScreen() {
         total: totalQuestions,
         topicId,
       });
-      router.replace(`/alistirma/sonuc?score=${score}&total=${totalQuestions}&type=dinle-yaz` as any);
+      router.replace({
+        pathname: '/alistirma/sonuc',
+        params: {
+          score: String(score),
+          total: String(totalQuestions),
+          type: 'dinle-yaz',
+          topicId: topicId ?? '',
+          wrongIds: wrongWordIds.join(','),
+        },
+      } as any);
       return;
     }
 
