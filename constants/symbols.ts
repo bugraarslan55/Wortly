@@ -17,6 +17,7 @@ export const topicSymbol = (topicId: string) =>
 export const EXERCISE_SYMBOLS = {
   flashcard: 'rectangle.on.rectangle.angled',
   'dinle-sec': 'speaker.wave.2.fill',
+  'dinle-yaz': 'waveform',
   'dogru-yanlis': 'checkmark.circle.fill',
   yazma: 'pencil.line',
   cumle: 'text.quote',

@@ -10,6 +10,7 @@ const TYPE_LABELS: Record<string, string> = {
   yazma: 'Yazarak Tekrar',
   'dogru-yanlis': 'Doğru / Yanlış',
   'dinle-sec': 'Dinle ve Seç',
+  'dinle-yaz': 'Dinle ve Yaz',
   cumle: 'Cümle Yazma',
   bosluk: 'Boşluk Doldurma',
 };

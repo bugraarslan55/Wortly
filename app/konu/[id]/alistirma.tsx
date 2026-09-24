@@ -62,6 +62,14 @@ export default function AlistirmaSecimScreen() {
       color: '#E8F0FF',
       path: 'dinle-sec',
       disabled: false,
+    }, {
+      id: 'dinle-yaz',
+      icon: EXERCISE_SYMBOLS['dinle-yaz'],
+      title: 'Dinle ve Yaz',
+      desc: 'Kelimeyi dinle, Almancasını yaz',
+      color: '#F1ECFF',
+      path: 'dinle-yaz',
+      disabled: false,
     }] : []),
     {
       id: 'dogru-yanlis',

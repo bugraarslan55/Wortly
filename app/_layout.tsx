@@ -52,6 +52,10 @@ export default function RootLayout() {
           options={{ animation: 'slide_from_right' }}
         />
         <Stack.Screen
+          name="alistirma/dinle-yaz"
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
           name="alistirma/yazma"
           options={{ animation: 'slide_from_right' }}
         />

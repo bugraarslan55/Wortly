@@ -3,7 +3,7 @@
 export type Level = 'A1' | 'A2' | 'B1';
 export type Article = 'der' | 'die' | 'das' | '';
 export type MasteryLevel = 0 | 1 | 2 | 3;
-export type ExerciseType = 'flashcard' | 'yazma' | 'dogru-yanlis' | 'dinle-sec' | 'bosluk' | 'cumle';
+export type ExerciseType = 'flashcard' | 'yazma' | 'dogru-yanlis' | 'dinle-sec' | 'dinle-yaz' | 'bosluk' | 'cumle';
 
 export interface Word {
   id: string;
