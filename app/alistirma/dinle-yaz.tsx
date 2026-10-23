@@ -7,6 +7,7 @@ import { AppIcon } from '../../components/app-icon';
 import { BorderRadius, Colors, Shadows, Spacing } from '../../constants/theme';
 import { getTopicById } from '../../constants/topics';
 import { getGermanSpeechText } from '../../utils/german-speech';
+import { selectWordsForReview } from '../../utils/spaced-repetition';
 import { Word } from '../../types';
 import { useSessionStore, useWordStore } from '../../store';
 
@@ -43,20 +44,11 @@ function getAcceptedAnswers(word: Word): string[] {
   return answers.map(normalizeGermanAnswer);
 }
 
-function shuffle<T>(items: T[]): T[] {
-  const copy = [...items];
-  for (let index = copy.length - 1; index > 0; index -= 1) {
-    const randomIndex = Math.floor(Math.random() * (index + 1));
-    [copy[index], copy[randomIndex]] = [copy[randomIndex], copy[index]];
-  }
-  return copy;
-}
-
 export default function DinleYazScreen() {
   const router = useRouter();
   const { topicId, wordIds } = useLocalSearchParams<{ topicId?: string; wordIds?: string }>();
   const topic = topicId ? getTopicById(topicId) : undefined;
-  const { words: customWords } = useWordStore();
+  const { words: customWords, reviewStates, updateMastery } = useWordStore();
   const customWordList = useMemo(() => customWords.filter(word => word.isCustom), [customWords]);
   const isSupportedTopic = topic
     ? topic.level === 'A1' || topic.level === 'A2' || topic.level === 'B1'
@@ -73,8 +65,8 @@ export default function DinleYazScreen() {
           .filter((word): word is Word => Boolean(word))
       : sourceWords;
 
-    return shuffle(wordPool).slice(0, SESSION_SIZE);
-  }, [isSupportedTopic, topic?.id, wordIds, customWordList]);
+    return selectWordsForReview(wordPool, SESSION_SIZE, reviewStates);
+  }, [isSupportedTopic, topic?.id, wordIds, customWordList.length]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [wrongWordIds, setWrongWordIds] = useState<string[]>([]);
@@ -147,6 +139,7 @@ export default function DinleYazScreen() {
 
     Keyboard.dismiss();
     const isCorrect = getAcceptedAnswers(currentWord).includes(normalizeGermanAnswer(answer));
+    void updateMastery(currentWord.id, isCorrect);
     if (isCorrect) setScore((current) => current + 1);
     else setWrongWordIds((current) => [...current, currentWord.id]);
     setAnswerResult(isCorrect);

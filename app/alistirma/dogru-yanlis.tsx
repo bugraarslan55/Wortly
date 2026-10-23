@@ -8,6 +8,7 @@ import { useWordStore, useSessionStore } from '../../store';
 import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
 import { Word } from '../../types';
 import { ColoredGermanWord } from '../../components/colored-german-word';
+import { selectWordsForReview } from '../../utils/spaced-repetition';
 
 type Phase = 'show' | 'reveal';
 
@@ -20,19 +21,10 @@ const NUMBER_WORDS = new Set([
   'hunderteins', 'zweihundert', '(ein)tausend', 'erste', 'zweite', 'dritte', 'vierte',
 ]);
 
-function shuffle<T>(items: T[]): T[] {
-  const copy = [...items];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
-}
-
 export default function DogruYanlisScreen() {
   const router = useRouter();
   const { wordIds, topicId } = useLocalSearchParams<{ wordIds: string; topicId?: string }>();
-  const { words: customWords, updateMastery } = useWordStore();
+  const { words: customWords, reviewStates, updateMastery } = useWordStore();
   const { startSession, saveSession } = useSessionStore();
 
   // Kelime listesini cevap verildiğinde yeniden üretme; aksi halde rastgele
@@ -51,9 +43,19 @@ export default function DogruYanlisScreen() {
   // Büyük Goethe listelerinde normal kelimelere öncelik ver. Yalnızca sayı
   // içeren bir konu açılırsa alıştırmanın boş kalmaması için sayıları yedekle.
   const sessionWords = useMemo(() => {
-    const regularWords = shuffle(words.filter(word => !NUMBER_WORDS.has(word.german)));
-    const numberWords = shuffle(words.filter(word => NUMBER_WORDS.has(word.german)));
-    return shuffle([...regularWords, ...numberWords].slice(0, SESSION_SIZE));
+    const regularWords = selectWordsForReview(
+      words.filter(word => !NUMBER_WORDS.has(word.german)),
+      SESSION_SIZE,
+      reviewStates,
+    );
+    if (regularWords.length >= SESSION_SIZE) return regularWords;
+
+    const numberWords = selectWordsForReview(
+      words.filter(word => NUMBER_WORDS.has(word.german)),
+      SESSION_SIZE - regularWords.length,
+      reviewStates,
+    );
+    return [...regularWords, ...numberWords];
   }, [wordIds, words.length]);
 
   // Her kelimeye rastgele yanlış Türkçe eşleştir

@@ -9,6 +9,7 @@ import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
 import { Word } from '../../types';
 import { ColoredGermanWord } from '../../components/colored-german-word';
 import { getArticlePalette } from '../../constants/article-colors';
+import { selectWordsForReview } from '../../utils/spaced-repetition';
 
 const GERMAN_CHARS = ['ä', 'ö', 'ü', 'ß', 'Ä', 'Ö', 'Ü'];
 const SESSION_SIZE = 10;
@@ -53,19 +54,10 @@ function getAcceptedAnswers(word: Word): string[] {
   return answers.map(normalizeGermanAnswer);
 }
 
-function shuffle<T>(items: T[]): T[] {
-  const copy = [...items];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
-}
-
 export default function YazmaScreen() {
   const router = useRouter();
   const { wordIds, topicId } = useLocalSearchParams<{ wordIds: string; topicId?: string }>();
-  const { words: customWords, updateMastery } = useWordStore();
+  const { words: customWords, reviewStates, updateMastery } = useWordStore();
   const { startSession, saveSession, sessions } = useSessionStore();
 
   const allBuiltIn = ALL_TOPICS.flatMap(t => t.words);
@@ -89,7 +81,16 @@ export default function YazmaScreen() {
       const freshWords = uniqueWords.filter(word => !recentWordIds.has(word.id));
       const recentWords = uniqueWords.filter(word => recentWordIds.has(word.id));
 
-      return [...shuffle(freshWords), ...shuffle(recentWords)].slice(0, SESSION_SIZE);
+      const selectedFresh = selectWordsForReview(freshWords, SESSION_SIZE, reviewStates);
+      if (selectedFresh.length >= SESSION_SIZE) return selectedFresh;
+
+      const selectedIds = new Set(selectedFresh.map(word => word.id));
+      const selectedRecent = selectWordsForReview(
+        recentWords.filter(word => !selectedIds.has(word.id)),
+        SESSION_SIZE - selectedFresh.length,
+        reviewStates,
+      );
+      return [...selectedFresh, ...selectedRecent];
     },
     [wordIds, topicId, words.length, sessions],
   );

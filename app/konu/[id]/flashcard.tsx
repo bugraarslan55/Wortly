@@ -9,26 +9,17 @@ import { useWordStore, useSessionStore } from '../../../store';
 import { Word } from '../../../types';
 import { AppIcon } from '../../../components/app-icon';
 import { ColoredGermanPlural, ColoredGermanWord } from '../../../components/colored-german-word';
+import { selectWordsForReview } from '../../../utils/spaced-repetition';
 
 const SESSION_SIZE = 20;
 // Özel pseudo-topic ID: "Kelimelerim" ekranından gelen, topicId filtresine
 // bakılmaksızın TÜM kişisel kelimeleri tek çalışma seti olarak kullanan mod.
 const PERSONAL_WORDS_ID = 'kelimelerim';
 
-// Fisher-Yates: rastgele sıralı, orijinal diziyi değiştirmeyen bir kopya döner.
-function shuffle<T>(arr: T[]): T[] {
-  const copy = [...arr];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
-}
-
 export default function FlashcardScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { words: customWords, updateMastery } = useWordStore();
+  const { words: customWords, reviewStates, updateMastery } = useWordStore();
   const { startSession, saveSession } = useSessionStore();
 
   const isPersonalMode = id === PERSONAL_WORDS_ID;
@@ -38,11 +29,12 @@ export default function FlashcardScreen() {
     : topic ? topic.words : customWords.filter(w => w.topicId === id);
   const [sessionVersion, setSessionVersion] = useState(0);
 
-  // Oturum başına: karıştırılmış ve en fazla SESSION_SIZE kelimelik bir alt küme.
+  // Oturum başına: tekrar zamanı gelen ve seviyesi düşük kelimelere öncelik
+  // veren, en fazla SESSION_SIZE kelimelik sabit bir alt küme.
   // sessionVersion yalnızca "Tekrar Çalış" ile artar; böylece oturum içinde sıra
   // sabit kalır, yeni oturum başlatıldığında ise kelimeler yeniden karıştırılır.
   const sessionWords = useMemo(
-    () => shuffle(words).slice(0, SESSION_SIZE),
+    () => selectWordsForReview(words, SESSION_SIZE, reviewStates),
     [id, words.length, sessionVersion],
   );
 

@@ -9,6 +9,7 @@ import { getTopicById } from '../../constants/topics';
 import { getGermanSpeechText } from '../../utils/german-speech';
 import { Word } from '../../types';
 import { useSessionStore, useWordStore } from '../../store';
+import { selectWordsForReview } from '../../utils/spaced-repetition';
 
 const SESSION_SIZE = 20;
 
@@ -42,7 +43,7 @@ export default function DinleSecScreen() {
   const router = useRouter();
   const { topicId, wordIds } = useLocalSearchParams<{ topicId?: string; wordIds?: string }>();
   const topic = topicId ? getTopicById(topicId) : undefined;
-  const { words: customWords } = useWordStore();
+  const { words: customWords, reviewStates, updateMastery } = useWordStore();
   const customWordList = useMemo(() => customWords.filter(word => word.isCustom), [customWords]);
   const { startSession, saveSession } = useSessionStore();
   const [speakingRate, setSpeakingRate] = useState<'normal' | 'slow' | null>(null);
@@ -70,11 +71,10 @@ export default function DinleSecScreen() {
           .filter((word): word is Word => Boolean(word))
       : sourceWords;
 
-    return shuffle(questionPool)
-      .slice(0, SESSION_SIZE)
+    return selectWordsForReview(questionPool, SESSION_SIZE, reviewStates)
       .map(word => createQuestion(word, sourceWords))
       .filter((question): question is ListenQuestion => Boolean(question));
-  }, [topic?.id, wordIds, customWordList]);
+  }, [topic?.id, wordIds, customWordList.length]);
 
   const question = sessionQuestions[currentIndex];
   const totalQuestions = sessionQuestions.length;
@@ -140,7 +140,9 @@ export default function DinleSecScreen() {
   const handleSelect = (optionId: string) => {
     if (selectedOptionId || !question) return;
     setSelectedOptionId(optionId);
-    if (optionId === question.word.id) setScore(current => current + 1);
+    const isCorrect = optionId === question.word.id;
+    void updateMastery(question.word.id, isCorrect);
+    if (isCorrect) setScore(current => current + 1);
     else setWrongWordIds(current => [...current, question.word.id]);
   };
 

@@ -1,13 +1,16 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Word, UserProfile, QuizSession, Level } from '../types';
+import { Word, UserProfile, QuizSession, Level, MasteryLevel } from '../types';
 import { findDuplicateCustomWord } from '../utils/word-validation';
 import { supabase } from '../utils/supabase';
+import { ReviewStateMap } from '../utils/spaced-repetition';
 
 // ─── STORAGE KEYS ───────────────────────────────────────────────────────────
 const KEYS = {
   WORDS: '@wortly:words',
   WORDS_OWNER: '@wortly:words-owner',
+  REVIEW_STATES: '@wortly:review-states',
+  REVIEW_OWNER: '@wortly:review-owner',
   PROFILE: '@wortly:profile',
   PROFILE_OWNER: '@wortly:profile-owner',
   SESSIONS: '@wortly:sessions',
@@ -75,6 +78,7 @@ function safeMultiRemove(keys: string[]): Promise<void> {
 // ─── WORD STORE ─────────────────────────────────────────────────────────────
 interface WordStore {
   words: Word[];
+  reviewStates: ReviewStateMap;
   isLoaded: boolean;
   syncedUserId: string | null;
   loadWords: () => Promise<void>;
@@ -222,15 +226,20 @@ const saveCloudSession = async (userId: string, session: QuizSession) => {
 
 export const useWordStore = create<WordStore>((set, get) => ({
   words: [],
+  reviewStates: {},
   isLoaded: false,
   syncedUserId: null,
 
   loadWords: async () => {
     console.warn('[Wortly][load] loadWords başladı');
     try {
-      const raw = await safeGetItem(KEYS.WORDS);
+      const [raw, rawReviewStates] = await Promise.all([
+        safeGetItem(KEYS.WORDS),
+        safeGetItem(KEYS.REVIEW_STATES),
+      ]);
       const words: Word[] = raw ? JSON.parse(raw) : [];
-      set({ words, isLoaded: true });
+      const reviewStates: ReviewStateMap = rawReviewStates ? JSON.parse(rawReviewStates) : {};
+      set({ words, reviewStates, isLoaded: true });
     } catch {
       set({ isLoaded: true });
     } finally {
@@ -248,6 +257,17 @@ export const useWordStore = create<WordStore>((set, get) => ({
     console.warn('[Wortly][sync] syncWords başladı', userId);
     try {
       const localOwner = await safeGetItem(KEYS.WORDS_OWNER);
+      const reviewOwner = await safeGetItem(KEYS.REVIEW_OWNER);
+
+      // Statik kelimelerin tekrar geçmişi cihazda tutulur. Kullanıcı değişince
+      // önceki hesabın geçmişi yeni hesaba görünür şekilde taşınmasın.
+      if (reviewOwner && reviewOwner !== userId) {
+        const emptyReviewStates: ReviewStateMap = {};
+        set({ reviewStates: emptyReviewStates });
+        await safeSetItem(KEYS.REVIEW_STATES, JSON.stringify(emptyReviewStates));
+      }
+      await safeSetItem(KEYS.REVIEW_OWNER, userId);
+
       const { data, error } = await withTimeout(
         supabase
           .from('user_words')
@@ -286,8 +306,13 @@ export const useWordStore = create<WordStore>((set, get) => ({
   },
 
   resetLocal: async () => {
-    set({ words: [], syncedUserId: null });
-    await safeMultiRemove([KEYS.WORDS, KEYS.WORDS_OWNER]);
+    set({ words: [], reviewStates: {}, syncedUserId: null });
+    await safeMultiRemove([
+      KEYS.WORDS,
+      KEYS.WORDS_OWNER,
+      KEYS.REVIEW_STATES,
+      KEYS.REVIEW_OWNER,
+    ]);
   },
 
   addWord: async (wordData) => {
@@ -333,11 +358,29 @@ export const useWordStore = create<WordStore>((set, get) => ({
 
   updateMastery: async (id, correct) => {
     const word = get().words.find(w => w.id === id);
-    if (!word) return;
+    const currentReview = get().reviewStates[id] ?? (word ? {
+      masteryLevel: word.masteryLevel,
+      lastReviewed: word.lastReviewed,
+    } : {
+      masteryLevel: 0 as MasteryLevel,
+    });
     const newLevel = correct
-      ? Math.min(3, word.masteryLevel + 1) as 0|1|2|3
-      : Math.max(0, word.masteryLevel - 1) as 0|1|2|3;
-    await get().updateWord(id, { masteryLevel: newLevel, lastReviewed: Date.now() });
+      ? Math.min(3, currentReview.masteryLevel + 1) as MasteryLevel
+      : Math.max(0, currentReview.masteryLevel - 1) as MasteryLevel;
+    const lastReviewed = Date.now();
+    const reviewStates = {
+      ...get().reviewStates,
+      [id]: { masteryLevel: newLevel, lastReviewed },
+    };
+
+    set({ reviewStates });
+    await safeSetItem(KEYS.REVIEW_STATES, JSON.stringify(reviewStates));
+
+    // Özel kelimeler için mevcut mastery alanını da koru. Statik Goethe
+    // kelimeleri yalnızca bu yerel review haritasında tutulur.
+    if (word) {
+      await get().updateWord(id, { masteryLevel: newLevel, lastReviewed });
+    }
   },
 
   getCustomWords: () => get().words.filter(w => w.isCustom),
