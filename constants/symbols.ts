@@ -9,6 +9,7 @@ export const TOPIC_SYMBOLS: Record<string, string> = {
   'a2-sehir': 'bus.fill',
   'a2-meslek': 'briefcase.fill',
   'goethe-a2': 'text.book.closed.fill',
+  'goethe-b1': 'text.book.closed.fill',
 };
 
 export const topicSymbol = (topicId: string) =>

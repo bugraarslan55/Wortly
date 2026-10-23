@@ -8,7 +8,7 @@ import { BorderRadius, Colors, Shadows, Spacing } from '../../constants/theme';
 import { getTopicById } from '../../constants/topics';
 import { getGermanSpeechText } from '../../utils/german-speech';
 import { Word } from '../../types';
-import { useSessionStore } from '../../store';
+import { useSessionStore, useWordStore } from '../../store';
 
 const SESSION_SIZE = 10;
 const GERMAN_CHARACTERS = ['ä', 'ö', 'ü', 'ß'] as const;
@@ -56,20 +56,25 @@ export default function DinleYazScreen() {
   const router = useRouter();
   const { topicId, wordIds } = useLocalSearchParams<{ topicId?: string; wordIds?: string }>();
   const topic = topicId ? getTopicById(topicId) : undefined;
-  const isSupportedTopic = topic?.level === 'A1' || topic?.level === 'A2';
+  const { words: customWords } = useWordStore();
+  const customWordList = useMemo(() => customWords.filter(word => word.isCustom), [customWords]);
+  const isSupportedTopic = topic
+    ? topic.level === 'A1' || topic.level === 'A2' || topic.level === 'B1'
+    : customWordList.length > 0;
   const { startSession, saveSession } = useSessionStore();
   const sessionWords = useMemo(() => {
     if (!isSupportedTopic) return [];
 
+    const sourceWords = topic ? topic.words : customWordList;
     const retryIds = wordIds?.split(',').filter(Boolean) ?? [];
     const wordPool = retryIds.length > 0
       ? retryIds
-          .map((id) => topic.words.find((word) => word.id === id))
+          .map((id) => sourceWords.find((word) => word.id === id))
           .filter((word): word is Word => Boolean(word))
-      : topic.words;
+      : sourceWords;
 
     return shuffle(wordPool).slice(0, SESSION_SIZE);
-  }, [isSupportedTopic, topic?.id, wordIds]);
+  }, [isSupportedTopic, topic?.id, wordIds, customWordList]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [wrongWordIds, setWrongWordIds] = useState<string[]>([]);
@@ -177,6 +182,24 @@ export default function DinleYazScreen() {
     setCurrentIndex((index) => index + 1);
   };
 
+  if (totalQuestions === 0) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>Bu çalışma başlatılamıyor</Text>
+          <Text style={styles.emptyText}>
+            {topic
+              ? 'Dinle ve Yaz için bu konuda kullanılabilir kelime bulunamadı.'
+              : 'Önce en az bir kişisel kelime ekle.'}
+          </Text>
+          <TouchableOpacity style={styles.emptyBackButton} onPress={handleBack} activeOpacity={0.85}>
+            <Text style={styles.emptyBackButtonText}>Geri dön</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.header}>
@@ -209,7 +232,7 @@ export default function DinleYazScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.topicTitle}>{topic?.title || 'A1 / A2'}</Text>
+        <Text style={styles.topicTitle}>{topic?.title || 'Kelimelerim'}</Text>
         <Text style={styles.instruction}>Kelimeyi dinle ve Almancasını yaz</Text>
 
         <View style={styles.listenCard}>
@@ -322,7 +345,7 @@ export default function DinleYazScreen() {
         </View>
 
         {!isSupportedTopic && (
-          <Text style={styles.unavailableText}>Bu çalışma yalnızca A1 ve A2 konularında kullanılabilir.</Text>
+          <Text style={styles.unavailableText}>Bu çalışma A1, A2, B1 veya kişisel kelimelerle kullanılabilir.</Text>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -368,4 +391,9 @@ const styles = StyleSheet.create({
   checkButtonDisabled: { opacity: 0.45 },
   checkButtonText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
   unavailableText: { marginTop: Spacing.md, fontSize: 13, lineHeight: 18, color: Colors.error, textAlign: 'center' },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl, gap: Spacing.md },
+  emptyTitle: { fontSize: 20, fontWeight: '700', color: Colors.primary, textAlign: 'center' },
+  emptyText: { fontSize: 14, lineHeight: 20, color: Colors.onSurfaceVariant, textAlign: 'center' },
+  emptyBackButton: { minHeight: 48, paddingHorizontal: Spacing.xl, borderRadius: BorderRadius.lg, backgroundColor: Colors.golden, alignItems: 'center', justifyContent: 'center' },
+  emptyBackButtonText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
 });

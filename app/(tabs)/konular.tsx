@@ -11,7 +11,7 @@ import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
 import { Level, Topic } from '../../types';
 import { AppIcon } from '../../components/app-icon';
 
-const LEVEL_TABS: Level[] = ['A1', 'A2'];
+const LEVEL_TABS: Level[] = ['A1', 'A2', 'B1'];
 
 export default function KonularScreen() {
   const router = useRouter();
@@ -24,7 +24,7 @@ export default function KonularScreen() {
   const [activeLevel, setActiveLevel] = useState<Level>(safeInitialLevel);
   const [search, setSearch] = useState('');
 
-  const allTopics = useMemo(() => getTopicsForLevel('A2'), []); // A1 + A2 (yayın kapsamı)
+  const allTopics = useMemo(() => getTopicsForLevel('B1'), []); // A1 + A2 + B1 (yayın kapsamı)
 
   const filteredTopics = useMemo(() => {
     const levelTopics = allTopics.filter(t => t.level === activeLevel);
@@ -35,7 +35,7 @@ export default function KonularScreen() {
   }, [allTopics, activeLevel, search]);
 
   const isLevelLocked = (level: Level) => {
-    const order: Level[] = ['A1', 'A2'];
+    const order: Level[] = ['A1', 'A2', 'B1'];
     return order.indexOf(level) > order.indexOf(profile?.level || 'A1');
   };
 

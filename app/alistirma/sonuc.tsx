@@ -31,7 +31,7 @@ export default function SonucScreen() {
   const percentage = totalNum > 0 ? (scoreNum / totalNum) * 100 : 0;
   const canRetryWrongAnswers = (
     type === 'dinle-yaz' || type === 'dinle-sec' || type === 'yazma'
-  ) && Boolean(topicId && wrongIds);
+  ) && Boolean(wrongIds);
 
   const retryWrongAnswers = () => {
     if (!canRetryWrongAnswers) return;
@@ -43,7 +43,10 @@ export default function SonucScreen() {
         : '/alistirma/dinle-yaz';
     router.replace({
       pathname,
-      params: { topicId, wordIds: wrongIds },
+      params: {
+        ...(topicId ? { topicId } : {}),
+        wordIds: wrongIds,
+      },
     } as any);
   };
 

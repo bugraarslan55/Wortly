@@ -8,7 +8,7 @@ import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
 import { getTopicById } from '../../constants/topics';
 import { getGermanSpeechText } from '../../utils/german-speech';
 import { Word } from '../../types';
-import { useSessionStore } from '../../store';
+import { useSessionStore, useWordStore } from '../../store';
 
 const SESSION_SIZE = 20;
 
@@ -42,6 +42,8 @@ export default function DinleSecScreen() {
   const router = useRouter();
   const { topicId, wordIds } = useLocalSearchParams<{ topicId?: string; wordIds?: string }>();
   const topic = topicId ? getTopicById(topicId) : undefined;
+  const { words: customWords } = useWordStore();
+  const customWordList = useMemo(() => customWords.filter(word => word.isCustom), [customWords]);
   const { startSession, saveSession } = useSessionStore();
   const [speakingRate, setSpeakingRate] = useState<'normal' | 'slow' | null>(null);
   const [isHintVisible, setIsHintVisible] = useState(false);
@@ -51,24 +53,28 @@ export default function DinleSecScreen() {
   const [wrongWordIds, setWrongWordIds] = useState<string[]>([]);
   const [isCompleting, setIsCompleting] = useState(false);
   const speechRunRef = useRef(0);
-
   const sessionQuestions = useMemo(() => {
-    if (!topic || (topic.level !== 'A1' && topic.level !== 'A2') || topic.words.length < 4) {
+    const sourceWords = topic ? topic.words : customWordList;
+    const isSupported = topic
+      ? topic.level === 'A1' || topic.level === 'A2' || topic.level === 'B1'
+      : customWordList.length >= 4;
+
+    if (!isSupported || sourceWords.length < 4) {
       return [];
     }
 
     const retryIds = wordIds?.split(',').filter(Boolean) ?? [];
     const questionPool = retryIds.length > 0
       ? retryIds
-          .map(id => topic.words.find(word => word.id === id))
+          .map(id => sourceWords.find(word => word.id === id))
           .filter((word): word is Word => Boolean(word))
-      : topic.words;
+      : sourceWords;
 
     return shuffle(questionPool)
       .slice(0, SESSION_SIZE)
-      .map(word => createQuestion(word, topic.words))
+      .map(word => createQuestion(word, sourceWords))
       .filter((question): question is ListenQuestion => Boolean(question));
-  }, [topic?.id, wordIds]);
+  }, [topic?.id, wordIds, customWordList]);
 
   const question = sessionQuestions[currentIndex];
   const totalQuestions = sessionQuestions.length;
@@ -168,6 +174,24 @@ export default function DinleSecScreen() {
     setCurrentIndex(index => index + 1);
   };
 
+  if (totalQuestions === 0) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>Bu çalışma başlatılamıyor</Text>
+          <Text style={styles.emptyText}>
+            {topic
+              ? 'Dinle ve Seç için bu konuda en az 4 farklı kelime gerekli.'
+              : 'Dinle ve Seç için en az 4 kişisel kelime gerekli.'}
+          </Text>
+          <TouchableOpacity style={styles.emptyBackButton} onPress={handleBack} activeOpacity={0.85}>
+            <Text style={styles.emptyBackButtonText}>Geri dön</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.header}>
@@ -196,7 +220,7 @@ export default function DinleSecScreen() {
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.topicTitle}>{topic?.title || 'A1 / A2'}</Text>
+        <Text style={styles.topicTitle}>{topic?.title || 'Kelimelerim'}</Text>
         <Text style={styles.instruction}>Sesi dinle ve doğru anlamı seç</Text>
 
         <View style={styles.previewCard}>
@@ -394,4 +418,9 @@ const styles = StyleSheet.create({
   nextButton: { width: '100%', height: 50, borderRadius: BorderRadius.lg, backgroundColor: Colors.golden, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm },
   nextButtonDisabled: { opacity: 0.55 },
   nextButtonText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl, gap: Spacing.md },
+  emptyTitle: { fontSize: 20, fontWeight: '700', color: Colors.primary, textAlign: 'center' },
+  emptyText: { fontSize: 14, lineHeight: 20, color: Colors.onSurfaceVariant, textAlign: 'center' },
+  emptyBackButton: { minHeight: 48, paddingHorizontal: Spacing.xl, borderRadius: BorderRadius.lg, backgroundColor: Colors.golden, alignItems: 'center', justifyContent: 'center' },
+  emptyBackButtonText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
 });

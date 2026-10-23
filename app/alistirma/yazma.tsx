@@ -66,7 +66,7 @@ export default function YazmaScreen() {
   const router = useRouter();
   const { wordIds, topicId } = useLocalSearchParams<{ wordIds: string; topicId?: string }>();
   const { words: customWords, updateMastery } = useWordStore();
-  const { startSession, saveSession } = useSessionStore();
+  const { startSession, saveSession, sessions } = useSessionStore();
 
   const allBuiltIn = ALL_TOPICS.flatMap(t => t.words);
   const ids = wordIds?.split(',').filter(Boolean) || [];
@@ -74,10 +74,24 @@ export default function YazmaScreen() {
     ? ids.map(id => allBuiltIn.find(w => w.id === id) || customWords.find(w => w.id === id)).filter(Boolean) as Word[]
     : (topicId ? getTopicById(topicId)?.words : undefined) ?? customWords;
 
-  // Oturum boyunca sırası sabit, en fazla 10 kelimelik karışık çalışma seti.
+  // Son iki Yazarak Tekrar oturumundaki kelimeleri önce havuzun dışında tut.
+  // Havuz küçükse eksik kalan sayıyı eski kelimelerle tamamla; böylece küçük
+  // kişisel listelerde çalışma tamamen kilitlenmez.
   const sessionWords = useMemo(
-    () => shuffle(words).slice(0, SESSION_SIZE),
-    [wordIds, topicId, words.length],
+    () => {
+      const uniqueWords = Array.from(new Map(words.map(word => [word.id, word])).values());
+      const recentWordIds = new Set(
+        sessions
+          .filter(session => session.type === 'yazma' && (session.topicId ?? '') === (topicId ?? ''))
+          .slice(0, 2)
+          .flatMap(session => session.wordIds),
+      );
+      const freshWords = uniqueWords.filter(word => !recentWordIds.has(word.id));
+      const recentWords = uniqueWords.filter(word => recentWordIds.has(word.id));
+
+      return [...shuffle(freshWords), ...shuffle(recentWords)].slice(0, SESSION_SIZE);
+    },
+    [wordIds, topicId, words.length, sessions],
   );
 
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -86,6 +100,7 @@ export default function YazmaScreen() {
   const [isCorrect, setIsCorrect] = useState(false);
   const [score, setScore] = useState(0);
   const [wrongWordIds, setWrongWordIds] = useState<string[]>([]);
+  const [isAdvancing, setIsAdvancing] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
   const currentWord = sessionWords[currentIndex];
@@ -99,7 +114,7 @@ export default function YazmaScreen() {
   }, [sessionWords]);
 
   const checkAnswer = () => {
-    if (phase === 'result') return; // Aynı sorunun cevabı iki kez işlenmesin.
+    if (phase === 'result' || !currentWord) return; // Aynı sorunun cevabı iki kez işlenmesin.
     Keyboard.dismiss();
     const given = normalizeGermanAnswer(input);
     const correct = getAcceptedAnswers(currentWord).includes(given);
@@ -110,33 +125,55 @@ export default function YazmaScreen() {
     setPhase('result');
   };
 
-  const handleNext = async () => {
+  const advance = async (nextScore: number, nextWrongWordIds: string[]) => {
+    if (isAdvancing) return;
+    setIsAdvancing(true);
+
     if (currentIndex + 1 >= sessionWords.length) {
       await saveSession({
         id: Date.now().toString(36),
         date: Date.now(),
         type: 'yazma',
         wordIds: sessionWords.map(w => w.id),
-        score,
+        score: nextScore,
         total: sessionWords.length,
         topicId,
       });
       router.replace({
         pathname: '/alistirma/sonuc',
         params: {
-          score: String(score),
+          score: String(nextScore),
           total: String(sessionWords.length),
           type: 'yazma',
           topicId: topicId ?? '',
-          wrongIds: wrongWordIds.join(','),
+          wrongIds: nextWrongWordIds.join(','),
         },
       } as any);
     } else {
       setCurrentIndex(i => i + 1);
       setInput('');
       setPhase('input');
+      setIsAdvancing(false);
       setTimeout(() => inputRef.current?.focus(), 300);
     }
+  };
+
+  const handleNext = async () => {
+    if (phase !== 'result') return;
+    await advance(score, wrongWordIds);
+  };
+
+  const handleSkip = async () => {
+    if (phase !== 'input' || !currentWord || isAdvancing) return;
+
+    Keyboard.dismiss();
+    const nextWrongWordIds = wrongWordIds.includes(currentWord.id)
+      ? wrongWordIds
+      : [...wrongWordIds, currentWord.id];
+    // Atlanan kelime puan kazandırmaz ve sonraki "Yanlışları Tekrarla"
+    // akışında yeniden karşılaşılabilmesi için yanlışlar listesine girer.
+    updateMastery(currentWord.id, false);
+    await advance(score, nextWrongWordIds);
   };
 
   const insertChar = (char: string) => {
@@ -268,18 +305,35 @@ export default function YazmaScreen() {
 
       {/* Bottom button */}
       {phase === 'input' ? (
+        <View style={styles.inputActions}>
+          <TouchableOpacity
+            style={[styles.skipBtn, isAdvancing && styles.ctaBtnDisabled]}
+            onPress={() => void handleSkip()}
+            disabled={isAdvancing}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Bu kelimeyi atla"
+          >
+            <Text style={styles.skipBtnText}>Atla</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.ctaBtn, styles.inputCtaBtn, (!input.trim() || isAdvancing) && styles.ctaBtnDisabled]}
+            onPress={checkAnswer}
+            disabled={!input.trim() || isAdvancing}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.ctaBtnText}>Kontrol Et</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
         <TouchableOpacity
-          style={[styles.ctaBtn, !input.trim() && styles.ctaBtnDisabled]}
-          onPress={checkAnswer}
-          disabled={!input.trim()}
+          style={[styles.ctaBtn, isAdvancing && styles.ctaBtnDisabled]}
+          onPress={() => void handleNext()}
+          disabled={isAdvancing}
           activeOpacity={0.85}
         >
-          <Text style={styles.ctaBtnText}>Kontrol Et</Text>
-        </TouchableOpacity>
-      ) : (
-        <TouchableOpacity style={styles.ctaBtn} onPress={() => void handleNext()} activeOpacity={0.85}>
           <Text style={styles.ctaBtnText}>
-            {currentIndex + 1 >= sessionWords.length ? 'Sonuçları Gör' : 'Devam Et'}
+            {isAdvancing ? 'Kaydediliyor…' : currentIndex + 1 >= sessionWords.length ? 'Sonuçları Gör' : 'Devam Et'}
           </Text>
         </TouchableOpacity>
       )}
@@ -321,7 +375,11 @@ const styles = StyleSheet.create({
   exampleLabel: { fontSize: 11, color: Colors.outlineVariant, marginBottom: 4 },
   exampleText: { fontSize: 13, fontWeight: '600', color: Colors.primary },
   exampleTr: { fontSize: 12, color: Colors.onSurfaceVariant, marginTop: 2 },
+  inputActions: { flexDirection: 'row', gap: Spacing.sm, marginHorizontal: Spacing.marginMain, marginBottom: 32 },
+  skipBtn: { flex: 0.7, height: 54, borderRadius: BorderRadius.lg, borderWidth: 1.5, borderColor: Colors.outlineVariant, backgroundColor: Colors.surfaceContainerLowest, alignItems: 'center', justifyContent: 'center' },
+  skipBtnText: { fontSize: 15, fontWeight: '700', color: Colors.onSurfaceVariant },
   ctaBtn: { marginHorizontal: Spacing.marginMain, marginBottom: 32, height: 54, backgroundColor: Colors.golden, borderRadius: BorderRadius.lg, alignItems: 'center', justifyContent: 'center' },
+  inputCtaBtn: { flex: 1.3, marginHorizontal: 0, marginBottom: 0 },
   ctaBtnDisabled: { opacity: 0.5 },
   ctaBtnText: { fontSize: 16, fontWeight: '700', color: Colors.primary },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl, gap: Spacing.md },

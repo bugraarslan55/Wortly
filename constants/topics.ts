@@ -1,6 +1,7 @@
 import { Topic, Word } from '../types';
 import { GOETHE_A1_TOPIC } from './goethe-a1';
 import { GOETHE_A2_TOPIC } from './goethe-a2';
+import { GOETHE_B1_TOPIC } from './goethe-b1';
 
 // Helper: geçici ID üretici. assignDeterministicIds() ile sayfa yenilense de
 // değişmeyen, topicId + kelimeye dayalı kararlı ID'lerle değiştirilir.
@@ -195,6 +196,7 @@ export const A2_TOPICS: Topic[] = [
 // ─── B1 KONULARI ────────────────────────────────────────────────────────────
 
 export const B1_TOPICS: Topic[] = [
+  GOETHE_B1_TOPIC,
   {
     id: 'b1-duygular',
     title: 'Duygular & Düşünceler',
@@ -256,11 +258,12 @@ export const B1_TOPICS: Topic[] = [
 
 // ─── YARDIMCI ───────────────────────────────────────────────────────────────
 
-// Goethe A1 listesi zaten kendi dosyasında elle atanmış kararlı ID'lere sahip;
-// burada üzerine yazılmaz, yalnızca bu dosyada tanımlı konular normalize edilir.
+// Goethe A1 ve B1 listeleri zaten kendi dosyalarında elle atanmış kararlı
+// ID'lere sahip; burada üzerine yazılmaz, yalnızca bu dosyada tanımlı konular
+// normalize edilir.
 assignDeterministicIds(A1_TOPICS.filter(t => t.id !== GOETHE_A1_TOPIC.id));
 assignDeterministicIds(A2_TOPICS);
-assignDeterministicIds(B1_TOPICS);
+assignDeterministicIds(B1_TOPICS.filter(t => t.id !== GOETHE_B1_TOPIC.id));
 
 export const ALL_TOPICS: Topic[] = [...A1_TOPICS, ...A2_TOPICS, ...B1_TOPICS];
 

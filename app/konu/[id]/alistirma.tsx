@@ -54,7 +54,7 @@ export default function AlistirmaSecimScreen() {
       path: 'flashcard',
       disabled: false,
     },
-    ...(topic?.level === 'A1' || topic?.level === 'A2' ? [{
+    ...(topic?.level === 'A1' || topic?.level === 'A2' || topic?.level === 'B1' ? [{
       id: 'dinle-sec',
       icon: EXERCISE_SYMBOLS['dinle-sec'],
       title: 'Dinle ve Seç',

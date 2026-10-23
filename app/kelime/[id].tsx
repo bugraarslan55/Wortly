@@ -43,7 +43,7 @@ export default function KelimeDetayScreen() {
   const [errors, setErrors] = useState<{ german?: string; turkish?: string; duplicate?: string }>({});
   const speechRequestRef = useRef(0);
 
-  const canUseSpeech = builtInTopic?.level === 'A1' || builtInTopic?.level === 'A2';
+  const canUseSpeech = builtInTopic?.level === 'A1' || builtInTopic?.level === 'A2' || builtInTopic?.level === 'B1';
 
   useEffect(() => () => {
     speechRequestRef.current += 1;

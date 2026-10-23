@@ -35,6 +35,26 @@ export default function KelimelerimleCalisScreen() {
       onPress: () => router.push('/konu/kelimelerim/flashcard' as any),
     },
     {
+      id: 'dinle-sec',
+      icon: EXERCISE_SYMBOLS['dinle-sec'],
+      title: 'Dinle ve Seç',
+      desc: customWords.length >= 4
+        ? 'Kelimeyi dinle, doğru Türkçe anlamı seç'
+        : 'En az 4 kişisel kelime gerekli',
+      color: '#EAF2FF',
+      disabled: customWords.length < 4,
+      onPress: () => router.push(`/alistirma/dinle-sec?wordIds=${wordIds}` as any),
+    },
+    {
+      id: 'dinle-yaz',
+      icon: EXERCISE_SYMBOLS['dinle-yaz'],
+      title: 'Dinle ve Yaz',
+      desc: 'Kelimeyi dinle, Almancasını yaz',
+      color: '#F0EBFF',
+      disabled: customWords.length === 0,
+      onPress: () => router.push(`/alistirma/dinle-yaz?wordIds=${wordIds}` as any),
+    },
+    {
       id: 'dogru-yanlis',
       icon: EXERCISE_SYMBOLS['dogru-yanlis'],
       title: 'Doğru / Yanlış',

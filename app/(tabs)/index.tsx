@@ -52,8 +52,19 @@ export default function HomeScreen() {
           <Text style={styles.greeting}>{greeting}, {firstName}</Text>
           <Text style={styles.greetingSubtext}>Bugün Almanca için güzel bir gün.</Text>
         </View>
-        <View style={styles.levelBadge}>
-          <Text style={styles.levelBadgeText}>{profile?.level || 'A1'}</Text>
+        <View style={styles.topBarRight}>
+          <View style={styles.levelBadge}>
+            <Text style={styles.levelBadgeText}>{profile?.level || 'A1'}</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.profileButton}
+            onPress={() => router.push('/profile' as any)}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Profil"
+          >
+            <AppIcon name="person.crop.circle.fill" size={22} color={Colors.primary} />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -148,9 +159,10 @@ export default function HomeScreen() {
           <Text style={styles.levelCardDesc}>
             {profile?.level === 'A1' && 'Temel kelimelerden başlıyorsun. Harika bir yolculuk!'}
             {profile?.level === 'A2' && 'Günlük konuşmaya hazır kelimeler öğreniyorsun.'}
+            {profile?.level === 'B1' && 'Bağımsız ve akıcı bir dil kullanımına doğru ilerliyorsun.'}
           </Text>
           <View style={styles.levelDots}>
-            {['A1', 'A2'].map(l => (
+            {['A1', 'A2', 'B1'].map(l => (
               <View
                 key={l}
                 style={[
@@ -179,11 +191,17 @@ const styles = StyleSheet.create({
   },
   greeting: { fontSize: 20, fontWeight: '700', color: Colors.primary },
   greetingSubtext: { fontSize: 13, color: Colors.onSurfaceVariant, marginTop: 2 },
+  topBarRight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   levelBadge: {
     backgroundColor: Colors.navy, paddingHorizontal: 12, paddingVertical: 6,
     borderRadius: BorderRadius.full,
   },
   levelBadgeText: { color: Colors.golden, fontWeight: '700', fontSize: 13 },
+  profileButton: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: Colors.surfaceContainerLow,
+    alignItems: 'center', justifyContent: 'center',
+  },
   scroll: { flex: 1 },
   content: { paddingHorizontal: Spacing.marginMain, paddingBottom: 100, gap: Spacing.md },
 

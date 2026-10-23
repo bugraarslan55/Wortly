@@ -12,6 +12,7 @@ import { AppIcon } from '../components/app-icon';
 const LEVELS: { key: Level; label: string; subtitle: string; desc: string }[] = [
   { key: 'A1', label: 'A1', subtitle: 'Başlangıç', desc: 'Temel kelime dağarcığı' },
   { key: 'A2', label: 'A2', subtitle: 'Temel', desc: 'Günlük konuşma kelimeleri' },
+  { key: 'B1', label: 'B1', subtitle: 'Orta', desc: 'Bağımsız dil kullanımı' },
 ];
 
 export default function OnboardingScreen() {
@@ -46,7 +47,7 @@ export default function OnboardingScreen() {
 
           {/* Başlık */}
           <View style={styles.header}>
-            <Text style={styles.eyebrow}>ALMANCA · A1–A2</Text>
+            <Text style={styles.eyebrow}>ALMANCA · A1–B1</Text>
             <Text style={styles.headline}>
               {step === 'welcome'
                 ? 'Almanca kelimelerini\ngerçekten öğren.'
@@ -67,7 +68,7 @@ export default function OnboardingScreen() {
           {step === 'welcome' && (
             <View style={styles.section}>
               {[
-                { icon: 'books.vertical.fill', title: 'Hazır Konular', desc: 'A1 ve A2 seviyesinde kısa, odaklı konu setleri' },
+                { icon: 'books.vertical.fill', title: 'Hazır Konular', desc: 'A1, A2 ve B1 seviyesinde kısa, odaklı konu setleri' },
                 { icon: 'square.and.pencil', title: 'Kendi Kelimelerin', desc: 'İstediğin kelimeyi ekle ve alıştırmalarla pekiştir' },
                 { icon: 'arrow.triangle.2.circlepath', title: 'Akıllı Tekrar', desc: 'Flashcard, yazma ve cümle alıştırmaları' },
               ].map((item) => (
