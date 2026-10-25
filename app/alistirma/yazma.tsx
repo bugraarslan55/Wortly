@@ -289,6 +289,7 @@ export default function YazmaScreen() {
                   style={styles.resultCorrect}
                   articleStyle={styles.resultCorrectArticle}
                 />
+                <Text style={styles.resultTurkish}>{currentWord.turkish}</Text>
               </>
             )}
             {currentWord.example && (
@@ -372,6 +373,7 @@ const styles = StyleSheet.create({
   resultLabel: { fontSize: 12, color: Colors.onSurfaceVariant },
   resultCorrect: { fontSize: 22, fontWeight: '700', color: Colors.primary },
   resultCorrectArticle: { fontWeight: '700' },
+  resultTurkish: { fontSize: 13, color: Colors.onSurfaceVariant, marginTop: 1 },
   exampleBox: { marginTop: Spacing.sm, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.08)', paddingTop: Spacing.sm },
   exampleLabel: { fontSize: 11, color: Colors.outlineVariant, marginBottom: 4 },
   exampleText: { fontSize: 13, fontWeight: '600', color: Colors.primary },

@@ -9,11 +9,12 @@ import { getTopicsForLevel } from '../../constants/topics';
 import { topicSymbol } from '../../constants/symbols';
 import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
 import { AppIcon } from '../../components/app-icon';
+import { getReviewState, isWordDue } from '../../utils/spaced-repetition';
 
 export default function HomeScreen() {
   const router = useRouter();
   const { profile } = useUserStore();
-  const { words } = useWordStore();
+  const { words, reviewStates } = useWordStore();
 
   const topics = useMemo(() => getTopicsForLevel(profile?.level || 'A1'), [profile?.level]);
 
@@ -43,6 +44,30 @@ export default function HomeScreen() {
   }
 
   const dailyTopics = topics.slice(0, 3);
+
+  const reviewCandidates = useMemo(() => {
+    const allWords = [...topics.flatMap(topic => topic.words), ...words.filter(word => word.isCustom)];
+    return Array.from(new Map(allWords.map(word => [word.id, word])).values());
+  }, [topics, words]);
+
+  const dueReviewWords = useMemo(
+    () => reviewCandidates.filter(word => {
+      const state = getReviewState(word, reviewStates);
+      return Boolean(state.lastReviewed) && isWordDue(word, reviewStates);
+    }),
+    [reviewCandidates, reviewStates],
+  );
+
+  const handleReviewPress = () => {
+    const firstDueWord = dueReviewWords[0];
+    if (firstDueWord?.isCustom) {
+      router.push('/kelime/calis' as any);
+    } else if (firstDueWord?.topicId) {
+      router.push(`/konu/${firstDueWord.topicId}/alistirma` as any);
+    } else {
+      router.push('/konular' as any);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -111,6 +136,29 @@ export default function HomeScreen() {
             <Text style={styles.startBtnText}>Bugünkü Çalışmaya Başla</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Smart review reminder */}
+        {dueReviewWords.length > 0 && (
+          <TouchableOpacity
+            style={styles.reviewCard}
+            onPress={handleReviewPress}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel={`${dueReviewWords.length} kelime tekrar zamanı geldi`}
+            accessibilityHint="Tekrar çalışmasını açar"
+          >
+            <View style={styles.reviewIconBox}>
+              <AppIcon name="arrow.clockwise" size={20} color={Colors.secondary} />
+            </View>
+            <View style={styles.reviewTextBlock}>
+              <Text style={styles.reviewTitle}>Tekrar Zamanı</Text>
+              <Text style={styles.reviewDesc}>
+                {dueReviewWords.length} kelime tekrar bekliyor
+              </Text>
+            </View>
+            <AppIcon name="chevron.right" size={14} color={Colors.outline} />
+          </TouchableOpacity>
+        )}
 
         {/* Kelimelerimle Çalış */}
         {customWordCount > 0 && (
@@ -230,6 +278,20 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   startBtnText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
+
+  // Smart review reminder
+  reviewCard: {
+    backgroundColor: Colors.secondaryContainer, borderRadius: 20, padding: Spacing.md,
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+    ...Shadows.level1,
+  },
+  reviewIconBox: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: Colors.surfaceContainerLowest, alignItems: 'center', justifyContent: 'center',
+  },
+  reviewTextBlock: { flex: 1 },
+  reviewTitle: { fontSize: 15, fontWeight: '700', color: Colors.primary },
+  reviewDesc: { fontSize: 12, color: Colors.onSurfaceVariant, marginTop: 2 },
 
   // Custom Card
   customCard: {
