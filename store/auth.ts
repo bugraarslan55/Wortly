@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
 import { supabase } from '../utils/supabase';
+import { clearPronunciationRecordings } from '../utils/pronunciation-storage';
 import { useWordStore, useUserStore, useSessionStore } from './index';
 
 type AuthResult =
@@ -144,6 +145,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   signOut: async () => {
+    const previousUserId = get().session?.user.id;
     await supabase.auth.signOut();
     // Önce önceki kullanıcıya ait yerel state/AsyncStorage'ı temizle, sonra
     // session'ı sıfırla — böylece oturum kapanıp auth ekranına geçildiğinde
@@ -153,6 +155,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       useWordStore.getState().resetLocal(),
       useUserStore.getState().resetLocal(),
       useSessionStore.getState().resetLocal(),
+      clearPronunciationRecordings(previousUserId),
     ]);
     set({ session: null });
   },

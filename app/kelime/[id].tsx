@@ -10,6 +10,7 @@ import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
 import { Article, MasteryLevel } from '../../types';
 import { AppIcon } from '../../components/app-icon';
 import { GermanCharacterBar } from '../../components/german-character-bar';
+import { PronunciationRecorder } from '../../components/pronunciation-recorder';
 import { ColoredGermanPlural, ColoredGermanWord } from '../../components/colored-german-word';
 import { findDuplicateCustomWord } from '../../utils/word-validation';
 import { getArticlePalette } from '../../constants/article-colors';
@@ -339,6 +340,9 @@ export default function KelimeDetayScreen() {
             )}
           </View>
         )}
+
+        {/* Pronunciation recording (device-only) */}
+        {!isEditing && <PronunciationRecorder wordId={word.id} />}
 
         {/* Quiz CTA */}
         <TouchableOpacity

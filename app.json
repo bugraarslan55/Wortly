@@ -44,7 +44,14 @@
           "imageWidth": 180,
           "resizeMode": "contain"
         }
-      ]
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Wortly, Almanca telaffuzunu kaydedip tekrar dinleyebilmen için mikrofonuna erişmek istiyor."
+        }
+      ],
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true
