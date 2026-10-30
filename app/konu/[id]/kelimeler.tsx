@@ -2,13 +2,13 @@ import React, { useMemo, useState } from 'react';
 import {
   FlatList,
   Platform,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { getTopicById } from '../../../constants/topics';
 import { Colors, BorderRadius, Shadows, Spacing } from '../../../constants/theme';
