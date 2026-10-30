@@ -13,18 +13,19 @@ import { Colors } from '../constants/theme';
 // Tek ikon sistemi: iOS, Android ve web'de aynı SVG çizimleri kullanılır.
 // Uygulama genelinde ikon adları SF Symbols adlarıyla tutulur (bkz. constants/symbols.ts);
 // burada bu adlar ortak Lucide ikonlarına eşlenir. SF Symbols çizimleri kopyalanmaz.
-// `solid` ikonlar dolu çizilir; diğerleri çizgi (stroke) ikonlardır. Yeni bir ikon adı
-// eklenirse buraya da eklenmelidir.
+// `solid` ikonlar SF'deki `.fill` görünümüne karşılık dolu çizilir. Dolgusu anlamı bozan
+// ikonlar (içinde işaret olan daireler, mail, palet, otobüs, el, grafik vb.) bilerek
+// çizgi bırakılmıştır. Yeni bir ikon adı eklenirse buraya da eklenmelidir.
 type LucideIcon = ComponentType<{ size?: number; color?: string; strokeWidth?: number; fill?: string }>;
 type IconDef = { Icon: LucideIcon; solid?: boolean };
 
 const ICONS: Record<string, IconDef> = {
   'house': { Icon: House },
-  'house.fill': { Icon: House },
+  'house.fill': { Icon: House, solid: true },
   'rectangle.stack': { Icon: Layers },
-  'rectangle.stack.fill': { Icon: Layers },
+  'rectangle.stack.fill': { Icon: Layers, solid: true },
   'text.book.closed': { Icon: BookOpen },
-  'text.book.closed.fill': { Icon: BookOpen },
+  'text.book.closed.fill': { Icon: BookOpen, solid: true },
   'books.vertical.fill': { Icon: Library },
   'chevron.right': { Icon: ChevronRight },
   'chevron.left': { Icon: ChevronLeft },
@@ -38,13 +39,13 @@ const ICONS: Record<string, IconDef> = {
   'questionmark.circle': { Icon: CircleQuestionMark },
   'circle.fill': { Icon: Circle, solid: true },
   'tortoise.fill': { Icon: Turtle },
-  'speaker.wave.2.fill': { Icon: Volume2 },
+  'speaker.wave.2.fill': { Icon: Volume2, solid: true },
   'waveform': { Icon: AudioLines },
-  'mic.fill': { Icon: Mic },
+  'mic.fill': { Icon: Mic, solid: true },
   'play.fill': { Icon: Play, solid: true },
   'pause.fill': { Icon: Pause, solid: true },
   'stop.fill': { Icon: Square, solid: true },
-  'lock.fill': { Icon: Lock },
+  'lock.fill': { Icon: Lock, solid: true },
   'trash': { Icon: Trash },
   'square.and.pencil': { Icon: SquarePen },
   'pencil.line': { Icon: PencilLine },
@@ -53,24 +54,24 @@ const ICONS: Record<string, IconDef> = {
   'list.bullet': { Icon: List },
   'tray': { Icon: Inbox },
   'person.crop.circle.fill': { Icon: CircleUser },
-  'person.3.fill': { Icon: Users },
-  'mappin.and.ellipse': { Icon: MapPin },
+  'person.3.fill': { Icon: Users, solid: true },
+  'mappin.and.ellipse': { Icon: MapPin, solid: true },
   'flame.fill': { Icon: Flame, solid: true },
   'scope': { Icon: Target },
   'envelope.fill': { Icon: Mail },
   'chart.bar.fill': { Icon: ChartColumn },
   'bubble.left.and.bubble.right.fill': { Icon: MessagesSquare },
-  'bell.fill': { Icon: Bell },
-  'trophy.fill': { Icon: Trophy },
-  'hand.thumbsup.fill': { Icon: ThumbsUp },
+  'bell.fill': { Icon: Bell, solid: true },
+  'trophy.fill': { Icon: Trophy, solid: true },
+  'hand.thumbsup.fill': { Icon: ThumbsUp, solid: true },
   'hand.wave.fill': { Icon: Hand },
-  'lightbulb.fill': { Icon: Lightbulb },
+  'lightbulb.fill': { Icon: Lightbulb, solid: true },
   'eye.slash.fill': { Icon: EyeOff },
   'number': { Icon: Hash },
   'paintpalette.fill': { Icon: Palette },
   'fork.knife': { Icon: Utensils },
   'bus.fill': { Icon: Bus },
-  'briefcase.fill': { Icon: Briefcase },
+  'briefcase.fill': { Icon: Briefcase, solid: true },
 };
 
 type AppIconProps = {
