@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { Stack, useRootNavigationState, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { useUserStore, useWordStore, useSessionStore } from '../store';
+import {
+  flushPendingChanges, getPendingChangeCount,
+  useUserStore, useWordStore, useSessionStore,
+} from '../store';
 import { useAuthStore } from '../store/auth';
 import { REVIEW_NOTIFICATION_TYPE, syncReminderForUser, useLastNotificationResponse } from '../utils/review-reminder';
 import { getReviewRoute } from '../utils/review-route';
@@ -139,6 +142,30 @@ export default function RootLayout() {
       areWordsLoaded, areSessionsLoaded, isUserDataSynced,
     });
   }, [isLoaded, isAuthLoaded, currentUserId, profileSyncedUserId, wordsSyncedUserId, sessionsSyncedUserId, areWordsLoaded, areSessionsLoaded, isUserDataSynced]);
+
+  // Bekleyen (çevrimdışı yapılmış) değişiklikleri uygulama açıkken de buluta gönderir:
+  // uygulama öne gelince ve bekleyen kayıt varken düzenli aralıklarla yeniden dener.
+  // Bağlantı var görünse de Supabase erişilemeyebileceği için başarı, kuyruğun
+  // boşalmasıyla ölçülür; başarısız kayıtlar kuyrukta kalır. Eşzamanlı çağrılar
+  // store içinde tek isteğe indirgenir.
+  const FLUSH_INTERVAL_MS = 30000;
+  useEffect(() => {
+    if (!currentUserId || !isUserDataSynced) return;
+    const flush = () => {
+      if (AppState.currentState !== 'active') return;
+      void getPendingChangeCount(currentUserId).then((count) => {
+        if (count > 0) return flushPendingChanges(currentUserId);
+      }).catch((error) => devWarn('[Wortly] Bekleyen değişiklikler gönderilemedi:', error));
+    };
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') flush();
+    });
+    const timer = setInterval(flush, FLUSH_INTERVAL_MS);
+    return () => {
+      subscription.remove();
+      clearInterval(timer);
+    };
+  }, [currentUserId, isUserDataSynced]);
 
   // Kayıtlı ayardan günlük hatırlatmayı yeniden planlar; çıkış yapılmışsa iptal eder.
   useEffect(() => {

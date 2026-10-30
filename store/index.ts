@@ -129,6 +129,10 @@ const clearPendingChange = async (entity: PendingChange['entity'], id: string): 
   await updatePendingChanges((changes) => changes.filter((item) => !(item.entity === entity && item.id === id)));
 };
 
+const clearPendingChangesForEntity = async (entity: PendingChange['entity']): Promise<void> => {
+  await updatePendingChanges((changes) => changes.filter((item) => item.entity !== entity));
+};
+
 const getPendingChangesForUser = async (
   entity: PendingChange['entity'],
   userId: string,
@@ -140,6 +144,42 @@ const getPendingChangesForUser = async (
     (item.userId === userId || (item.userId === null && ownerId === userId))
   ));
 };
+
+const OWNER_KEY_BY_ENTITY: Record<PendingChange['entity'], string> = {
+  word: KEYS.WORDS_OWNER,
+  profile: KEYS.PROFILE_OWNER,
+  session: KEYS.SESSIONS_OWNER,
+};
+
+// Bu kullanıcıya ait, henüz buluta ulaşmamış değişiklik sayısı. Sahibi bilinmeyen
+// (userId: null) kayıtlar yalnızca o varlığın yerel sahibi bu kullanıcıysa sayılır;
+// aksi halde senkronizasyon onları hiç işlemeyeceği için sayaç hiç sıfırlanmazdı.
+export const getPendingChangeCount = async (userId: string): Promise<number> => {
+  const changes = await readPendingChanges();
+  const owners: Partial<Record<PendingChange['entity'], string | null>> = {};
+  let count = 0;
+  for (const item of changes) {
+    if (item.userId === userId) {
+      count += 1;
+    } else if (item.userId === null) {
+      owners[item.entity] ??= await safeGetItem(OWNER_KEY_BY_ENTITY[item.entity]);
+      if (owners[item.entity] === userId) count += 1;
+    }
+  }
+  return count;
+};
+
+// Aynı varlık ve kullanıcı için eşzamanlı senkronizasyonlar tek isteği paylaşır
+// (açılış, uygulama öne gelme ve zamanlayıcı tetikleyicileri üst üste binmesin).
+const inFlightSyncs = new Map<string, Promise<void>>();
+function dedupeSync(entity: string, userId: string, run: () => Promise<void>): Promise<void> {
+  const key = `${entity}:${userId}`;
+  const existing = inFlightSyncs.get(key);
+  if (existing) return existing;
+  const task = run().finally(() => inFlightSyncs.delete(key));
+  inFlightSyncs.set(key, task);
+  return task;
+}
 
 const getCurrentUserId = async (): Promise<string | null> => {
   const { data } = await withTimeout(
@@ -329,7 +369,7 @@ export const useWordStore = create<WordStore>((set, get) => ({
     }
   },
 
-  syncWords: async (userId) => {
+  syncWords: (userId) => dedupeSync('words', userId, async () => {
     // Bu fonksiyon ne olursa olsun (başarı, hata ya da beklenmeyen bir
     // istisna) `finally` içinde syncedUserId'i işaretler — RootLayout'taki
     // senkronizasyon kapısı bu sayede asla sonsuza kadar beklemez. Tüm
@@ -337,6 +377,7 @@ export const useWordStore = create<WordStore>((set, get) => ({
     // uğratılır, çünkü yerel depolama çağrısı askıda kalırsa `await` hiç
     // dönmez ve finally bile çalışmaz.
     devLog('[Wortly][sync] syncWords başladı');
+    const wordsAtStart = get().words;
     try {
       const localOwner = await safeGetItem(KEYS.WORDS_OWNER);
       const reviewOwner = await safeGetItem(KEYS.REVIEW_OWNER);
@@ -358,12 +399,19 @@ export const useWordStore = create<WordStore>((set, get) => ({
       // Başarısız bir yazımdan sonra bulut verisini okuyup yereli ezmek,
       // çevrimdışı eklenen/güncellenen kelimelerin kaybolmasına neden olur.
       for (const change of pendingChanges) {
-        const localWord = localCustomWords.find(word => word.id === change.id);
+        // Anlık görüntü yerine güncel duruma bak: bekleyen kayıt, kelime state'e eklendikten
+        // sonra yazılır; eski görüntüde kelime yok görünürse kayıt yanlışlıkla temizlenirdi.
+        const localWord = get().words.find(word => word.isCustom && word.id === change.id);
+        // Bekleyen bir "upsert"in yerel karşılığı yoksa (ör. çıkıştaki resetLocal yerel
+        // kelimeleri sildi) kelime kullanıcı tarafından silinmiş değildir: silme isteği
+        // ayrı bir "delete" kaydıdır. Bu durumda buluttaki kelimeyi silme, kaydı temizle.
+        if (change.operation === 'upsert' && !localWord) {
+          await clearPendingChange('word', change.id);
+          continue;
+        }
         const saved = change.operation === 'delete'
           ? await deleteCloudWord(userId, change.id)
-          : localWord
-            ? await saveCloudWord(userId, localWord)
-            : await deleteCloudWord(userId, change.id);
+          : await saveCloudWord(userId, localWord!);
 
         if (!saved) return;
         await clearPendingChange('word', change.id);
@@ -385,8 +433,11 @@ export const useWordStore = create<WordStore>((set, get) => ({
 
       const cloudWords = (data ?? []) as CloudWord[];
 
-      // İlk bulut geçişinde mevcut cihaz kelimelerini kaybetmeden yükle.
-      if ((!localOwner || localOwner === userId) && cloudWords.length === 0 && localCustomWords.length > 0) {
+      // İlk bulut geçişinde (bu cihazda henüz sahip yokken) mevcut cihaz kelimelerini
+      // kaybetmeden yükle. Sahibi zaten bu kullanıcı olan bir cihazda bulut boşsa kelimeler
+      // başka bir cihazdan silinmiştir; yerel kopyalardan geri yükleme (silinenlerin
+      // dirilmesi) yapılmaz. Gönderilmemiş yerel kelimeler bekleyen kayıtlarla korunur.
+      if (!localOwner && cloudWords.length === 0 && localCustomWords.length > 0) {
         const saved = await saveCloudWords(userId, localCustomWords);
         if (saved) await safeSetItem(KEYS.WORDS_OWNER, userId);
         return;
@@ -411,6 +462,12 @@ export const useWordStore = create<WordStore>((set, get) => ({
         if (pendingUpsertIds.has(word.id)) nextWordsById.set(word.id, word);
       }
       const nextWords = Array.from(nextWordsById.values());
+      // Ağ beklenirken kullanıcı kelime ekledi/düzenledi/sildiyse bu eski anlık görüntüyle
+      // üzerine yazma; bekleyen kayıtlar bir sonraki senkronizasyonda işlenir.
+      if (get().words !== wordsAtStart) {
+        devLog('[Wortly][sync] syncWords: yerel değişiklik algılandı, birleştirme ertelendi');
+        return;
+      }
       set({ words: nextWords });
       await safeSetItem(KEYS.WORDS, JSON.stringify(nextWords));
       await safeSetItem(KEYS.WORDS_OWNER, userId);
@@ -420,7 +477,7 @@ export const useWordStore = create<WordStore>((set, get) => ({
       set({ syncedUserId: userId });
       devLog('[Wortly][sync] syncWords tamamlandı');
     }
-  },
+  }),
 
   resetLocal: async () => {
     set({ words: [], reviewStates: {}, syncedUserId: null });
@@ -614,13 +671,14 @@ export const useUserStore = create<UserStore>((set, get) => ({
     }
   },
 
-  syncProfile: async (userId) => {
+  syncProfile: (userId) => dedupeSync('profile', userId, async () => {
     // syncWords'teki gibi: her çıkış yolunda (başarı/hata/istisna) `finally`
     // içinde syncedUserId işaretlenir, senkronizasyon kapısı asla takılmaz.
     // Tüm AsyncStorage çağrıları da safeGetItem/safeSetItem ile zaman
     // aşımına uğratılır (askıda kalan bir `await`, finally'nin de hiç
     // çalışmamasına yol açar).
     devLog('[Wortly][sync] syncProfile başladı');
+    const profileAtStart = get().profile;
     try {
       const localProfile = get().profile ?? DEFAULT_PROFILE;
       const localOwner = await safeGetItem(KEYS.PROFILE_OWNER);
@@ -680,6 +738,10 @@ export const useUserStore = create<UserStore>((set, get) => ({
       // Yazma başarıyla tamamlandıktan hemen sonra eski bir okuma dönerse,
       // bu senkronizasyonda yerel değişikliği koru.
       const profile = hasPendingProfile ? localProfile : fromCloudProfile(data);
+      if (get().profile !== profileAtStart) {
+        devLog('[Wortly][sync] syncProfile: yerel değişiklik algılandı, birleştirme ertelendi');
+        return;
+      }
       set({ profile });
       await safeSetItem(KEYS.PROFILE, JSON.stringify(profile));
       await safeSetItem(KEYS.PROFILE_OWNER, userId);
@@ -689,11 +751,14 @@ export const useUserStore = create<UserStore>((set, get) => ({
       set({ syncedUserId: userId });
       devLog('[Wortly][sync] syncProfile tamamlandı');
     }
-  },
+  }),
 
   resetLocal: async () => {
     set({ profile: DEFAULT_PROFILE, syncedUserId: null });
     await safeMultiRemove([KEYS.PROFILE, KEYS.PROFILE_OWNER]);
+    // Yerel profil silindi; bekleyen profil kaydı kalırsa bir sonraki girişte
+    // varsayılan profil buluttaki gerçek profilin üzerine yazılırdı.
+    await clearPendingChangesForEntity('profile');
   },
 
   setProfile: async (profile) => {
@@ -782,7 +847,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     }
   },
 
-  syncSessions: async (userId) => {
+  syncSessions: (userId) => dedupeSync('sessions', userId, async () => {
     // syncWords/syncProfile'daki gibi: her çıkış yolunda (başarı/hata/istisna)
     // `finally` içinde syncedUserId işaretlenir, senkronizasyon kapısı asla
     // takılmaz. Tüm AsyncStorage çağrıları da safeGetItem/safeSetItem ile
@@ -794,7 +859,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       const pendingChanges = await getPendingChangesForUser('session', userId, localOwner);
 
       for (const change of pendingChanges) {
-        const localSession = localSessions.find(session => session.id === change.id);
+        const localSession = get().sessions.find(session => session.id === change.id);
         if (!localSession) {
           await clearPendingChange('session', change.id);
           continue;
@@ -837,6 +902,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         if (pendingSessionIds.has(session.id)) nextSessionsById.set(session.id, session);
       }
       const nextSessions = Array.from(nextSessionsById.values()).sort((a, b) => b.date - a.date);
+      if (get().sessions !== localSessions) {
+        devLog('[Wortly][sync] syncSessions: yerel değişiklik algılandı, birleştirme ertelendi');
+        return;
+      }
       set({ sessions: nextSessions });
       await safeSetItem(KEYS.SESSIONS, JSON.stringify(nextSessions));
       await safeSetItem(KEYS.SESSIONS_OWNER, userId);
@@ -846,7 +915,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       set({ syncedUserId: userId });
       devLog('[Wortly][sync] syncSessions tamamlandı');
     }
-  },
+  }),
 
   resetLocal: async () => {
     set({ sessions: [], currentSession: null, syncedUserId: null });
@@ -876,3 +945,14 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
   clearCurrentSession: () => set({ currentSession: null }),
 }));
+
+// Bekleyen değişiklikleri buluta göndermeyi dener ve kalan sayıyı döndürür.
+// Başarısız olan kayıtlar kuyrukta kalır; 0 dönmesi hepsinin buluta ulaştığını gösterir.
+export async function flushPendingChanges(userId: string): Promise<number> {
+  await Promise.all([
+    useUserStore.getState().syncProfile(userId),
+    useWordStore.getState().syncWords(userId),
+    useSessionStore.getState().syncSessions(userId),
+  ]);
+  return getPendingChangeCount(userId);
+}
