@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Stack, useRootNavigationState, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
+import { Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -8,6 +9,12 @@ import { useUserStore, useWordStore, useSessionStore } from '../store';
 import { useAuthStore } from '../store/auth';
 import { REVIEW_NOTIFICATION_TYPE, syncReminderForUser, useLastNotificationResponse } from '../utils/review-reminder';
 import { getReviewRoute } from '../utils/review-route';
+import { Colors } from '../constants/theme';
+
+// Android'de ekran geçişlerinde pencere arka planı (siyah) görünmesin; iOS davranışı değişmez.
+const androidScreenOptions = Platform.OS === 'android'
+  ? { contentStyle: { backgroundColor: Colors.warmWhite } }
+  : {};
 
 const devWarn = (...args: unknown[]) => {
   if (__DEV__) console.warn(...args);
@@ -155,7 +162,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <StatusBar style="dark" />
-        <Stack screenOptions={{ headerShown: false }}>
+        <Stack screenOptions={{ headerShown: false, ...androidScreenOptions }}>
         <Stack.Screen
           name="auth"
           options={{ animation: 'fade' }}

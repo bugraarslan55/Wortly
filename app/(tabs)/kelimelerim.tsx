@@ -85,6 +85,7 @@ export default function KelimelerimScreen() {
       {/* Filter tabs */}
       <ScrollView
         horizontal
+        nestedScrollEnabled
         style={styles.filterScroll}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.filterRow}
