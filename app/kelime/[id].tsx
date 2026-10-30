@@ -342,7 +342,7 @@ export default function KelimeDetayScreen() {
         )}
 
         {/* Pronunciation recording (device-only) */}
-        {!isEditing && <PronunciationRecorder wordId={word.id} />}
+        {!isEditing && <PronunciationRecorder word={word} />}
 
         {/* Quiz CTA */}
         <TouchableOpacity

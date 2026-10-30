@@ -180,6 +180,27 @@ export default function HomeScreen() {
           </TouchableOpacity>
         )}
 
+        {/* Gerçek Hayat Senaryoları */}
+        <TouchableOpacity
+          style={styles.customCard}
+          onPress={() => router.push('/senaryolar' as any)}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="Gerçek Hayat Senaryoları"
+          accessibilityHint="Günlük konuşma senaryolarını açar"
+        >
+          <View style={styles.customLeft}>
+            <View style={styles.customIconBox}>
+              <AppIcon name="bubble.left.and.bubble.right.fill" size={18} color={Colors.secondary} />
+            </View>
+            <View>
+              <Text style={styles.customTitle}>Gerçek Hayat Senaryoları</Text>
+              <Text style={styles.customDesc}>Almancayı günlük konuşmalarla pratiğe dök.</Text>
+            </View>
+          </View>
+          <AppIcon name="chevron.right" size={14} color={Colors.outline} />
+        </TouchableOpacity>
+
         {/* Bugünün Konuları */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Konular — {profile?.level}</Text>

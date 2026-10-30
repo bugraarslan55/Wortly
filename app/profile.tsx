@@ -5,6 +5,7 @@ import { useUserStore } from '../store';
 import { useAuthStore } from '../store/auth';
 import { Colors, Spacing, BorderRadius, Shadows } from '../constants/theme';
 import { AppIcon } from '../components/app-icon';
+import { ReviewReminderCard } from '../components/review-reminder-card';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -71,6 +72,8 @@ export default function ProfileScreen() {
             </View>
           </View>
         </View>
+
+        <ReviewReminderCard userId={session?.user?.id ?? null} />
 
         <TouchableOpacity
           style={styles.signOutBtn}

@@ -10,6 +10,7 @@ import {
   useAudioRecorderState,
 } from 'expo-audio';
 import { useAuthStore } from '../store/auth';
+import { Word } from '../types';
 import { AppIcon } from './app-icon';
 import { BorderRadius, Colors, Shadows, Spacing } from '../constants/theme';
 import {
@@ -27,7 +28,8 @@ const TOO_SHORT_MESSAGE = 'Kayıt çok kısa, lütfen tekrar dene.';
 const MIC_DENIED_MESSAGE =
   'Mikrofon izni verilmedi. Telaffuzunu kaydetmek için Ayarlar > Wortly bölümünden mikrofon iznini aç.';
 
-export function PronunciationRecorder({ wordId }: { wordId: string }) {
+export function PronunciationRecorder({ word }: { word: Word }) {
+  const wordId = word.id;
   const userId = useAuthStore(state => state.session?.user.id ?? 'guest');
   const [recordingUri, setRecordingUri] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -262,6 +264,7 @@ export function PronunciationRecorder({ wordId }: { wordId: string }) {
               </TouchableOpacity>
             </View>
           )}
+
         </>
       )}
 

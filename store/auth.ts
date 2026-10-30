@@ -5,6 +5,7 @@ import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
 import { supabase } from '../utils/supabase';
 import { clearPronunciationRecordings } from '../utils/pronunciation-storage';
+import { cancelReviewReminders } from '../utils/review-reminder';
 import { useWordStore, useUserStore, useSessionStore } from './index';
 
 type AuthResult =
@@ -156,6 +157,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       useUserStore.getState().resetLocal(),
       useSessionStore.getState().resetLocal(),
       clearPronunciationRecordings(previousUserId),
+      cancelReviewReminders(),
     ]);
     set({ session: null });
   },

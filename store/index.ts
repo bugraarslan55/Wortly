@@ -15,6 +15,19 @@ const KEYS = {
   PROFILE_OWNER: '@wortly:profile-owner',
   SESSIONS: '@wortly:sessions',
   SESSIONS_OWNER: '@wortly:sessions-owner',
+  PENDING_CHANGES: '@wortly:pending-changes',
+};
+
+const devWarn = (...args: unknown[]) => {
+  if (__DEV__) console.warn(...args);
+};
+
+type PendingChange = {
+  entity: 'word' | 'profile' | 'session';
+  id: string;
+  operation: 'upsert' | 'delete';
+  userId: string | null;
+  queuedAt: number;
 };
 
 // ─── BULUT İSTEĞİ ZAMAN AŞIMI ───────────────────────────────────────────────
@@ -74,6 +87,67 @@ function safeSetItem(key: string, value: string): Promise<void> {
 function safeMultiRemove(keys: string[]): Promise<void> {
   return withTimeout(AsyncStorage.multiRemove(keys), undefined, STORAGE_TIMEOUT_MS);
 }
+
+let pendingChangesWrite: Promise<void> = Promise.resolve();
+
+const readPendingChanges = async (): Promise<PendingChange[]> => {
+  const raw = await safeGetItem(KEYS.PENDING_CHANGES);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as PendingChange[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const updatePendingChanges = async (
+  updater: (changes: PendingChange[]) => PendingChange[],
+): Promise<void> => {
+  const task = pendingChangesWrite.then(async () => {
+    const current = await readPendingChanges();
+    const next = updater(current);
+    await safeSetItem(KEYS.PENDING_CHANGES, JSON.stringify(next));
+  });
+  pendingChangesWrite = task.catch(() => undefined);
+  await task;
+};
+
+const queuePendingChange = async (change: Omit<PendingChange, 'queuedAt'>): Promise<void> => {
+  await updatePendingChanges((changes) => [
+    ...changes.filter((item) => !(item.entity === change.entity && item.id === change.id)),
+    { ...change, queuedAt: Date.now() },
+  ]);
+};
+
+const clearPendingChange = async (entity: PendingChange['entity'], id: string): Promise<void> => {
+  await updatePendingChanges((changes) => changes.filter((item) => !(item.entity === entity && item.id === id)));
+};
+
+const getPendingChangesForUser = async (
+  entity: PendingChange['entity'],
+  userId: string,
+  ownerId: string | null,
+): Promise<PendingChange[]> => {
+  const changes = await readPendingChanges();
+  return changes.filter((item) => (
+    item.entity === entity &&
+    (item.userId === userId || (item.userId === null && ownerId === userId))
+  ));
+};
+
+const getCurrentUserId = async (): Promise<string | null> => {
+  const { data } = await withTimeout(
+    supabase.auth.getSession(),
+    { data: { session: null } } as any,
+    3000,
+  );
+  return data?.session?.user?.id ?? null;
+};
+
+const getMutationUserId = async (ownerKey: string): Promise<string | null> => (
+  (await getCurrentUserId()) ?? await safeGetItem(ownerKey)
+);
 
 // ─── WORD STORE ─────────────────────────────────────────────────────────────
 interface WordStore {
@@ -153,27 +227,30 @@ const saveCloudWords = async (userId: string, words: Word[]) => {
     { error: TIMEOUT_ERROR } as any,
   );
   if (error) {
-    console.warn('[Wortly] Kullanıcı kelimeleri buluta senkronize edilemedi:', error.message);
+    devWarn('[Wortly] Kullanıcı kelimeleri buluta senkronize edilemedi:', error.message);
     return false;
   }
   return true;
 };
 
-const saveCloudWord = async (word: Word) => {
-  const { data } = await supabase.auth.getUser();
-  if (!data.user) return;
-  await saveCloudWords(data.user.id, [word]);
+const saveCloudWord = async (userId: string, word: Word) => {
+  return saveCloudWords(userId, [word]);
 };
 
-const deleteCloudWord = async (wordId: string) => {
-  const { data } = await supabase.auth.getUser();
-  if (!data.user) return;
-  const { error } = await supabase
-    .from('user_words')
-    .delete()
-    .eq('id', wordId)
-    .eq('user_id', data.user.id);
-  if (error) console.warn('[Wortly] Kullanıcı kelimesi buluttan silinemedi:', error.message);
+const deleteCloudWord = async (userId: string, wordId: string) => {
+  const { error } = await withTimeout(
+    supabase
+      .from('user_words')
+      .delete()
+      .eq('id', wordId)
+      .eq('user_id', userId),
+    { error: TIMEOUT_ERROR } as any,
+  );
+  if (error) {
+    devWarn('[Wortly] Kullanıcı kelimesi buluttan silinemedi:', error.message);
+    return false;
+  }
+  return true;
 };
 
 type CloudSession = {
@@ -218,7 +295,7 @@ const saveCloudSession = async (userId: string, session: QuizSession) => {
     { error: TIMEOUT_ERROR } as any,
   );
   if (error) {
-    console.warn('[Wortly] Çalışma oturumu buluta kaydedilemedi:', error.message);
+    devWarn('[Wortly] Çalışma oturumu buluta kaydedilemedi:', error.message);
     return false;
   }
   return true;
@@ -231,7 +308,7 @@ export const useWordStore = create<WordStore>((set, get) => ({
   syncedUserId: null,
 
   loadWords: async () => {
-    console.warn('[Wortly][load] loadWords başladı');
+    devWarn('[Wortly][load] loadWords başladı');
     try {
       const [raw, rawReviewStates] = await Promise.all([
         safeGetItem(KEYS.WORDS),
@@ -243,7 +320,7 @@ export const useWordStore = create<WordStore>((set, get) => ({
     } catch {
       set({ isLoaded: true });
     } finally {
-      console.warn('[Wortly][load] loadWords tamamlandı');
+      devWarn('[Wortly][load] loadWords tamamlandı');
     }
   },
 
@@ -254,7 +331,7 @@ export const useWordStore = create<WordStore>((set, get) => ({
     // AsyncStorage çağrıları da safeGetItem/safeSetItem ile zaman aşımına
     // uğratılır, çünkü yerel depolama çağrısı askıda kalırsa `await` hiç
     // dönmez ve finally bile çalışmaz.
-    console.warn('[Wortly][sync] syncWords başladı', userId);
+    devWarn('[Wortly][sync] syncWords başladı', userId);
     try {
       const localOwner = await safeGetItem(KEYS.WORDS_OWNER);
       const reviewOwner = await safeGetItem(KEYS.REVIEW_OWNER);
@@ -268,6 +345,25 @@ export const useWordStore = create<WordStore>((set, get) => ({
       }
       await safeSetItem(KEYS.REVIEW_OWNER, userId);
 
+      const localWords = get().words;
+      const localCustomWords = localWords.filter(word => word.isCustom);
+      const pendingChanges = await getPendingChangesForUser('word', userId, localOwner);
+
+      // Yerel değişiklikler buluta ulaşmadıysa önce onları yeniden dene.
+      // Başarısız bir yazımdan sonra bulut verisini okuyup yereli ezmek,
+      // çevrimdışı eklenen/güncellenen kelimelerin kaybolmasına neden olur.
+      for (const change of pendingChanges) {
+        const localWord = localCustomWords.find(word => word.id === change.id);
+        const saved = change.operation === 'delete'
+          ? await deleteCloudWord(userId, change.id)
+          : localWord
+            ? await saveCloudWord(userId, localWord)
+            : await deleteCloudWord(userId, change.id);
+
+        if (!saved) return;
+        await clearPendingChange('word', change.id);
+      }
+
       const { data, error } = await withTimeout(
         supabase
           .from('user_words')
@@ -278,13 +374,11 @@ export const useWordStore = create<WordStore>((set, get) => ({
       );
 
       if (error) {
-        console.warn('[Wortly] Kullanıcı kelimeleri buluttan okunamadı:', error.message);
+        devWarn('[Wortly] Kullanıcı kelimeleri buluttan okunamadı:', error.message);
         return;
       }
 
       const cloudWords = (data ?? []) as CloudWord[];
-      const localWords = get().words;
-      const localCustomWords = localWords.filter(word => word.isCustom);
 
       // İlk bulut geçişinde mevcut cihaz kelimelerini kaybetmeden yükle.
       if ((!localOwner || localOwner === userId) && cloudWords.length === 0 && localCustomWords.length > 0) {
@@ -293,15 +387,33 @@ export const useWordStore = create<WordStore>((set, get) => ({
         return;
       }
 
-      const nextWords = cloudWords.map(fromCloudWord);
+      const pendingUpsertIds = new Set(
+        pendingChanges
+          .filter(change => change.operation === 'upsert')
+          .map(change => change.id),
+      );
+      const pendingDeleteIds = new Set(
+        pendingChanges
+          .filter(change => change.operation === 'delete')
+          .map(change => change.id),
+      );
+      const nextWordsById = new Map(
+        cloudWords
+          .filter(word => !pendingDeleteIds.has(word.id))
+          .map(word => [word.id, fromCloudWord(word)] as const),
+      );
+      for (const word of localCustomWords) {
+        if (pendingUpsertIds.has(word.id)) nextWordsById.set(word.id, word);
+      }
+      const nextWords = Array.from(nextWordsById.values());
       set({ words: nextWords });
       await safeSetItem(KEYS.WORDS, JSON.stringify(nextWords));
       await safeSetItem(KEYS.WORDS_OWNER, userId);
     } catch (err) {
-      console.warn('[Wortly] Kelime senkronizasyonunda beklenmeyen hata:', err);
+      devWarn('[Wortly] Kelime senkronizasyonunda beklenmeyen hata:', err);
     } finally {
       set({ syncedUserId: userId });
-      console.warn('[Wortly][sync] syncWords tamamlandı', userId);
+      devWarn('[Wortly][sync] syncWords tamamlandı', userId);
     }
   },
 
@@ -327,8 +439,13 @@ export const useWordStore = create<WordStore>((set, get) => ({
     };
     const updated = [...get().words, newWord];
     set({ words: updated });
-    await AsyncStorage.setItem(KEYS.WORDS, JSON.stringify(updated));
-    await saveCloudWord(newWord);
+    await safeSetItem(KEYS.WORDS, JSON.stringify(updated));
+    const userId = await getMutationUserId(KEYS.WORDS_OWNER);
+    await queuePendingChange({ entity: 'word', id: newWord.id, operation: 'upsert', userId });
+    if (userId && await saveCloudWord(userId, newWord)) {
+      await clearPendingChange('word', newWord.id);
+      await safeSetItem(KEYS.WORDS_OWNER, userId);
+    }
     return { ok: true };
   },
 
@@ -343,17 +460,29 @@ export const useWordStore = create<WordStore>((set, get) => ({
 
     const updated = get().words.map(w => w.id === id ? { ...w, ...updates } : w);
     set({ words: updated });
-    await AsyncStorage.setItem(KEYS.WORDS, JSON.stringify(updated));
+    await safeSetItem(KEYS.WORDS, JSON.stringify(updated));
     const updatedWord = updated.find(word => word.id === id);
-    if (updatedWord) await saveCloudWord(updatedWord);
+    if (updatedWord) {
+      const userId = await getMutationUserId(KEYS.WORDS_OWNER);
+      await queuePendingChange({ entity: 'word', id, operation: 'upsert', userId });
+      if (userId && await saveCloudWord(userId, updatedWord)) {
+        await clearPendingChange('word', id);
+        await safeSetItem(KEYS.WORDS_OWNER, userId);
+      }
+    }
     return { ok: true };
   },
 
   deleteWord: async (id) => {
     const updated = get().words.filter(w => w.id !== id);
     set({ words: updated });
-    await AsyncStorage.setItem(KEYS.WORDS, JSON.stringify(updated));
-    await deleteCloudWord(id);
+    await safeSetItem(KEYS.WORDS, JSON.stringify(updated));
+    const userId = await getMutationUserId(KEYS.WORDS_OWNER);
+    await queuePendingChange({ entity: 'word', id, operation: 'delete', userId });
+    if (userId && await deleteCloudWord(userId, id)) {
+      await clearPendingChange('word', id);
+      await safeSetItem(KEYS.WORDS_OWNER, userId);
+    }
   },
 
   updateMastery: async (id, correct) => {
@@ -446,7 +575,11 @@ const saveCloudProfile = async (userId: string, profile: UserProfile) => {
       .upsert(toCloudProfile(userId, profile), { onConflict: 'id' }),
     { error: TIMEOUT_ERROR } as any,
   );
-  if (error) console.warn('[Wortly] Profil buluta senkronize edilemedi:', error.message);
+  if (error) {
+    devWarn('[Wortly] Profil buluta senkronize edilemedi:', error.message);
+    return false;
+  }
+  return true;
 };
 
 export const useUserStore = create<UserStore>((set, get) => ({
@@ -455,7 +588,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
   syncedUserId: null,
 
   loadProfile: async () => {
-    console.warn('[Wortly][load] loadProfile başladı');
+    devWarn('[Wortly][load] loadProfile başladı');
     try {
       const raw = await safeGetItem(KEYS.PROFILE);
       const profile: UserProfile = raw ? JSON.parse(raw) : DEFAULT_PROFILE;
@@ -472,7 +605,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
     } catch {
       set({ profile: DEFAULT_PROFILE, isLoaded: true });
     } finally {
-      console.warn('[Wortly][load] loadProfile tamamlandı');
+      devWarn('[Wortly][load] loadProfile tamamlandı');
     }
   },
 
@@ -482,10 +615,19 @@ export const useUserStore = create<UserStore>((set, get) => ({
     // Tüm AsyncStorage çağrıları da safeGetItem/safeSetItem ile zaman
     // aşımına uğratılır (askıda kalan bir `await`, finally'nin de hiç
     // çalışmamasına yol açar).
-    console.warn('[Wortly][sync] syncProfile başladı', userId);
+    devWarn('[Wortly][sync] syncProfile başladı', userId);
     try {
       const localProfile = get().profile ?? DEFAULT_PROFILE;
       const localOwner = await safeGetItem(KEYS.PROFILE_OWNER);
+      const pendingChanges = await getPendingChangesForUser('profile', userId, localOwner);
+      const hasPendingProfile = pendingChanges.length > 0;
+
+      if (hasPendingProfile) {
+        const saved = await saveCloudProfile(userId, localProfile);
+        if (!saved) return;
+        await clearPendingChange('profile', 'profile');
+      }
+
       const { data, error } = await withTimeout(
         supabase
           .from('profiles')
@@ -496,14 +638,15 @@ export const useUserStore = create<UserStore>((set, get) => ({
       );
 
       if (error) {
-        console.warn('[Wortly] Bulut profil okunamadı:', error.message);
+        devWarn('[Wortly] Bulut profil okunamadı:', error.message);
         return;
       }
 
       if (!data) {
         const profile = localOwner && localOwner !== userId ? DEFAULT_PROFILE : localProfile;
-        await saveCloudProfile(userId, profile);
-        await safeSetItem(KEYS.PROFILE_OWNER, userId);
+        if (await saveCloudProfile(userId, profile)) {
+          await safeSetItem(KEYS.PROFILE_OWNER, userId);
+        }
         return;
       }
 
@@ -523,20 +666,23 @@ export const useUserStore = create<UserStore>((set, get) => ({
       // Preserve the current device's pre-cloud profile on the first rollout,
       // but never reuse it for a different signed-in user.
       if ((!localOwner || localOwner === userId) && cloudIsInitial && localHasProgress) {
-        await saveCloudProfile(userId, localProfile);
-        await safeSetItem(KEYS.PROFILE_OWNER, userId);
+        if (await saveCloudProfile(userId, localProfile)) {
+          await safeSetItem(KEYS.PROFILE_OWNER, userId);
+        }
         return;
       }
 
-      const profile = fromCloudProfile(data);
+      // Yazma başarıyla tamamlandıktan hemen sonra eski bir okuma dönerse,
+      // bu senkronizasyonda yerel değişikliği koru.
+      const profile = hasPendingProfile ? localProfile : fromCloudProfile(data);
       set({ profile });
       await safeSetItem(KEYS.PROFILE, JSON.stringify(profile));
       await safeSetItem(KEYS.PROFILE_OWNER, userId);
     } catch (err) {
-      console.warn('[Wortly] Profil senkronizasyonunda beklenmeyen hata:', err);
+      devWarn('[Wortly] Profil senkronizasyonunda beklenmeyen hata:', err);
     } finally {
       set({ syncedUserId: userId });
-      console.warn('[Wortly][sync] syncProfile tamamlandı', userId);
+      devWarn('[Wortly][sync] syncProfile tamamlandı', userId);
     }
   },
 
@@ -547,11 +693,12 @@ export const useUserStore = create<UserStore>((set, get) => ({
 
   setProfile: async (profile) => {
     set({ profile });
-    await AsyncStorage.setItem(KEYS.PROFILE, JSON.stringify(profile));
-    const { data } = await supabase.auth.getUser();
-    if (data.user) {
-      await saveCloudProfile(data.user.id, profile);
-      await AsyncStorage.setItem(KEYS.PROFILE_OWNER, data.user.id);
+    await safeSetItem(KEYS.PROFILE, JSON.stringify(profile));
+    const userId = await getMutationUserId(KEYS.PROFILE_OWNER);
+    await queuePendingChange({ entity: 'profile', id: 'profile', operation: 'upsert', userId });
+    if (userId && await saveCloudProfile(userId, profile)) {
+      await clearPendingChange('profile', 'profile');
+      await safeSetItem(KEYS.PROFILE_OWNER, userId);
     }
   },
 
@@ -559,11 +706,12 @@ export const useUserStore = create<UserStore>((set, get) => ({
     const current = get().profile || DEFAULT_PROFILE;
     const updated = { ...current, ...updates };
     set({ profile: updated });
-    await AsyncStorage.setItem(KEYS.PROFILE, JSON.stringify(updated));
-    const { data } = await supabase.auth.getUser();
-    if (data.user) {
-      await saveCloudProfile(data.user.id, updated);
-      await AsyncStorage.setItem(KEYS.PROFILE_OWNER, data.user.id);
+    await safeSetItem(KEYS.PROFILE, JSON.stringify(updated));
+    const userId = await getMutationUserId(KEYS.PROFILE_OWNER);
+    await queuePendingChange({ entity: 'profile', id: 'profile', operation: 'upsert', userId });
+    if (userId && await saveCloudProfile(userId, updated)) {
+      await clearPendingChange('profile', 'profile');
+      await safeSetItem(KEYS.PROFILE_OWNER, userId);
     }
   },
 
@@ -575,11 +723,12 @@ export const useUserStore = create<UserStore>((set, get) => ({
       onboardingCompleted: true,
     };
     set({ profile });
-    await AsyncStorage.setItem(KEYS.PROFILE, JSON.stringify(profile));
-    const { data } = await supabase.auth.getUser();
-    if (data.user) {
-      await saveCloudProfile(data.user.id, profile);
-      await AsyncStorage.setItem(KEYS.PROFILE_OWNER, data.user.id);
+    await safeSetItem(KEYS.PROFILE, JSON.stringify(profile));
+    const userId = await getMutationUserId(KEYS.PROFILE_OWNER);
+    await queuePendingChange({ entity: 'profile', id: 'profile', operation: 'upsert', userId });
+    if (userId && await saveCloudProfile(userId, profile)) {
+      await clearPendingChange('profile', 'profile');
+      await safeSetItem(KEYS.PROFILE_OWNER, userId);
     }
   },
 
@@ -617,14 +766,14 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   syncedUserId: null,
 
   loadSessions: async () => {
-    console.warn('[Wortly][load] loadSessions başladı');
+    devWarn('[Wortly][load] loadSessions başladı');
     try {
       const raw = await safeGetItem(KEYS.SESSIONS);
       set({ sessions: raw ? JSON.parse(raw) : [], isLoaded: true });
     } catch {
       set({ isLoaded: true });
     } finally {
-      console.warn('[Wortly][load] loadSessions tamamlandı');
+      devWarn('[Wortly][load] loadSessions tamamlandı');
     }
   },
 
@@ -633,9 +782,22 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     // `finally` içinde syncedUserId işaretlenir, senkronizasyon kapısı asla
     // takılmaz. Tüm AsyncStorage çağrıları da safeGetItem/safeSetItem ile
     // zaman aşımına uğratılır.
-    console.warn('[Wortly][sync] syncSessions başladı', userId);
+    devWarn('[Wortly][sync] syncSessions başladı', userId);
     try {
       const localOwner = await safeGetItem(KEYS.SESSIONS_OWNER);
+      const localSessions = get().sessions;
+      const pendingChanges = await getPendingChangesForUser('session', userId, localOwner);
+
+      for (const change of pendingChanges) {
+        const localSession = localSessions.find(session => session.id === change.id);
+        if (!localSession) {
+          await clearPendingChange('session', change.id);
+          continue;
+        }
+        if (!(await saveCloudSession(userId, localSession))) return;
+        await clearPendingChange('session', change.id);
+      }
+
       const { data, error } = await withTimeout(
         supabase
           .from('study_sessions')
@@ -646,12 +808,11 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       );
 
       if (error) {
-        console.warn('[Wortly] Çalışma geçmişi buluttan okunamadı:', error.message);
+        devWarn('[Wortly] Çalışma geçmişi buluttan okunamadı:', error.message);
         return;
       }
 
       const cloudSessions = (data ?? []) as CloudSession[];
-      const localSessions = get().sessions;
 
       // İlk bulut geçişinde mevcut cihaz geçmişini kaybetmeden yükle.
       if ((!localOwner || localOwner === userId) && cloudSessions.length === 0 && localSessions.length > 0) {
@@ -663,15 +824,22 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         return;
       }
 
-      const nextSessions = cloudSessions.map(fromCloudSession);
+      const pendingSessionIds = new Set(pendingChanges.map(change => change.id));
+      const nextSessionsById = new Map(
+        cloudSessions.map(session => [session.id, fromCloudSession(session)] as const),
+      );
+      for (const session of localSessions) {
+        if (pendingSessionIds.has(session.id)) nextSessionsById.set(session.id, session);
+      }
+      const nextSessions = Array.from(nextSessionsById.values()).sort((a, b) => b.date - a.date);
       set({ sessions: nextSessions });
       await safeSetItem(KEYS.SESSIONS, JSON.stringify(nextSessions));
       await safeSetItem(KEYS.SESSIONS_OWNER, userId);
     } catch (err) {
-      console.warn('[Wortly] Çalışma geçmişi senkronizasyonunda beklenmeyen hata:', err);
+      devWarn('[Wortly] Çalışma geçmişi senkronizasyonunda beklenmeyen hata:', err);
     } finally {
       set({ syncedUserId: userId });
-      console.warn('[Wortly][sync] syncSessions tamamlandı', userId);
+      devWarn('[Wortly][sync] syncSessions tamamlandı', userId);
     }
   },
 
@@ -692,9 +860,13 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   saveSession: async (session) => {
     const updated = [session, ...get().sessions].slice(0, 100); // Son 100 oturum
     set({ sessions: updated, currentSession: null });
-    await AsyncStorage.setItem(KEYS.SESSIONS, JSON.stringify(updated));
-    const { data } = await supabase.auth.getUser();
-    if (data.user) await saveCloudSession(data.user.id, session);
+    await safeSetItem(KEYS.SESSIONS, JSON.stringify(updated));
+    const userId = await getMutationUserId(KEYS.SESSIONS_OWNER);
+    await queuePendingChange({ entity: 'session', id: session.id, operation: 'upsert', userId });
+    if (userId && await saveCloudSession(userId, session)) {
+      await clearPendingChange('session', session.id);
+      await safeSetItem(KEYS.SESSIONS_OWNER, userId);
+    }
   },
 
   clearCurrentSession: () => set({ currentSession: null }),
