@@ -1,19 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Stack, useRootNavigationState, useRouter } from 'expo-router';
-import * as Notifications from 'expo-notifications';
 import * as Linking from 'expo-linking';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useUserStore, useWordStore, useSessionStore } from '../store';
 import { useAuthStore } from '../store/auth';
-import { isReminderSupported, REVIEW_NOTIFICATION_TYPE, syncReminderForUser } from '../utils/review-reminder';
+import { REVIEW_NOTIFICATION_TYPE, syncReminderForUser, useLastNotificationResponse } from '../utils/review-reminder';
 import { getReviewRoute } from '../utils/review-route';
-
-// Platform sabit olduğundan hook sırası render'lar arasında değişmez.
-const useLastNotificationResponse = isReminderSupported
-  ? Notifications.useLastNotificationResponse
-  : () => null;
 
 const devWarn = (...args: unknown[]) => {
   if (__DEV__) console.warn(...args);

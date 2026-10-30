@@ -1,12 +1,40 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
+import type * as NotificationsModule from 'expo-notifications';
 import { Platform } from 'react-native';
+
+// Expo Go (Android) uzaktan push ve expo-notifications'ın bazı native modüllerini (ör.
+// ExpoTopicSubscriptionModule) içermez. Paket yalnızca import edilse bile "Push notifications
+// are unavailable in Expo Go on Android" hatasını yazar ve native modül hatası fırlatır.
+// Bu bir kod hatası değil Expo Go kısıtıdır; bu yüzden orada paket hiç yüklenmez ve
+// hatırlatma özelliği kapalı kalır. iOS, Android development build ve production'da
+// paket normal yüklenir.
+const isAndroidExpoGo =
+  Platform.OS === 'android' && Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+
+function loadNotifications(): typeof NotificationsModule | null {
+  if (Platform.OS !== 'ios' && Platform.OS !== 'android') return null;
+  if (isAndroidExpoGo) return null;
+  try {
+    return require('expo-notifications') as typeof NotificationsModule;
+  } catch (error) {
+    // Expo Go dışında yükleme hatası beklenmez; gerçek bir yapılandırma sorunudur.
+    console.warn('[Wortly] expo-notifications yüklenemedi, hatırlatmalar devre dışı:', error);
+    return null;
+  }
+}
+
+const Notifications = loadNotifications() as typeof NotificationsModule;
 
 export type ReminderSettings = { enabled: boolean; hour: number; minute: number };
 
 export const DEFAULT_REMINDER: ReminderSettings = { enabled: false, hour: 20, minute: 0 };
 export const REVIEW_NOTIFICATION_TYPE = 'daily-review';
-export const isReminderSupported = Platform.OS === 'ios' || Platform.OS === 'android';
+export const isReminderSupported = Notifications != null;
+
+// Hook sırası render'lar arasında değişmesin diye isReminderSupported modül yüklenirken sabitlenir.
+export const useLastNotificationResponse: typeof NotificationsModule.useLastNotificationResponse =
+  isReminderSupported ? Notifications.useLastNotificationResponse : () => null;
 
 const CHANNEL_ID = 'daily-review';
 const NOTIFICATION_ID = 'wortly-daily-review';
@@ -63,7 +91,7 @@ async function ensureChannel() {
   });
 }
 
-function isGranted(permission: Notifications.NotificationPermissionsStatus) {
+function isGranted(permission: NotificationsModule.NotificationPermissionsStatus) {
   return permission.granted || permission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
 }
 
