@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useUserStore } from '../store';
+import { flushPendingChanges, getPendingChangeCount, useUserStore } from '../store';
 import { useAuthStore } from '../store/auth';
 import { Colors, Spacing, BorderRadius, Shadows } from '../constants/theme';
 import { AppIcon } from '../components/app-icon';
@@ -16,22 +16,62 @@ export default function ProfileScreen() {
   const email = session?.user?.email ?? '—';
   const level = profile?.level ?? 'A1';
 
-  const handleSignOut = () => {
+  const signingOutRef = useRef(false);
+
+  const performSignOut = async () => {
+    await signOut();
+    router.replace('/auth' as any);
+  };
+
+  // Çıkışta yerel veri silinir. Buluta ulaşmamış değişiklik varsa kullanıcıyı uyar,
+  // önce senkronize etmeyi öner; senkronize edilemezse çıkış yapma.
+  const syncThenSignOut = async (userId: string) => {
+    const remaining = await flushPendingChanges(userId).catch(() => -1);
+    if (remaining === 0) {
+      await performSignOut();
+      return;
+    }
     Alert.alert(
-      'Çıkış Yap',
-      'Hesabından çıkış yapmak istiyor musun?',
+      'Senkronize edilemedi',
+      'Bağlantı kurulamadığı için değişikliklerin buluta gönderilemedi ve çıkış yapılmadı. İnternet bağlantını kontrol edip tekrar dene.',
       [
-        { text: 'İptal', style: 'cancel' },
-        {
-          text: 'Çıkış Yap',
-          style: 'destructive',
-          onPress: async () => {
-            await signOut();
-            router.replace('/auth' as any);
-          },
-        },
+        { text: 'Tamam', style: 'cancel' },
+        { text: 'Yine de çık', style: 'destructive', onPress: () => { void performSignOut(); } },
       ]
     );
+  };
+
+  const handleSignOut = async () => {
+    if (signingOutRef.current) return;
+    signingOutRef.current = true;
+    try {
+      const userId = session?.user?.id;
+      const pending = userId ? await getPendingChangeCount(userId).catch(() => 0) : 0;
+
+      if (!userId || pending === 0) {
+        Alert.alert(
+          'Çıkış Yap',
+          'Hesabından çıkış yapmak istiyor musun?',
+          [
+            { text: 'İptal', style: 'cancel' },
+            { text: 'Çıkış Yap', style: 'destructive', onPress: () => { void performSignOut(); } },
+          ]
+        );
+        return;
+      }
+
+      Alert.alert(
+        'Senkronize edilmemiş değişiklikler',
+        `${pending} değişiklik henüz buluta gönderilmedi. Şimdi çıkış yaparsan bu değişiklikler kaybolur.`,
+        [
+          { text: 'İptal', style: 'cancel' },
+          { text: 'Senkronize et ve çık', onPress: () => { void syncThenSignOut(userId); } },
+          { text: 'Yine de çık', style: 'destructive', onPress: () => { void performSignOut(); } },
+        ]
+      );
+    } finally {
+      signingOutRef.current = false;
+    }
   };
 
   return (
