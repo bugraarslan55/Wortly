@@ -20,6 +20,10 @@ const devWarn = (...args: unknown[]) => {
   if (__DEV__) console.warn(...args);
 };
 
+const devLog = (...args: unknown[]) => {
+  if (__DEV__) console.debug(...args);
+};
+
 export default function RootLayout() {
   const router = useRouter();
   const navigationState = useRootNavigationState();
@@ -108,10 +112,9 @@ export default function RootLayout() {
     if (forceOpenTimer.current) return;
     forceOpenTimer.current = setTimeout(() => {
       devWarn('[Wortly][gate] Senkronizasyon zaman aşımına uğradı, kapı zorla açılıyor.', {
-        currentUserId,
-        profileSyncedUserId,
-        wordsSyncedUserId,
-        sessionsSyncedUserId,
+        profileSynced: profileSyncedUserId === currentUserId,
+        wordsSynced: wordsSyncedUserId === currentUserId,
+        sessionsSynced: sessionsSyncedUserId === currentUserId,
       });
       forceOpenTimer.current = null;
       setForceOpen(true);
@@ -128,9 +131,11 @@ export default function RootLayout() {
   const isUserDataSynced = !currentUserId || dataSynced || forceOpen;
 
   useEffect(() => {
-    devWarn('[Wortly][gate] durum:', {
-      isLoaded, isAuthLoaded, currentUserId,
-      profileSyncedUserId, wordsSyncedUserId, sessionsSyncedUserId,
+    devLog('[Wortly][gate] durum:', {
+      isLoaded, isAuthLoaded, hasUser: !!currentUserId,
+      profileSynced: profileSyncedUserId === currentUserId,
+      wordsSynced: wordsSyncedUserId === currentUserId,
+      sessionsSynced: sessionsSyncedUserId === currentUserId,
       areWordsLoaded, areSessionsLoaded, isUserDataSynced,
     });
   }, [isLoaded, isAuthLoaded, currentUserId, profileSyncedUserId, wordsSyncedUserId, sessionsSyncedUserId, areWordsLoaded, areSessionsLoaded, isUserDataSynced]);
