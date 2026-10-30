@@ -1,22 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
 import { Stack, useRootNavigationState, useRouter } from 'expo-router';
-import * as Notifications from 'expo-notifications';
 import * as Linking from 'expo-linking';
+import { Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useUserStore, useWordStore, useSessionStore } from '../store';
 import { useAuthStore } from '../store/auth';
-import { isReminderSupported, REVIEW_NOTIFICATION_TYPE, syncReminderForUser } from '../utils/review-reminder';
+import { REVIEW_NOTIFICATION_TYPE, syncReminderForUser, useLastNotificationResponse } from '../utils/review-reminder';
 import { getReviewRoute } from '../utils/review-route';
+import { Colors } from '../constants/theme';
 
-// Platform sabit olduğundan hook sırası render'lar arasında değişmez.
-const useLastNotificationResponse = isReminderSupported
-  ? Notifications.useLastNotificationResponse
-  : () => null;
+// Android'de ekran geçişlerinde pencere arka planı (siyah) görünmesin; iOS davranışı değişmez.
+const androidScreenOptions = Platform.OS === 'android'
+  ? { contentStyle: { backgroundColor: Colors.warmWhite } }
+  : {};
 
 const devWarn = (...args: unknown[]) => {
   if (__DEV__) console.warn(...args);
+};
+
+const devLog = (...args: unknown[]) => {
+  if (__DEV__) console.debug(...args);
 };
 
 export default function RootLayout() {
@@ -107,10 +112,9 @@ export default function RootLayout() {
     if (forceOpenTimer.current) return;
     forceOpenTimer.current = setTimeout(() => {
       devWarn('[Wortly][gate] Senkronizasyon zaman aşımına uğradı, kapı zorla açılıyor.', {
-        currentUserId,
-        profileSyncedUserId,
-        wordsSyncedUserId,
-        sessionsSyncedUserId,
+        profileSynced: profileSyncedUserId === currentUserId,
+        wordsSynced: wordsSyncedUserId === currentUserId,
+        sessionsSynced: sessionsSyncedUserId === currentUserId,
       });
       forceOpenTimer.current = null;
       setForceOpen(true);
@@ -127,9 +131,11 @@ export default function RootLayout() {
   const isUserDataSynced = !currentUserId || dataSynced || forceOpen;
 
   useEffect(() => {
-    devWarn('[Wortly][gate] durum:', {
-      isLoaded, isAuthLoaded, currentUserId,
-      profileSyncedUserId, wordsSyncedUserId, sessionsSyncedUserId,
+    devLog('[Wortly][gate] durum:', {
+      isLoaded, isAuthLoaded, hasUser: !!currentUserId,
+      profileSynced: profileSyncedUserId === currentUserId,
+      wordsSynced: wordsSyncedUserId === currentUserId,
+      sessionsSynced: sessionsSyncedUserId === currentUserId,
       areWordsLoaded, areSessionsLoaded, isUserDataSynced,
     });
   }, [isLoaded, isAuthLoaded, currentUserId, profileSyncedUserId, wordsSyncedUserId, sessionsSyncedUserId, areWordsLoaded, areSessionsLoaded, isUserDataSynced]);
@@ -161,7 +167,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <StatusBar style="dark" />
-        <Stack screenOptions={{ headerShown: false }}>
+        <Stack screenOptions={{ headerShown: false, ...androidScreenOptions }}>
         <Stack.Screen
           name="auth"
           options={{ animation: 'fade' }}

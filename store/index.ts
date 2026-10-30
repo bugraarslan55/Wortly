@@ -22,6 +22,11 @@ const devWarn = (...args: unknown[]) => {
   if (__DEV__) console.warn(...args);
 };
 
+// Normal akış izleri: uyarı değil, debug seviyesinde yazılır. Kullanıcı kimliği loglanmaz.
+const devLog = (...args: unknown[]) => {
+  if (__DEV__) console.debug(...args);
+};
+
 type PendingChange = {
   entity: 'word' | 'profile' | 'session';
   id: string;
@@ -308,7 +313,7 @@ export const useWordStore = create<WordStore>((set, get) => ({
   syncedUserId: null,
 
   loadWords: async () => {
-    devWarn('[Wortly][load] loadWords başladı');
+    devLog('[Wortly][load] loadWords başladı');
     try {
       const [raw, rawReviewStates] = await Promise.all([
         safeGetItem(KEYS.WORDS),
@@ -320,7 +325,7 @@ export const useWordStore = create<WordStore>((set, get) => ({
     } catch {
       set({ isLoaded: true });
     } finally {
-      devWarn('[Wortly][load] loadWords tamamlandı');
+      devLog('[Wortly][load] loadWords tamamlandı');
     }
   },
 
@@ -331,7 +336,7 @@ export const useWordStore = create<WordStore>((set, get) => ({
     // AsyncStorage çağrıları da safeGetItem/safeSetItem ile zaman aşımına
     // uğratılır, çünkü yerel depolama çağrısı askıda kalırsa `await` hiç
     // dönmez ve finally bile çalışmaz.
-    devWarn('[Wortly][sync] syncWords başladı', userId);
+    devLog('[Wortly][sync] syncWords başladı');
     try {
       const localOwner = await safeGetItem(KEYS.WORDS_OWNER);
       const reviewOwner = await safeGetItem(KEYS.REVIEW_OWNER);
@@ -413,7 +418,7 @@ export const useWordStore = create<WordStore>((set, get) => ({
       devWarn('[Wortly] Kelime senkronizasyonunda beklenmeyen hata:', err);
     } finally {
       set({ syncedUserId: userId });
-      devWarn('[Wortly][sync] syncWords tamamlandı', userId);
+      devLog('[Wortly][sync] syncWords tamamlandı');
     }
   },
 
@@ -588,7 +593,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
   syncedUserId: null,
 
   loadProfile: async () => {
-    devWarn('[Wortly][load] loadProfile başladı');
+    devLog('[Wortly][load] loadProfile başladı');
     try {
       const raw = await safeGetItem(KEYS.PROFILE);
       const profile: UserProfile = raw ? JSON.parse(raw) : DEFAULT_PROFILE;
@@ -605,7 +610,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
     } catch {
       set({ profile: DEFAULT_PROFILE, isLoaded: true });
     } finally {
-      devWarn('[Wortly][load] loadProfile tamamlandı');
+      devLog('[Wortly][load] loadProfile tamamlandı');
     }
   },
 
@@ -615,7 +620,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
     // Tüm AsyncStorage çağrıları da safeGetItem/safeSetItem ile zaman
     // aşımına uğratılır (askıda kalan bir `await`, finally'nin de hiç
     // çalışmamasına yol açar).
-    devWarn('[Wortly][sync] syncProfile başladı', userId);
+    devLog('[Wortly][sync] syncProfile başladı');
     try {
       const localProfile = get().profile ?? DEFAULT_PROFILE;
       const localOwner = await safeGetItem(KEYS.PROFILE_OWNER);
@@ -682,7 +687,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
       devWarn('[Wortly] Profil senkronizasyonunda beklenmeyen hata:', err);
     } finally {
       set({ syncedUserId: userId });
-      devWarn('[Wortly][sync] syncProfile tamamlandı', userId);
+      devLog('[Wortly][sync] syncProfile tamamlandı');
     }
   },
 
@@ -766,14 +771,14 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   syncedUserId: null,
 
   loadSessions: async () => {
-    devWarn('[Wortly][load] loadSessions başladı');
+    devLog('[Wortly][load] loadSessions başladı');
     try {
       const raw = await safeGetItem(KEYS.SESSIONS);
       set({ sessions: raw ? JSON.parse(raw) : [], isLoaded: true });
     } catch {
       set({ isLoaded: true });
     } finally {
-      devWarn('[Wortly][load] loadSessions tamamlandı');
+      devLog('[Wortly][load] loadSessions tamamlandı');
     }
   },
 
@@ -782,7 +787,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     // `finally` içinde syncedUserId işaretlenir, senkronizasyon kapısı asla
     // takılmaz. Tüm AsyncStorage çağrıları da safeGetItem/safeSetItem ile
     // zaman aşımına uğratılır.
-    devWarn('[Wortly][sync] syncSessions başladı', userId);
+    devLog('[Wortly][sync] syncSessions başladı');
     try {
       const localOwner = await safeGetItem(KEYS.SESSIONS_OWNER);
       const localSessions = get().sessions;
@@ -839,7 +844,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       devWarn('[Wortly] Çalışma geçmişi senkronizasyonunda beklenmeyen hata:', err);
     } finally {
       set({ syncedUserId: userId });
-      devWarn('[Wortly][sync] syncSessions tamamlandı', userId);
+      devLog('[Wortly][sync] syncSessions tamamlandı');
     }
   },
 

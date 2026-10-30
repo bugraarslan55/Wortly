@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
+  View, Text, StyleSheet, TouchableOpacity,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ALL_TOPICS, getTopicById } from '../../constants/topics';
 import { useWordStore, useSessionStore } from '../../store';

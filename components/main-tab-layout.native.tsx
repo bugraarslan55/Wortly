@@ -152,8 +152,8 @@ export default function MainTabLayout() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.warmWhite },
-  pager: { flex: 1 },
-  page: { flex: 1 },
+  pager: { flex: 1, backgroundColor: Colors.warmWhite },
+  page: { flex: 1, backgroundColor: Colors.warmWhite },
   tabBar: {
     minHeight: 64,
     paddingTop: Spacing.sm,
