@@ -3,7 +3,7 @@ import { StyleProp, View, ViewStyle } from 'react-native';
 import {
   ArrowRight, AudioLines, BadgeCheck, Bell, BookOpen, Briefcase, Bus, ChartColumn,
   ChevronLeft, ChevronRight, Circle, CircleCheck, CircleQuestionMark, CircleUser, CircleX,
-  Copy, EyeOff, Flame, Hand, Hash, House, Inbox, Layers, Library, Lightbulb, List, Lock,
+  Check, Copy, EyeOff, Flame, Hand, Hash, House, Inbox, Layers, Library, Lightbulb, List, Lock,
   Mail, MapPin, MessagesSquare, Mic, Palette, Pause, PencilLine, Play, Quote, RefreshCw,
   RotateCw, Search, Square, SquarePen, Target, ThumbsUp, Trash, Trophy, Turtle, Users,
   Utensils, Volume2,
@@ -34,6 +34,7 @@ const ICONS: Record<string, IconDef> = {
   'arrow.triangle.2.circlepath': { Icon: RefreshCw },
   'magnifyingglass': { Icon: Search },
   'xmark.circle.fill': { Icon: CircleX },
+  'checkmark': { Icon: Check },
   'checkmark.circle.fill': { Icon: CircleCheck },
   'checkmark.seal.fill': { Icon: BadgeCheck },
   'questionmark.circle': { Icon: CircleQuestionMark },
