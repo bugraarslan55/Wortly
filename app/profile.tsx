@@ -1,20 +1,75 @@
-import React, { useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import React, { useMemo, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { flushPendingChanges, getPendingChangeCount, useUserStore } from '../store';
+import {
+  flushPendingChanges, getPendingChangeCount, useSessionStore, useUserStore, useWordStore,
+} from '../store';
 import { useAuthStore } from '../store/auth';
-import { Colors, Spacing, BorderRadius, Shadows } from '../constants/theme';
+import { Colors, Spacing, BorderRadius, Cards } from '../constants/theme';
 import { AppIcon } from '../components/app-icon';
+import { Card, IconTile, SecondaryButton, SectionTitle, SegmentedControl } from '../components/ui';
 import { ReviewReminderCard } from '../components/review-reminder-card';
+import { isReminderSupported } from '../utils/review-reminder';
+import { Level } from '../types';
+import {
+  countCompletedExercises, countLearnedWords, DAILY_GOAL_OPTIONS, getActiveStreak, normalizeDailyGoal,
+} from '../utils/progress-stats';
+
+const LEVELS: Level[] = ['A1', 'A2', 'B1'];
+const LEVEL_DESCRIPTIONS: Record<Level, string> = {
+  A1: 'Başlangıç',
+  A2: 'Temel',
+  B1: 'Orta',
+};
+
+function getInitials(name: string, email: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length > 0) return parts.slice(0, 2).map(part => part[0]!.toLocaleUpperCase('tr-TR')).join('');
+  return (email[0] ?? '?').toLocaleUpperCase('tr-TR');
+}
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { profile } = useUserStore();
+  const { profile, updateProfile } = useUserStore();
   const { session, signOut } = useAuthStore();
+  const words = useWordStore(state => state.words);
+  const reviewStates = useWordStore(state => state.reviewStates);
+  const sessions = useSessionStore(state => state.sessions);
+  const scenarioResults = useSessionStore(state => state.scenarioResults);
 
-  const email = session?.user?.email ?? '—';
-  const level = profile?.level ?? 'A1';
+  const email = session?.user?.email ?? '';
+  const level: Level = profile?.level ?? 'A1';
+  const displayName = profile?.name?.trim() || email.split('@')[0] || 'Öğrenci';
+  const dailyGoal = normalizeDailyGoal(profile?.dailyGoal);
+  const goalOptions = (DAILY_GOAL_OPTIONS as readonly number[]).includes(dailyGoal)
+    ? [...DAILY_GOAL_OPTIONS]
+    : [...DAILY_GOAL_OPTIONS, dailyGoal].sort((a, b) => a - b);
+
+  // Tüm sayılar yerel gerçek veriden hesaplanır; veri yoksa 0 görünür.
+  const learnedCount = useMemo(() => countLearnedWords(reviewStates, words), [reviewStates, words]);
+  const exerciseCount = useMemo(
+    () => countCompletedExercises(sessions, scenarioResults),
+    [sessions, scenarioResults],
+  );
+  const streak = getActiveStreak(profile?.streak, profile?.lastStudyDate);
+
+  const handleGoalChange = (goal: number) => {
+    if (goal === dailyGoal) return;
+    void updateProfile({ dailyGoal: goal });
+  };
+
+  const handleLevelChange = (next: Level) => {
+    if (next === level) return;
+    Alert.alert(
+      `Seviyeyi ${next} yap`,
+      'Konular ve önerilen plan yeni seviyeye göre değişir. Kelime ilerlemen silinmez.',
+      [
+        { text: 'İptal', style: 'cancel' },
+        { text: 'Değiştir', onPress: () => { void updateProfile({ level: next }); } },
+      ]
+    );
+  };
 
   const signingOutRef = useRef(false);
 
@@ -83,94 +138,154 @@ export default function ProfileScreen() {
           accessibilityRole="button"
           accessibilityLabel="Geri"
         >
-          <Text style={styles.backText}>← Geri</Text>
+          <AppIcon name="chevron.left" size={16} color={Colors.onSurfaceVariant} />
+          <Text style={styles.backText}>Geri</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Profil</Text>
         <View style={styles.backButton} />
       </View>
 
-      <View style={styles.content}>
-        <View style={styles.avatarBox}>
-          <AppIcon name="person.crop.circle.fill" size={64} color={Colors.secondary} />
-        </View>
-
-        <View style={styles.card}>
-          <View style={styles.row}>
-            <AppIcon name="envelope.fill" size={18} color={Colors.secondary} />
-            <View style={styles.rowTextBox}>
-              <Text style={styles.rowLabel}>E-posta</Text>
-              <Text style={styles.rowValue}>{email}</Text>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Profil başlığı */}
+        <View style={styles.hero}>
+          <View style={styles.avatar} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <Text style={styles.avatarText} maxFontSizeMultiplier={1.2}>
+              {getInitials(profile?.name ?? '', email)}
+            </Text>
+          </View>
+          <View style={styles.heroText}>
+            <Text style={styles.name} numberOfLines={1}>{displayName}</Text>
+            {!!email && <Text style={styles.email} numberOfLines={1}>{email}</Text>}
+            <View style={styles.levelPill}>
+              <Text style={styles.levelPillText}>Almanca · {level}</Text>
             </View>
           </View>
+        </View>
+
+        {/* Öğrenme istatistikleri */}
+        <View style={styles.statsRow}>
+          <StatBox icon="checkmark.seal.fill" value={learnedCount} label="Öğrenilen kelime" />
+          <StatBox icon="flame.fill" value={streak} label="Günlük seri" />
+          <StatBox icon="chart.bar.fill" value={exerciseCount} label="Tamamlanan alıştırma" />
+        </View>
+
+        {/* Öğrenme tercihleri */}
+        <SectionTitle>Öğrenme tercihleri</SectionTitle>
+        <Card style={styles.card}>
+          <Text style={styles.prefLabel}>Günlük hedef</Text>
+          <Text style={styles.prefHint}>Her gün tekrar etmek istediğin kelime sayısı.</Text>
+          <SegmentedControl
+            options={goalOptions.map(goal => ({
+              value: goal,
+              label: String(goal),
+              accessibilityLabel: `Günlük hedef ${goal} kelime`,
+            }))}
+            value={dailyGoal}
+            onChange={handleGoalChange}
+          />
 
           <View style={styles.divider} />
 
-          <View style={styles.row}>
-            <AppIcon name="chart.bar.fill" size={18} color={Colors.secondary} />
-            <View style={styles.rowTextBox}>
-              <Text style={styles.rowLabel}>Seviye</Text>
-              <Text style={styles.rowValue}>{level}</Text>
+          <Text style={styles.prefLabel}>Seviye</Text>
+          <Text style={styles.prefHint}>Konular ve plan seçtiğin seviyeye göre hazırlanır.</Text>
+          <SegmentedControl
+            options={LEVELS.map(item => ({
+              value: item,
+              label: item,
+              sublabel: LEVEL_DESCRIPTIONS[item],
+              accessibilityLabel: `Seviye ${item}, ${LEVEL_DESCRIPTIONS[item]}`,
+            }))}
+            value={level}
+            onChange={handleLevelChange}
+          />
+        </Card>
+
+        {/* Bildirimler */}
+        <SectionTitle>Bildirimler</SectionTitle>
+        {isReminderSupported ? (
+          <ReviewReminderCard userId={session?.user?.id ?? null} />
+        ) : (
+          <Card style={styles.card}>
+            <View style={styles.infoRow}>
+              <IconTile name="bell.fill" size={40} />
+              <View style={styles.infoText}>
+                <Text style={styles.prefLabel}>Günlük tekrar bildirimi</Text>
+                <Text style={styles.prefHint}>
+                  Bu ortamda (Android Expo Go) bildirimler desteklenmiyor. Development build veya mağaza sürümünde kullanılabilir.
+                </Text>
+              </View>
             </View>
-          </View>
-        </View>
+          </Card>
+        )}
 
-        <ReviewReminderCard userId={session?.user?.id ?? null} />
-
-        <TouchableOpacity
-          style={styles.signOutBtn}
-          onPress={handleSignOut}
-          activeOpacity={0.85}
-          accessibilityRole="button"
-          accessibilityLabel="Çıkış Yap"
-        >
-          <Text style={styles.signOutBtnText}>Çıkış Yap</Text>
-        </TouchableOpacity>
-      </View>
+        {/* Hesap */}
+        <SectionTitle>Hesap</SectionTitle>
+        <SecondaryButton label="Çıkış Yap" onPress={handleSignOut} tone="danger" />
+        {!!email && <Text style={styles.signedInAs} numberOfLines={1}>{email} olarak giriş yapıldı</Text>}
+      </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function StatBox({ icon, value, label }: { icon: string; value: number; label: string }) {
+  return (
+    <View style={[Cards.surface, styles.statBox]} accessible accessibilityLabel={`${label}: ${value}`}>
+      <IconTile name={icon} size={34} />
+      <Text style={styles.statValue} maxFontSizeMultiplier={1.3}>{value}</Text>
+      <Text style={styles.statLabel} numberOfLines={2}>{label}</Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   header: {
-    height: 56,
+    minHeight: 56,
     paddingHorizontal: Spacing.marginMain,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  backButton: { minWidth: 68, paddingVertical: Spacing.sm },
+  backButton: { minWidth: 72, minHeight: Spacing.touchTargetMin, flexDirection: 'row', alignItems: 'center', gap: 2 },
   backText: { fontSize: 15, fontWeight: '600', color: Colors.onSurfaceVariant },
   headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.primary },
-  content: { flex: 1, paddingHorizontal: Spacing.marginMain, paddingTop: Spacing.lg, alignItems: 'center' },
-  avatarBox: {
-    width: 96, height: 96, borderRadius: 48,
-    backgroundColor: Colors.surfaceContainerLow,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: Spacing.xl,
+  scroll: { flex: 1 },
+  content: { paddingHorizontal: Spacing.marginMain, paddingTop: Spacing.sm, paddingBottom: Spacing.xl, gap: Spacing.md },
+
+  hero: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.md, padding: Spacing.lg,
+    backgroundColor: Colors.navy, borderRadius: BorderRadius.xxl, borderCurve: 'continuous',
+    boxShadow: '0 8px 22px rgba(26, 31, 43, 0.2)',
   },
-  card: {
-    width: '100%',
-    backgroundColor: Colors.surfaceContainerLowest,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.lg,
-    gap: Spacing.md,
-    ...Shadows.level1,
+  heroText: { flex: 1, gap: 2 },
+  avatar: {
+    width: 72, height: 72, borderRadius: 36, backgroundColor: Colors.golden,
+    alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: 'rgba(244, 211, 94, 0.35)',
   },
-  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
-  rowTextBox: { flex: 1 },
-  rowLabel: { fontSize: 12, fontWeight: '600', color: Colors.outlineVariant, textTransform: 'uppercase' },
-  rowValue: { fontSize: 16, fontWeight: '600', color: Colors.primary, marginTop: 2 },
-  divider: { height: 1, backgroundColor: Colors.outlineVariant, opacity: 0.4 },
-  signOutBtn: {
-    width: '100%',
-    marginTop: Spacing.xl,
-    height: 52,
-    borderRadius: BorderRadius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: Colors.error,
+  avatarText: { fontSize: 26, fontWeight: '700', color: Colors.navy },
+  name: { fontSize: 21, lineHeight: 27, fontWeight: '700', color: Colors.onPrimary },
+  email: { fontSize: 13, color: '#B8BCC8' },
+  levelPill: {
+    alignSelf: 'flex-start', marginTop: Spacing.sm, backgroundColor: 'rgba(244, 211, 94, 0.16)',
+    paddingHorizontal: 12, paddingVertical: 4, borderRadius: BorderRadius.full,
   },
-  signOutBtnText: { fontSize: 15, fontWeight: '700', color: Colors.error },
+  levelPillText: { fontSize: 12, fontWeight: '700', color: Colors.golden },
+
+  statsRow: { flexDirection: 'row', gap: Spacing.sm },
+  statBox: { flex: 1, paddingVertical: Spacing.md, paddingHorizontal: Spacing.sm, alignItems: 'center', gap: 4 },
+  statValue: { fontSize: 24, lineHeight: 30, fontWeight: '700', color: Colors.primary },
+  // İki satıra inen etiket diğer kartlardaki sayıların hizasını bozmasın.
+  statLabel: { fontSize: 11, lineHeight: 14, minHeight: 28, color: Colors.onSurfaceVariant, textAlign: 'center' },
+
+  card: { gap: Spacing.sm },
+  prefLabel: { fontSize: 15, fontWeight: '700', color: Colors.primary },
+  prefHint: { fontSize: 12, color: Colors.onSurfaceVariant, lineHeight: 17, marginBottom: 4 },
+  divider: { height: 1, backgroundColor: Cards.borderColor, marginVertical: Spacing.sm },
+  infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.md },
+  infoText: { flex: 1, gap: 2 },
+  signedInAs: { fontSize: 12, color: Colors.onSurfaceVariant, textAlign: 'center' },
 });

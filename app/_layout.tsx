@@ -196,8 +196,8 @@ export default function RootLayout() {
   if (!isLoaded || !isAuthLoaded || !isUserDataSynced) return null;
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: Colors.warmWhite }}>
+      <SafeAreaProvider style={{ backgroundColor: Colors.warmWhite }}>
         <StatusBar style="dark" />
         <Stack screenOptions={{ headerShown: false, ...androidScreenOptions }}>
         <Stack.Screen

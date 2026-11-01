@@ -7,66 +7,64 @@ import { useRouter } from 'expo-router';
 import { useUserStore, useWordStore } from '../../store';
 import { getTopicsForLevel } from '../../constants/topics';
 import { topicSymbol } from '../../constants/symbols';
-import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { Colors, Spacing, BorderRadius, Cards } from '../../constants/theme';
 import { AppIcon } from '../../components/app-icon';
 import { DailyPlanCard } from '../../components/daily-plan-card';
+import { ProgressRing } from '../../components/progress-ring';
+import { Card, IconTile, SectionTitle } from '../../components/ui';
+import { countReviewedToday, getActiveStreak, normalizeDailyGoal } from '../../utils/progress-stats';
+
+function getGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return 'Günaydın';
+  if (h < 18) return 'İyi günler';
+  return 'İyi akşamlar';
+}
 
 export default function HomeScreen() {
   const router = useRouter();
   const { profile } = useUserStore();
-  const { words } = useWordStore();
+  const { words, reviewStates } = useWordStore();
 
-  const topics = useMemo(() => getTopicsForLevel(profile?.level || 'A1'), [profile?.level]);
+  const level = profile?.level || 'A1';
+  const topics = useMemo(() => getTopicsForLevel(level), [level]);
 
-  // Günlük ilerleme: bugün tekrar edilen (lastReviewed=bugün) benzersiz kişisel kelime sayısı.
-  const todayCount = useMemo(() => {
-    const todayStr = new Date().toDateString();
-    const seen = new Set<string>();
-    for (const w of words) {
-      if (w.isCustom && w.lastReviewed && new Date(w.lastReviewed).toDateString() === todayStr) {
-        seen.add(w.id);
-      }
-    }
-    return seen.size;
-  }, [words]);
-  const dailyGoal = profile?.dailyGoal || 10;
-  const progress = dailyGoal > 0 ? Math.min(todayCount / dailyGoal, 1) : 0;
+  // Günlük ilerleme: bugün tekrar edilen benzersiz kelime (konu + kişisel kelimeler).
+  const todayCount = useMemo(() => countReviewedToday(reviewStates, words), [reviewStates, words]);
+  const dailyGoal = normalizeDailyGoal(profile?.dailyGoal);
+  const progress = Math.min(todayCount / dailyGoal, 1);
+  const goalReached = todayCount >= dailyGoal;
+  const streak = getActiveStreak(profile?.streak, profile?.lastStudyDate);
 
   const customWordCount = words.filter(w => w.isCustom).length;
-  const greeting = getGreeting();
-  const firstName = profile?.name?.split(' ')[0] || 'Öğrenci';
-
-  function getGreeting() {
-    const h = new Date().getHours();
-    if (h < 12) return 'Günaydın';
-    if (h < 18) return 'İyi günler';
-    return 'İyi akşamlar';
-  }
-
+  const firstName = profile?.name?.trim().split(/\s+/)[0] || 'Öğrenci';
   const dailyTopics = topics.slice(0, 3);
+
+  const goalMessage = goalReached
+    ? 'Bugünkü hedefini tamamladın. Harika!'
+    : todayCount > 0
+      ? `Hedefe ${dailyGoal - todayCount} kelime kaldı.`
+      : 'Bugün henüz kelime tekrar etmedin.';
 
   return (
     <SafeAreaView style={styles.safe}>
-      {/* Header */}
       <View style={styles.topBar}>
-        <View>
-          <Text style={styles.greeting}>{greeting}, {firstName}</Text>
-          <Text style={styles.greetingSubtext}>Bugün Almanca için güzel bir gün.</Text>
+        <View style={styles.topBarText}>
+          <Text style={styles.greeting} numberOfLines={1}>{getGreeting()}, {firstName}</Text>
+          <Text style={styles.greetingSubtext} numberOfLines={1}>Bugün Almanca için güzel bir gün.</Text>
         </View>
-        <View style={styles.topBarRight}>
+        <TouchableOpacity
+          style={styles.profileButton}
+          onPress={() => router.push('/profile' as any)}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel={`Profil, seviye ${level}`}
+        >
+          <AppIcon name="person.crop.circle.fill" size={24} color={Colors.primary} />
           <View style={styles.levelBadge}>
-            <Text style={styles.levelBadgeText}>{profile?.level || 'A1'}</Text>
+            <Text style={styles.levelBadgeText}>{level}</Text>
           </View>
-          <TouchableOpacity
-            style={styles.profileButton}
-            onPress={() => router.push('/profile' as any)}
-            activeOpacity={0.85}
-            accessibilityRole="button"
-            accessibilityLabel="Profil"
-          >
-            <AppIcon name="person.crop.circle.fill" size={22} color={Colors.primary} />
-          </TouchableOpacity>
-        </View>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -74,134 +72,104 @@ export default function HomeScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* Progress Card */}
-        <View style={styles.card}>
-          <View style={styles.progressRow}>
-            {/* Progress Ring */}
-            <View style={styles.ringContainer}>
-              <View style={styles.ringCenter}>
-                <Text style={styles.ringNumber}>{todayCount}</Text>
-                <Text style={styles.ringLabel}>/ {dailyGoal}</Text>
-              </View>
-              {/* Visual ring via border trick */}
-              <View style={[
-                styles.ringOuter,
-                { borderColor: Colors.secondaryFixedDim }
-              ]} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.progressTitle}>Günlük Hedef</Text>
-              <View style={styles.streakRow}>
-                <AppIcon name="flame.fill" size={14} color={Colors.secondary} />
-                <Text style={styles.streakText}>{profile?.streak || 0} günlük seri</Text>
-              </View>
-              <Text style={styles.progressDesc}>
-                Bugün {todayCount} kelime tekrar ettin.
-              </Text>
-              <View style={styles.progressBarTrack}>
-                <View style={[styles.progressBarFill, { width: `${Math.round(progress * 100)}%` }]} />
+        {/* Günlük hedef */}
+        <Card style={styles.goalCard}>
+          <View style={styles.goalRow}>
+            <ProgressRing progress={progress} value={todayCount} total={dailyGoal} size={92} />
+            <View style={styles.goalText}>
+              <Text style={styles.cardEyebrow}>GÜNLÜK HEDEF</Text>
+              <Text style={styles.goalMessage}>{goalMessage}</Text>
+              <View style={[styles.streakChip, streak > 0 && styles.streakChipActive]}>
+                <AppIcon name="flame.fill" size={13} color={streak > 0 ? Colors.secondary : Colors.outline} />
+                <Text style={styles.streakText}>
+                  {streak > 0 ? `${streak} günlük seri` : 'Seri başlamadı'}
+                </Text>
               </View>
             </View>
           </View>
+          <View style={styles.goalDivider} />
           <TouchableOpacity
-            style={styles.startBtn}
-            onPress={() => router.push('/konular' as any)}
-            activeOpacity={0.85}
+            style={styles.goalAdjust}
+            onPress={() => router.push('/profile' as any)}
+            activeOpacity={0.8}
             accessibilityRole="button"
+            accessibilityLabel={`Günlük hedef ${dailyGoal} kelime. Hedefi değiştir`}
+            accessibilityHint="Profil ekranında günlük hedef ayarını açar"
           >
-            <Text style={styles.startBtnText}>Bugünkü Çalışmaya Başla</Text>
+            <Text style={styles.goalAdjustLabel}>Hedef: {dailyGoal} kelime / gün</Text>
+            <View style={styles.goalAdjustAction}>
+              <Text style={styles.goalAdjustText}>Değiştir</Text>
+              <AppIcon name="chevron.right" size={12} color={Colors.secondary} />
+            </View>
           </TouchableOpacity>
-        </View>
+        </Card>
 
-        {/* Bugünkü Planın */}
+        {/* Bugünkü plan: tek ana "Çalışmaya Başla" eylemi burada */}
         <DailyPlanCard />
 
-        {/* Kelimelerimle Çalış */}
+        {/* Gerçek hayat senaryoları: öne çıkan çağrı kartı */}
+        <TouchableOpacity
+          style={styles.scenarioCard}
+          onPress={() => router.push('/senaryolar' as any)}
+          activeOpacity={0.9}
+          accessibilityRole="button"
+          accessibilityLabel="Gerçek Hayat Senaryoları"
+          accessibilityHint="Günlük konuşma senaryolarını açar"
+        >
+          <IconTile name="bubble.left.and.bubble.right.fill" size={44} tone="gold" />
+          <View style={styles.scenarioText}>
+            <Text style={styles.scenarioTitle}>Gerçek Hayat Senaryoları</Text>
+            <Text style={styles.scenarioSubtitle}>Almancayı günlük konuşmalarla pratiğe dök.</Text>
+          </View>
+          <AppIcon name="chevron.right" size={14} color={Colors.golden} />
+        </TouchableOpacity>
+
         {customWordCount > 0 && (
           <TouchableOpacity
-            style={styles.customCard}
+            style={styles.linkCard}
             onPress={() => router.push('/kelime/calis' as any)}
             activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Kelimelerimle Çalış"
           >
-            <View style={styles.customLeft}>
-              <View style={styles.customIconBox}>
-                <AppIcon name="text.book.closed.fill" size={18} color={Colors.secondary} />
-              </View>
-              <View>
-                <Text style={styles.customTitle}>Kelimelerimle Çalış</Text>
-                <Text style={styles.customDesc}>{customWordCount} kişisel kelimenle alıştırma yap</Text>
-              </View>
+            <IconTile name="text.book.closed.fill" size={40} />
+            <View style={styles.linkText}>
+              <Text style={styles.linkTitle}>Kelimelerimle Çalış</Text>
+              <Text style={styles.linkSubtitle}>{customWordCount} kişisel kelimenle alıştırma yap</Text>
             </View>
             <AppIcon name="chevron.right" size={14} color={Colors.outline} />
           </TouchableOpacity>
         )}
 
-        {/* Gerçek Hayat Senaryoları */}
-        <TouchableOpacity
-          style={styles.customCard}
-          onPress={() => router.push('/senaryolar' as any)}
-          activeOpacity={0.85}
-          accessibilityRole="button"
-          accessibilityLabel="Gerçek Hayat Senaryoları"
-          accessibilityHint="Günlük konuşma senaryolarını açar"
-        >
-          <View style={styles.customLeft}>
-            <View style={styles.customIconBox}>
-              <AppIcon name="bubble.left.and.bubble.right.fill" size={18} color={Colors.secondary} />
-            </View>
-            <View>
-              <Text style={styles.customTitle}>Gerçek Hayat Senaryoları</Text>
-              <Text style={styles.customDesc}>Almancayı günlük konuşmalarla pratiğe dök.</Text>
-            </View>
-          </View>
-          <AppIcon name="chevron.right" size={14} color={Colors.outline} />
-        </TouchableOpacity>
-
-        {/* Bugünün Konuları */}
+        {/* Konular */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Konular — {profile?.level}</Text>
-          <View style={styles.topicsGrid}>
-            {dailyTopics.map((topic) => (
-              <TouchableOpacity
-                key={topic.id}
-                style={styles.topicCard}
-                onPress={() => router.push(`/konu/${topic.id}/alistirma` as any)}
-                activeOpacity={0.85}
-              >
-                <View style={styles.topicIconBox}>
-                  <AppIcon name={topicSymbol(topic.id)} size={22} color={Colors.secondary} />
-                </View>
-                <Text style={styles.topicTitle}>{topic.title}</Text>
-                <Text style={styles.topicCount}>{topic.wordCount} kelime</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Seviye Bilgisi */}
-        <View style={styles.levelCard}>
-          <Text style={styles.levelCardTitle}>Seviyeni Keşfet</Text>
-          <Text style={styles.levelCardDesc}>
-            {profile?.level === 'A1' && 'Temel kelimelerden başlıyorsun. Harika bir yolculuk!'}
-            {profile?.level === 'A2' && 'Günlük konuşmaya hazır kelimeler öğreniyorsun.'}
-            {profile?.level === 'B1' && 'Bağımsız ve akıcı bir dil kullanımına doğru ilerliyorsun.'}
-          </Text>
-          <View style={styles.levelDots}>
-            {['A1', 'A2', 'B1'].map(l => (
-              <View
-                key={l}
-                style={[
-                  styles.levelDot,
-                  l === profile?.level && styles.levelDotActive,
-                ]}
-              >
-                <Text style={[
-                  styles.levelDotText,
-                  l === profile?.level && styles.levelDotTextActive,
-                ]}>{l}</Text>
-              </View>
-            ))}
-          </View>
+          <SectionTitle
+            action={{ label: 'Tümü', onPress: () => router.push('/konular' as any), accessibilityLabel: 'Tüm konuları gör' }}
+          >
+            {`Konular · ${level}`}
+          </SectionTitle>
+          {dailyTopics.length === 0 ? (
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyText}>Bu seviye için henüz konu yok.</Text>
+            </View>
+          ) : (
+            <View style={styles.topicsGrid}>
+              {dailyTopics.map((topic) => (
+                <TouchableOpacity
+                  key={topic.id}
+                  style={styles.topicCard}
+                  onPress={() => router.push(`/konu/${topic.id}/alistirma` as any)}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${topic.title}, ${topic.wordCount} kelime`}
+                >
+                  <IconTile name={topicSymbol(topic.id)} size={44} />
+                  <Text style={styles.topicTitle} numberOfLines={2}>{topic.title}</Text>
+                  <Text style={styles.topicCount}>{topic.wordCount} kelime</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -212,93 +180,69 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   topBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: Spacing.marginMain, paddingTop: Spacing.md, paddingBottom: Spacing.sm,
+    gap: Spacing.md, paddingHorizontal: Spacing.marginMain, paddingTop: Spacing.md, paddingBottom: Spacing.sm,
   },
-  greeting: { fontSize: 20, fontWeight: '700', color: Colors.primary },
+  topBarText: { flex: 1 },
+  greeting: { fontSize: 24, lineHeight: 30, fontWeight: '700', color: Colors.primary, letterSpacing: -0.3 },
   greetingSubtext: { fontSize: 13, color: Colors.onSurfaceVariant, marginTop: 2 },
-  topBarRight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  levelBadge: {
-    backgroundColor: Colors.navy, paddingHorizontal: 12, paddingVertical: 6,
-    borderRadius: BorderRadius.full,
-  },
-  levelBadgeText: { color: Colors.golden, fontWeight: '700', fontSize: 13 },
   profileButton: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: Colors.surfaceContainerLow,
+    width: 46, height: 46, borderRadius: 23,
+    backgroundColor: Colors.surfaceContainerLowest, borderWidth: 1, borderColor: Cards.borderColor,
     alignItems: 'center', justifyContent: 'center',
   },
+  levelBadge: {
+    position: 'absolute', right: -6, bottom: -4,
+    backgroundColor: Colors.navy, paddingHorizontal: 6, paddingVertical: 2,
+    borderRadius: BorderRadius.full, borderWidth: 2, borderColor: Colors.warmWhite,
+  },
+  levelBadgeText: { color: Colors.golden, fontWeight: '700', fontSize: 10 },
   scroll: { flex: 1 },
-  content: { paddingHorizontal: Spacing.marginMain, paddingBottom: 100, gap: Spacing.md },
+  content: { paddingHorizontal: Spacing.marginMain, paddingTop: Spacing.sm, paddingBottom: 100, gap: Spacing.md },
 
-  // Progress Card
-  card: {
-    backgroundColor: Colors.surfaceContainerLowest,
-    borderRadius: 24, padding: Spacing.lg, ...Shadows.level1, gap: Spacing.md,
+  goalCard: { padding: 0, overflow: 'hidden' },
+  goalRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, padding: Spacing.md },
+  goalText: { flex: 1, gap: 4 },
+  cardEyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 1.1, color: Colors.secondary },
+  goalMessage: { fontSize: 15, fontWeight: '600', color: Colors.primary, lineHeight: 21 },
+  streakChip: {
+    alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2,
+    backgroundColor: Colors.surfaceContainerLow, borderRadius: BorderRadius.full,
+    paddingHorizontal: 10, paddingVertical: 4,
   },
-  progressRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
-  ringContainer: { width: 80, height: 80, position: 'relative', alignItems: 'center', justifyContent: 'center' },
-  ringOuter: {
-    position: 'absolute', width: 80, height: 80, borderRadius: 40,
-    borderWidth: 8, borderColor: Colors.secondaryFixedDim,
-  },
-  ringCenter: { alignItems: 'center' },
-  ringNumber: { fontSize: 22, fontWeight: '700', color: Colors.primary },
-  ringLabel: { fontSize: 10, color: Colors.onSurfaceVariant },
-  progressTitle: { fontSize: 16, fontWeight: '600', color: Colors.primary, marginBottom: 4 },
-  streakRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
-  streakText: { fontSize: 12, fontWeight: '600', color: Colors.onSurfaceVariant },
-  progressDesc: { fontSize: 13, color: Colors.onSurfaceVariant, marginBottom: 6 },
-  progressBarTrack: { height: 6, borderRadius: 3, backgroundColor: Colors.surfaceContainer, overflow: 'hidden' },
-  progressBarFill: { height: 6, borderRadius: 3, backgroundColor: Colors.secondaryFixedDim },
-  startBtn: {
-    backgroundColor: Colors.golden, borderRadius: BorderRadius.lg, height: 50,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  startBtnText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
-
-  // Custom Card
-  customCard: {
-    backgroundColor: Colors.surfaceContainerLowest, borderRadius: 20, padding: Spacing.md,
+  streakChipActive: { backgroundColor: Colors.secondaryContainer },
+  streakText: { fontSize: 12, fontWeight: '600', color: Colors.primary },
+  goalDivider: { height: 1, backgroundColor: Cards.borderColor },
+  goalAdjust: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    ...Shadows.level1, borderWidth: 1, borderColor: `${Colors.primary}0D`,
+    minHeight: Spacing.touchTargetMin, paddingHorizontal: Spacing.md,
+    backgroundColor: Colors.surfaceContainerLow,
   },
-  customLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
-  customIconBox: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: Colors.primaryContainer, alignItems: 'center', justifyContent: 'center',
-  },
-  customTitle: { fontSize: 14, fontWeight: '600', color: Colors.primary },
-  customDesc: { fontSize: 12, color: Colors.onSurfaceVariant },
-  arrow: { fontSize: 24, color: Colors.outlineVariant },
+  goalAdjustLabel: { fontSize: 13, color: Colors.onSurfaceVariant },
+  goalAdjustAction: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  goalAdjustText: { fontSize: 13, fontWeight: '700', color: Colors.secondary },
 
-  // Section
-  section: { gap: Spacing.sm },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: Colors.primary },
+  scenarioCard: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.md, padding: Spacing.md, minHeight: 76,
+    backgroundColor: Colors.navy, borderRadius: BorderRadius.xl, borderCurve: 'continuous',
+    boxShadow: '0 6px 18px rgba(26, 31, 43, 0.18)',
+  },
+  scenarioText: { flex: 1 },
+  scenarioTitle: { fontSize: 16, fontWeight: '700', color: Colors.onPrimary },
+  scenarioSubtitle: { fontSize: 12, color: '#B8BCC8', marginTop: 2, lineHeight: 17 },
+
+  linkCard: { ...Cards.surface, flexDirection: 'row', alignItems: 'center', gap: Spacing.md, padding: Spacing.md, minHeight: 64 },
+  linkText: { flex: 1 },
+  linkTitle: { fontSize: 14, fontWeight: '600', color: Colors.primary },
+  linkSubtitle: { fontSize: 12, color: Colors.onSurfaceVariant, marginTop: 1 },
+
+  section: { gap: Spacing.xs },
   topicsGrid: { flexDirection: 'row', gap: Spacing.sm },
   topicCard: {
-    flex: 1, backgroundColor: Colors.surfaceContainerLowest, borderRadius: 16,
-    padding: Spacing.md, alignItems: 'center', ...Shadows.level1,
+    ...Cards.surface, flex: 1, minHeight: 124,
+    paddingVertical: Spacing.md, paddingHorizontal: Spacing.sm, alignItems: 'center', justifyContent: 'center', gap: 6,
   },
-  topicIconBox: {
-    width: 40, height: 40, borderRadius: BorderRadius.md,
-    backgroundColor: Colors.surfaceContainerLow,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 6,
-  },
-  topicTitle: { fontSize: 12, fontWeight: '600', color: Colors.primary, textAlign: 'center' },
-  topicCount: { fontSize: 11, color: Colors.onSurfaceVariant, marginTop: 2 },
-
-  // Level card
-  levelCard: {
-    backgroundColor: Colors.primaryContainer, borderRadius: 20, padding: Spacing.lg,
-  },
-  levelCardTitle: { fontSize: 15, fontWeight: '700', color: Colors.golden, marginBottom: 6 },
-  levelCardDesc: { fontSize: 13, color: Colors.onPrimaryContainer, lineHeight: 20, marginBottom: Spacing.md },
-  levelDots: { flexDirection: 'row', gap: Spacing.sm },
-  levelDot: {
-    paddingHorizontal: 14, paddingVertical: 6, borderRadius: BorderRadius.full,
-    borderWidth: 1.5, borderColor: Colors.onPrimaryContainer,
-  },
-  levelDotActive: { backgroundColor: Colors.golden, borderColor: Colors.golden },
-  levelDotText: { fontSize: 12, fontWeight: '600', color: Colors.onPrimaryContainer },
-  levelDotTextActive: { color: Colors.primary },
+  topicTitle: { fontSize: 13, fontWeight: '700', color: Colors.primary, textAlign: 'center' },
+  topicCount: { fontSize: 11, color: Colors.onSurfaceVariant },
+  emptyBox: { ...Cards.surface, padding: Spacing.lg, alignItems: 'center' },
+  emptyText: { fontSize: 13, color: Colors.onSurfaceVariant },
 });

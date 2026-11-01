@@ -5,6 +5,7 @@ import { findDuplicateCustomWord } from '../utils/word-validation';
 import { supabase } from '../utils/supabase';
 import { ReviewStateMap } from '../utils/spaced-repetition';
 import { ScenarioResult } from '../utils/learning-analysis';
+import { previousLocalDateKey, toLocalDateKey } from '../utils/progress-stats';
 
 // ─── STORAGE KEYS ───────────────────────────────────────────────────────────
 const KEYS = {
@@ -808,11 +809,12 @@ export const useUserStore = create<UserStore>((set, get) => ({
   updateStreak: async () => {
     const profile = get().profile;
     if (!profile) return;
-    const today = new Date().toISOString().split('T')[0];
+    // Yerel takvim günü kullanılır (UTC değil): gece yarısından sonra gün doğru değişir.
+    const today = toLocalDateKey();
     const lastDate = profile.lastStudyDate;
     if (lastDate === today) return; // Aynı gün
 
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    const yesterday = previousLocalDateKey();
     const newStreak = lastDate === yesterday ? profile.streak + 1 : 1;
     await get().updateProfile({ streak: newStreak, lastStudyDate: today });
   },

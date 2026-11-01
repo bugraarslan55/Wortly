@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
-import { AppIcon } from './app-icon';
-import { BorderRadius, Colors, Shadows, Spacing } from '../constants/theme';
+import { IconTile } from './ui';
+import { Cards, Colors, Spacing } from '../constants/theme';
 import {
   applyReminder,
   DEFAULT_REMINDER,
@@ -92,7 +92,7 @@ export function ReviewReminderCard({ userId }: { userId: string | null }) {
   return (
     <View style={styles.card}>
       <View style={styles.row}>
-        <AppIcon name="bell.fill" size={18} color={Colors.secondary} />
+        <IconTile name="bell.fill" size={40} />
         <View style={styles.textBox}>
           <Text style={styles.label}>Günlük tekrar bildirimi</Text>
           <Text style={styles.hint}>Her gün seçtiğin saatte “Bugünkü kelime tekrarın hazır” bildirimi gelir.</Text>
@@ -136,22 +136,19 @@ export function ReviewReminderCard({ userId }: { userId: string | null }) {
 
 const styles = StyleSheet.create({
   card: {
+    ...Cards.surface,
     width: '100%',
-    marginTop: Spacing.md,
-    backgroundColor: Colors.surfaceContainerLowest,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.lg,
+    padding: Spacing.md,
     gap: Spacing.md,
-    ...Shadows.level1,
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   textBox: { flex: 1 },
   label: { fontSize: 15, fontWeight: '700', color: Colors.primary },
   hint: { fontSize: 12, color: Colors.onSurfaceVariant, marginTop: 2, lineHeight: 17 },
-  timeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  timeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: Colors.surfaceContainerLow, borderRadius: 12, paddingVertical: Spacing.sm, paddingLeft: Spacing.md, paddingRight: Spacing.sm },
   timeLabel: { fontSize: 14, fontWeight: '600', color: Colors.primary },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  stepBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: Colors.surfaceContainer, alignItems: 'center', justifyContent: 'center' },
+  stepBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.surfaceContainerLowest, alignItems: 'center', justifyContent: 'center' },
   stepText: { fontSize: 18, fontWeight: '700', color: Colors.primary, lineHeight: 22 },
   timeValue: { fontSize: 17, fontWeight: '700', color: Colors.primary, minWidth: 22, textAlign: 'center' },
   message: { fontSize: 12, color: Colors.error, fontWeight: '600', lineHeight: 17 },

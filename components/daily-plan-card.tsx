@@ -3,9 +3,10 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSessionStore, useUserStore, useWordStore } from '../store';
 import { getTopicsForLevel } from '../constants/topics';
-import { BorderRadius, Colors, Shadows, Spacing } from '../constants/theme';
+import { BorderRadius, Colors, Spacing } from '../constants/theme';
 import { AnalysisCategory, analyzeLearning, DailyPlan } from '../utils/learning-analysis';
 import { AppIcon } from './app-icon';
+import { Card, IconTile, PrimaryButton } from './ui';
 
 export const CATEGORY_LABELS: Record<AnalysisCategory, string> = {
   dinleme: 'Dinleme',
@@ -65,89 +66,72 @@ export function DailyPlanCard() {
     }
   };
 
-  const weakestLabel = weakestCategory ? CATEGORY_LABELS[weakestCategory] : 'Veri yok';
   const planLabel = `${dailyPlan.wordCount} kelime · ${dailyPlan.exerciseCount} alıştırma`;
+  const startLabel = dueCount > 0 ? `${dueCount} Kelimeyi Tekrar Et` : 'Çalışmaya Başla';
 
   return (
-    <View style={styles.card}>
+    <Card style={styles.card}>
       <View style={styles.titleRow}>
-        <View style={styles.iconBox}>
-          <AppIcon name="scope" size={18} color={Colors.secondary} />
-        </View>
-        <Text style={styles.title}>Bugünkü Planın</Text>
+        <IconTile name="scope" size={36} />
+        <Text style={styles.title} numberOfLines={1}>Bugünkü Planın</Text>
+        <TouchableOpacity
+          style={styles.analysisLink}
+          onPress={() => router.push('/analiz' as any)}
+          activeOpacity={0.8}
+          accessibilityRole="link"
+          accessibilityLabel="Analizi Gör"
+          accessibilityHint="Öğrenme analizi ekranını açar"
+        >
+          <Text style={styles.analysisLinkText}>Analizi Gör</Text>
+          <AppIcon name="chevron.right" size={12} color={Colors.secondary} />
+        </TouchableOpacity>
       </View>
 
+      {/* Yalnızca gerçek veri gösterilir: en zayıf alan yeterli cevap yokken gizlenir. */}
       <View style={styles.statsRow}>
         <View style={styles.stat}>
-          <Text style={styles.statValue}>{dueCount}</Text>
+          <Text style={styles.statValue} maxFontSizeMultiplier={1.3}>{dueCount}</Text>
           <Text style={styles.statLabel}>Tekrar bekleyen</Text>
         </View>
-        <View style={[styles.stat, styles.statWide]}>
-          <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{planLabel}</Text>
+        <View style={styles.stat}>
+          <Text style={styles.statValue} maxFontSizeMultiplier={1.3}>{planLabel}</Text>
           <Text style={styles.statLabel}>Önerilen çalışma</Text>
         </View>
-        <View style={styles.stat}>
-          <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{weakestLabel}</Text>
-          <Text style={styles.statLabel}>En zayıf alan</Text>
-        </View>
+        {weakestCategory && (
+          <View style={styles.stat}>
+            <Text style={styles.statValue} maxFontSizeMultiplier={1.3}>{CATEGORY_LABELS[weakestCategory]}</Text>
+            <Text style={styles.statLabel}>En zayıf alan</Text>
+          </View>
+        )}
       </View>
 
       <Text style={styles.reason}>{describeReason(dailyPlan, dueCount)}</Text>
 
-      <TouchableOpacity
-        style={styles.startBtn}
+      <PrimaryButton
+        label={startLabel}
         onPress={handleStart}
-        activeOpacity={0.85}
-        accessibilityRole="button"
-        accessibilityLabel="Çalışmaya Başla"
         accessibilityHint={dueCount > 0 ? 'Tekrar zamanı gelen kelimelerin çalışmasını açar' : 'Konular ekranını açar'}
-      >
-        <Text style={styles.startBtnText}>Çalışmaya Başla</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.analysisLink}
-        onPress={() => router.push('/analiz' as any)}
-        activeOpacity={0.8}
-        accessibilityRole="link"
-        accessibilityLabel="Analizi Gör"
-        accessibilityHint="Öğrenme analizi ekranını açar"
-      >
-        <Text style={styles.analysisLinkText}>Analizi Gör</Text>
-        <AppIcon name="chevron.right" size={12} color={Colors.secondary} />
-      </TouchableOpacity>
-    </View>
+      />
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: Colors.surfaceContainerLowest, borderRadius: 24, padding: Spacing.lg,
-    ...Shadows.level1, gap: Spacing.md,
-  },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  iconBox: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: Colors.primaryContainer, alignItems: 'center', justifyContent: 'center',
-  },
-  title: { fontSize: 16, fontWeight: '700', color: Colors.primary },
-  statsRow: { flexDirection: 'row', gap: Spacing.sm },
+  card: { gap: Spacing.sm + 2 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm + 2 },
+  title: { flex: 1, fontSize: 17, fontWeight: '700', color: Colors.primary },
+  statsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   stat: {
-    flex: 1, backgroundColor: Colors.surfaceContainerLow, borderRadius: 16,
-    paddingVertical: Spacing.sm, paddingHorizontal: Spacing.sm, gap: 2, justifyContent: 'center',
+    flexGrow: 1, flexBasis: 100, backgroundColor: Colors.surfaceContainerLow, borderRadius: BorderRadius.md,
+    borderCurve: 'continuous', paddingVertical: Spacing.sm + 2, paddingHorizontal: Spacing.sm + 4, gap: 2,
+    justifyContent: 'center',
   },
-  statWide: { flex: 1.6 },
-  statValue: { fontSize: 14, fontWeight: '700', color: Colors.primary },
+  statValue: { fontSize: 15, fontWeight: '700', color: Colors.primary },
   statLabel: { fontSize: 11, color: Colors.onSurfaceVariant },
   reason: { fontSize: 13, color: Colors.onSurfaceVariant, lineHeight: 19 },
-  startBtn: {
-    backgroundColor: Colors.golden, borderRadius: BorderRadius.lg, height: 50,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  startBtnText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
   analysisLink: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
-    minHeight: Spacing.touchTargetMin, marginTop: -Spacing.sm,
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    minHeight: Spacing.touchTargetMin, paddingLeft: Spacing.sm,
   },
   analysisLinkText: { fontSize: 13, fontWeight: '700', color: Colors.secondary },
 });
