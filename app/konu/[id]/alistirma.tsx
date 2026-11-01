@@ -6,8 +6,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { getTopicById } from '../../../constants/topics';
 import { useWordStore } from '../../../store';
-import { Colors, Spacing, BorderRadius, Shadows } from '../../../constants/theme';
+import { Colors, Spacing, BorderRadius, Cards } from '../../../constants/theme';
 import { AppIcon } from '../../../components/app-icon';
+import { SecondaryButton } from '../../../components/ui';
 import { EXERCISE_SYMBOLS } from '../../../constants/symbols';
 
 export default function AlistirmaSecimScreen() {
@@ -119,45 +120,48 @@ export default function AlistirmaSecimScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      {/* Handle bar */}
       <View style={styles.handleBar} />
 
-      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>
+        <Text style={styles.title} numberOfLines={2} accessibilityRole="header">
           {topic?.title || 'Alıştırma Seç'}
         </Text>
         <Text style={styles.subtitle}>{words.length} kelime · Nasıl çalışmak istersin?</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {EXERCISE_TYPES.map((ex) => (
           <TouchableOpacity
             key={ex.id}
             style={[
               styles.exerciseCard,
-              { backgroundColor: ex.color },
-              ex.disabled && styles.exerciseCardDisabled,
+              ex.disabled ? styles.exerciseCardDisabled : { backgroundColor: ex.color },
             ]}
             onPress={() => handleExercise(ex.id, ex.path, ex.disabled)}
             disabled={ex.disabled}
             activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel={ex.title}
+            accessibilityHint={ex.disabled ? undefined : ex.desc}
+            accessibilityState={{ disabled: ex.disabled }}
           >
-            <View style={styles.exerciseIconBox}>
-              <AppIcon name={ex.icon} size={22} color={Colors.secondary} />
+            <View style={[styles.exerciseIconBox, ex.disabled ? styles.exerciseIconBoxDisabled : styles.exerciseIconBoxEnabled]}>
+              <AppIcon name={ex.icon} size={22} color={ex.disabled ? Colors.outline : Colors.secondary} />
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.exerciseTitle}>{ex.title}</Text>
-              <Text style={styles.exerciseDesc}>{ex.desc}</Text>
+            <View style={styles.exerciseText}>
+              <Text style={[styles.exerciseTitle, ex.disabled && styles.exerciseTextDisabled]}>{ex.title}</Text>
+              <Text style={[styles.exerciseDesc, ex.disabled && styles.exerciseTextDisabled]}>{ex.desc}</Text>
             </View>
-            {!ex.disabled && <AppIcon name="chevron.right" size={15} color={Colors.outline} />}
+            {ex.disabled
+              ? <AppIcon name="lock.fill" size={14} color={Colors.outline} />
+              : <AppIcon name="chevron.right" size={15} color={Colors.outline} />}
           </TouchableOpacity>
         ))}
       </ScrollView>
 
-      <TouchableOpacity style={styles.cancelBtn} onPress={handleCancel} activeOpacity={0.7}>
-        <Text style={styles.cancelBtnText}>İptal</Text>
-      </TouchableOpacity>
+      <View style={styles.footer}>
+        <SecondaryButton label="İptal" onPress={handleCancel} />
+      </View>
     </SafeAreaView>
   );
 }
@@ -168,25 +172,29 @@ const styles = StyleSheet.create({
     width: 36, height: 4, backgroundColor: Colors.outlineVariant,
     borderRadius: 2, alignSelf: 'center', marginTop: Spacing.sm,
   },
-  header: { padding: Spacing.marginMain, paddingBottom: Spacing.sm },
-  title: { fontSize: 22, fontWeight: '700', color: Colors.primary, marginBottom: 4 },
-  subtitle: { fontSize: 14, color: Colors.onSurfaceVariant },
-  content: { paddingHorizontal: Spacing.marginMain, gap: Spacing.sm, paddingBottom: 24 },
+  header: { paddingHorizontal: Spacing.marginMain, paddingTop: Spacing.md, paddingBottom: Spacing.md },
+  title: { fontSize: 24, lineHeight: 30, fontWeight: '700', color: Colors.primary, letterSpacing: -0.3 },
+  subtitle: { fontSize: 14, color: Colors.onSurfaceVariant, marginTop: 4 },
+  content: { paddingHorizontal: Spacing.marginMain, gap: Spacing.sm + 2, paddingBottom: Spacing.md },
   exerciseCard: {
-    borderRadius: 20, padding: Spacing.md, minHeight: 76,
-    flexDirection: 'row', alignItems: 'center', gap: Spacing.md, ...Shadows.level1,
+    borderRadius: BorderRadius.xl, borderCurve: 'continuous', padding: Spacing.md, minHeight: 80,
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+    borderWidth: 1, borderColor: Cards.borderColor,
   },
-  exerciseCardDisabled: { opacity: 0.5 },
+  exerciseCardDisabled: { backgroundColor: Colors.surfaceContainer, opacity: 0.8 },
   exerciseIconBox: {
-    width: 44, height: 44, borderRadius: BorderRadius.md,
-    backgroundColor: Colors.surfaceContainerLowest,
-    alignItems: 'center', justifyContent: 'center',
+    width: 46, height: 46, borderRadius: BorderRadius.lg, borderCurve: 'continuous',
+    backgroundColor: Colors.surfaceContainerLowest, alignItems: 'center', justifyContent: 'center',
   },
+  exerciseIconBoxEnabled: { boxShadow: '0 1px 6px rgba(26, 31, 43, 0.08)' },
+  exerciseIconBoxDisabled: { backgroundColor: Colors.surfaceContainerHigh },
+  exerciseText: { flex: 1 },
   exerciseTitle: { fontSize: 16, fontWeight: '700', color: Colors.primary, marginBottom: 2 },
-  exerciseDesc: { fontSize: 13, color: Colors.onSurfaceVariant },
-  cancelBtn: {
-    margin: Spacing.marginMain, height: 50, alignItems: 'center', justifyContent: 'center',
-    borderRadius: BorderRadius.lg, borderWidth: 1.5, borderColor: Colors.outlineVariant,
+  exerciseDesc: { fontSize: 13, color: Colors.onSurfaceVariant, lineHeight: 18 },
+  // Devre dışı kartın açıklaması bilgi taşıdığı için okunur kontrast korunur.
+  exerciseTextDisabled: { color: Colors.onSurfaceVariant },
+  footer: {
+    paddingHorizontal: Spacing.marginMain, paddingTop: Spacing.sm, paddingBottom: Spacing.md,
+    borderTopWidth: 1, borderTopColor: Cards.borderColor, backgroundColor: Colors.warmWhite,
   },
-  cancelBtnText: { fontSize: 15, color: Colors.onSurfaceVariant, fontWeight: '600' },
 });

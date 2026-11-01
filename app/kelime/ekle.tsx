@@ -1,15 +1,19 @@
 import React, { useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  TextInput, KeyboardAvoidingView, Platform,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useWordStore } from '../../store';
-import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { Colors, Spacing, BorderRadius, Cards } from '../../constants/theme';
 import { Article } from '../../types';
+import { KeyboardSafeView } from '../../components/keyboard-safe-view';
 import { GermanCharacterBar } from '../../components/german-character-bar';
 import { ColoredGermanPlural, ColoredGermanWord } from '../../components/colored-german-word';
+import {
+  Card, FormField, PrimaryButton, SectionTitle, SegmentedControl, TextField,
+} from '../../components/ui';
 import { findDuplicateCustomWord } from '../../utils/word-validation';
 import { getArticlePalette } from '../../constants/article-colors';
 
@@ -31,6 +35,8 @@ export default function KelimeEkleScreen() {
   const [example, setExample] = useState('');
   const [exampleTurkish, setExampleTurkish] = useState('');
   const [saving, setSaving] = useState(false);
+  // state güncellemesi bir sonraki render'da görünür; ardışık hızlı dokunuşları ref ile engelle.
+  const savingRef = useRef(false);
   const [errors, setErrors] = useState<{ german?: string; turkish?: string; duplicate?: string }>({});
 
   const duplicateWord = findDuplicateCustomWord(words, german, article);
@@ -47,7 +53,7 @@ export default function KelimeEkleScreen() {
   };
 
   const handleSave = async () => {
-    if (saving) return;
+    if (savingRef.current) return;
 
     const nextErrors = {
       german: german.trim() ? undefined : 'Almanca kelimeyi yazmalısın.',
@@ -67,6 +73,7 @@ export default function KelimeEkleScreen() {
       return;
     }
 
+    savingRef.current = true;
     setSaving(true);
     const result = await addWord({
         german: german.trim(),
@@ -79,6 +86,7 @@ export default function KelimeEkleScreen() {
       });
 
     if (!result.ok) {
+      savingRef.current = false;
       setSaving(false);
       setErrors(current => ({
         ...current,
@@ -91,163 +99,136 @@ export default function KelimeEkleScreen() {
     router.back();
   };
 
+  const germanError = errors.german
+    || errors.duplicate
+    || (duplicateWord
+      ? `${duplicateWord.article ? `${duplicateWord.article} ` : ''}${duplicateWord.german} zaten Kelimelerim listende.`
+      : undefined);
+
   return (
     <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        {/* Header */}
+      <KeyboardSafeView>
+        <View style={styles.handleBar} />
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.cancelBtn}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.cancelBtn}
+            accessibilityRole="button"
+            accessibilityLabel="İptal"
+          >
             <Text style={styles.cancelBtnText}>İptal</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Yeni Kelime</Text>
-          <TouchableOpacity
-            style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
-            onPress={handleSave}
-            disabled={saving}
-            activeOpacity={0.85}
-            accessibilityRole="button"
-            accessibilityHint="Zorunlu alanları kontrol edip kelimeyi kaydeder"
-          >
-            <Text style={styles.saveBtnText}>{saving ? 'Kaydediliyor…' : 'Kaydet'}</Text>
-          </TouchableOpacity>
+          <Text style={styles.headerTitle} accessibilityRole="header">Yeni Kelime</Text>
+          <View style={styles.cancelBtn} />
         </View>
-
-        {/* Handle bar */}
-        <View style={styles.handleBar} />
 
         <ScrollView
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Almanca Kelime */}
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Almanca Kelime *</Text>
-            <TextInput
-              ref={germanInputRef}
-              style={[styles.input, (errors.german || errors.duplicate) && styles.inputError]}
-              value={german}
-              onChangeText={updateGerman}
-              onBlur={() => {
-                if (!german.trim()) {
-                  setErrors(current => ({ ...current, german: 'Almanca kelimeyi yazmalısın.' }));
-                }
-              }}
-              placeholder="örn: Apfel"
-              placeholderTextColor={Colors.outlineVariant}
-              autoCapitalize="words"
-              autoFocus
-              returnKeyType="next"
-              onSubmitEditing={() => turkishInputRef.current?.focus()}
-            />
-            <GermanCharacterBar onSelect={(character) => updateGerman(german + character)} />
-            {errors.german && <Text style={styles.errorText} selectable>{errors.german}</Text>}
-            {(errors.duplicate || duplicateWord) && (
-              <Text style={styles.errorText} selectable accessibilityLiveRegion="polite">
-                {errors.duplicate || `${duplicateWord?.article ? `${duplicateWord.article} ` : ''}${duplicateWord?.german} zaten Kelimelerim listende.`}
-              </Text>
-            )}
-          </View>
+          {/* Kelime */}
+          <SectionTitle>Kelime</SectionTitle>
+          <Card style={styles.card}>
+            <FormField label="Almanca kelime" error={germanError}>
+              <TextField
+                ref={germanInputRef}
+                invalid={!!germanError}
+                value={german}
+                onChangeText={updateGerman}
+                onBlur={() => {
+                  if (!german.trim()) {
+                    setErrors(current => ({ ...current, german: 'Almanca kelimeyi yazmalısın.' }));
+                  }
+                }}
+                placeholder="örn: Apfel"
+                autoCapitalize="words"
+                autoFocus
+                returnKeyType="next"
+                onSubmitEditing={() => turkishInputRef.current?.focus()}
+                accessibilityLabel="Almanca kelime, zorunlu"
+              />
+              <GermanCharacterBar onSelect={(character) => updateGerman(german + character)} />
+            </FormField>
 
-          {/* Artikel */}
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Artikel (Cinsiyet)</Text>
-            <View style={styles.articleRow}>
-              {ARTICLES.map(art => {
-                const palette = getArticlePalette(art);
-                const isActive = article === art;
-                return (
-                  <TouchableOpacity
-                    key={art || 'none'}
-                    style={[
-                      styles.articleBtn,
-                      isActive && { backgroundColor: palette.background, borderColor: palette.foreground },
-                    ]}
-                    onPress={() => {
-                      setArticle(art);
-                      setErrors(current => ({ ...current, duplicate: undefined }));
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.articleBtnText, isActive && { color: palette.foreground }]}>
-                      {ARTICLE_LABELS[art]}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
+            <FormField label="Artikel" hint="İsimlerin cinsiyetini belirtir. Emin değilsen “Yok” seç.">
+              <SegmentedControl
+                options={ARTICLES.map(art => {
+                  const palette = getArticlePalette(art);
+                  return {
+                    value: art,
+                    label: ARTICLE_LABELS[art],
+                    accessibilityLabel: art ? `Artikel ${art}` : 'Artikel yok',
+                    activeBackground: palette.background,
+                    activeColor: palette.foreground,
+                    activeBorder: palette.foreground,
+                  };
+                })}
+                value={article}
+                onChange={(next) => {
+                  setArticle(next);
+                  setErrors(current => ({ ...current, duplicate: undefined }));
+                }}
+              />
+            </FormField>
 
-          {/* Türkçe */}
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Türkçe Anlamı *</Text>
-            <TextInput
-              ref={turkishInputRef}
-              style={[styles.input, errors.turkish && styles.inputError]}
-              value={turkish}
-              onChangeText={updateTurkish}
-              onBlur={() => {
-                if (!turkish.trim()) {
-                  setErrors(current => ({ ...current, turkish: 'Türkçe anlamını yazmalısın.' }));
-                }
-              }}
-              placeholder="örn: elma"
-              placeholderTextColor={Colors.outlineVariant}
-            />
-            {errors.turkish && <Text style={styles.errorText} selectable>{errors.turkish}</Text>}
-          </View>
+            <FormField label="Türkçe anlamı" error={errors.turkish}>
+              <TextField
+                ref={turkishInputRef}
+                invalid={!!errors.turkish}
+                value={turkish}
+                onChangeText={updateTurkish}
+                onBlur={() => {
+                  if (!turkish.trim()) {
+                    setErrors(current => ({ ...current, turkish: 'Türkçe anlamını yazmalısın.' }));
+                  }
+                }}
+                placeholder="örn: elma"
+                accessibilityLabel="Türkçe anlamı, zorunlu"
+              />
+            </FormField>
+          </Card>
 
-          {/* Çoğul */}
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Çoğul Formu <Text style={styles.optional}>(isteğe bağlı)</Text></Text>
-            <TextInput
-              style={styles.input}
-              value={plural}
-              onChangeText={setPlural}
-              placeholder="örn: die Äpfel"
-              placeholderTextColor={Colors.outlineVariant}
-            />
-            <GermanCharacterBar onSelect={(character) => setPlural(value => value + character)} />
-          </View>
+          {/* Ek bilgiler */}
+          <SectionTitle>Ek bilgiler</SectionTitle>
+          <Card style={styles.card}>
+            <FormField label="Çoğul formu" optional>
+              <TextField
+                value={plural}
+                onChangeText={setPlural}
+                placeholder="örn: die Äpfel"
+              />
+              <GermanCharacterBar onSelect={(character) => setPlural(value => value + character)} />
+            </FormField>
 
-          {/* Örnek Cümle */}
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Almanca Örnek Cümle <Text style={styles.optional}>(isteğe bağlı)</Text></Text>
-            <TextInput
-              style={[styles.input, styles.inputMultiline]}
-              value={example}
-              onChangeText={setExample}
-              placeholder="örn: Ich esse einen Apfel."
-              placeholderTextColor={Colors.outlineVariant}
-              multiline
-              numberOfLines={2}
-            />
-            <GermanCharacterBar onSelect={(character) => setExample(value => value + character)} />
-          </View>
-
-          {/* Örnek Cümle Türkçe */}
-          {example.trim().length > 0 && (
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Türkçe Çevirisi <Text style={styles.optional}>(isteğe bağlı)</Text></Text>
-              <TextInput
-                style={[styles.input, styles.inputMultiline]}
-                value={exampleTurkish}
-                onChangeText={setExampleTurkish}
-                placeholder="örn: Bir elma yiyorum."
-                placeholderTextColor={Colors.outlineVariant}
+            <FormField label="Almanca örnek cümle" optional>
+              <TextField
+                value={example}
+                onChangeText={setExample}
+                placeholder="örn: Ich esse einen Apfel."
                 multiline
                 numberOfLines={2}
               />
-            </View>
-          )}
+              <GermanCharacterBar onSelect={(character) => setExample(value => value + character)} />
+            </FormField>
 
-          {/* Preview */}
+            {example.trim().length > 0 && (
+              <FormField label="Türkçe çevirisi" optional>
+                <TextField
+                  value={exampleTurkish}
+                  onChangeText={setExampleTurkish}
+                  placeholder="örn: Bir elma yiyorum."
+                  multiline
+                  numberOfLines={2}
+                />
+              </FormField>
+            )}
+          </Card>
+
+          {/* Önizleme */}
           {isValid && (
             <View style={styles.preview}>
-              <Text style={styles.previewLabel}>Önizleme:</Text>
+              <SectionTitle>Önizleme</SectionTitle>
               <View style={styles.previewCard}>
                 <ColoredGermanWord
                   article={article}
@@ -261,48 +242,43 @@ export default function KelimeEkleScreen() {
             </View>
           )}
         </ScrollView>
-      </KeyboardAvoidingView>
+
+        <View style={styles.footer}>
+          <PrimaryButton
+            label={saving ? 'Kaydediliyor…' : 'Kaydet'}
+            onPress={handleSave}
+            loading={saving}
+            accessibilityHint="Zorunlu alanları kontrol edip kelimeyi kaydeder"
+          />
+        </View>
+      </KeyboardSafeView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
+  handleBar: {
+    width: 36, height: 4, backgroundColor: Colors.outlineVariant, borderRadius: 2,
+    alignSelf: 'center', marginTop: Spacing.sm,
+  },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: Spacing.marginMain, paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.marginMain, paddingVertical: Spacing.sm,
   },
-  cancelBtn: { paddingVertical: 6, paddingRight: 12 },
-  cancelBtnText: { fontSize: 15, color: Colors.onSurfaceVariant, fontWeight: '500' },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.primary },
-  saveBtn: { backgroundColor: Colors.golden, paddingHorizontal: 16, paddingVertical: 8, borderRadius: BorderRadius.md },
-  saveBtnDisabled: { opacity: 0.4 },
-  saveBtnText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
-  handleBar: { width: 36, height: 4, backgroundColor: Colors.outlineVariant, borderRadius: 2, alignSelf: 'center', marginBottom: Spacing.sm },
-  content: { paddingHorizontal: Spacing.marginMain, paddingBottom: 60, gap: Spacing.md },
-  fieldGroup: { gap: 6 },
-  label: { fontSize: 13, fontWeight: '600', color: Colors.primary },
-  optional: { fontWeight: '400', color: Colors.outlineVariant },
-  input: {
-    backgroundColor: Colors.surfaceContainerLowest, borderRadius: BorderRadius.lg,
-    padding: Spacing.md, fontSize: 16, color: Colors.primary,
-    borderWidth: 1.5, borderColor: Colors.outlineVariant, ...Shadows.level1,
-  },
-  inputError: { borderColor: Colors.error, backgroundColor: Colors.errorContainer },
-  errorText: { fontSize: 12, color: Colors.error, fontWeight: '600', lineHeight: 17 },
-  inputMultiline: { minHeight: 60, textAlignVertical: 'top' },
-  articleRow: { flexDirection: 'row', gap: Spacing.sm },
-  articleBtn: {
-    flex: 1, height: 44, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: Colors.surfaceContainer, borderRadius: BorderRadius.md,
-    borderWidth: 1.5, borderColor: 'transparent',
-  },
-  articleBtnText: { fontSize: 14, fontWeight: '600', color: Colors.onSurfaceVariant },
+  cancelBtn: { minWidth: 72, minHeight: Spacing.touchTargetMin, justifyContent: 'center' },
+  cancelBtnText: { fontSize: 15, color: Colors.onSurfaceVariant, fontWeight: '600' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: Colors.primary },
+  content: { paddingHorizontal: Spacing.marginMain, paddingBottom: Spacing.lg, gap: Spacing.sm },
+  card: { gap: Spacing.md },
   preview: { gap: Spacing.sm },
-  previewLabel: { fontSize: 12, fontWeight: '600', color: Colors.outlineVariant, textTransform: 'uppercase', letterSpacing: 0.5 },
-  previewCard: { backgroundColor: Colors.surfaceContainerLowest, borderRadius: 16, padding: Spacing.md, ...Shadows.level1 },
-  previewGerman: { fontSize: 22, fontWeight: '700', color: Colors.primary, marginBottom: 4 },
+  previewCard: { ...Cards.surface, borderRadius: BorderRadius.lg, padding: Spacing.md, gap: 4 },
+  previewGerman: { fontSize: 22, fontWeight: '700', color: Colors.primary },
   previewArticle: { fontSize: 16, fontWeight: '700' },
   previewTurkish: { fontSize: 15, color: Colors.onSurfaceVariant },
-  previewMeta: { fontSize: 12, color: Colors.outlineVariant, marginTop: 4 },
+  previewMeta: { fontSize: 12, color: Colors.outline },
+  footer: {
+    paddingHorizontal: Spacing.marginMain, paddingTop: Spacing.sm, paddingBottom: Spacing.md,
+    backgroundColor: Colors.warmWhite, borderTopWidth: 1, borderTopColor: Cards.borderColor,
+  },
 });

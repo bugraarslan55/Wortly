@@ -1,15 +1,16 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useUserStore } from '../../store';
 import { getTopicsForLevel } from '../../constants/topics';
 import { topicSymbol } from '../../constants/symbols';
-import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { Colors, Spacing, Cards } from '../../constants/theme';
 import { Level, Topic } from '../../types';
 import { AppIcon } from '../../components/app-icon';
+import { EmptyState, IconTile, ScreenHeader, SearchField, SegmentedControl } from '../../components/ui';
 
 const LEVEL_TABS: Level[] = ['A1', 'A2', 'B1'];
 
@@ -22,6 +23,10 @@ export default function KonularScreen() {
     ? (profile!.level as Level)
     : 'A1';
   const [activeLevel, setActiveLevel] = useState<Level>(safeInitialLevel);
+  // Sekme ekranı bellekte kalır; Profil'den seviye değişince seçili sekme kilitli kalmasın.
+  useEffect(() => {
+    setActiveLevel(safeInitialLevel);
+  }, [safeInitialLevel]);
   const [search, setSearch] = useState('');
 
   const allTopics = useMemo(() => getTopicsForLevel('B1'), []); // A1 + A2 + B1 (yayın kapsamı)
@@ -41,73 +46,39 @@ export default function KonularScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>Konular</Text>
-        <Text style={styles.subtitle}>Seviyene göre kelime konuları</Text>
-      </View>
+      <ScreenHeader title="Konular" subtitle="Seviyene göre kelime konuları" />
 
-      {/* Search */}
-      <View style={styles.searchWrapper}>
-        <AppIcon name="magnifyingglass" size={16} color={Colors.outline} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Konu ara..."
-          placeholderTextColor={Colors.outlineVariant}
-          value={search}
-          onChangeText={setSearch}
-        />
-        {search.length > 0 && (
-          <TouchableOpacity
-            onPress={() => setSearch('')}
-            style={styles.clearButton}
-            accessibilityRole="button"
-            accessibilityLabel="Aramayı temizle"
-          >
-            <AppIcon name="xmark.circle.fill" size={18} color={Colors.outline} />
-          </TouchableOpacity>
-        )}
-      </View>
+      <SearchField value={search} onChangeText={setSearch} placeholder="Konu ara..." style={styles.search} />
 
-      {/* Level Tabs */}
       <View style={styles.levelTabs}>
-        {LEVEL_TABS.map((lvl) => {
-          const locked = isLevelLocked(lvl);
-          return (
-            <TouchableOpacity
-              key={lvl}
-              style={[
-                styles.levelTab,
-                activeLevel === lvl && styles.levelTabActive,
-                locked && styles.levelTabLocked,
-              ]}
-              onPress={() => !locked && setActiveLevel(lvl)}
-              activeOpacity={locked ? 1 : 0.8}
-            >
-              <Text style={[
-                styles.levelTabText,
-                activeLevel === lvl && styles.levelTabTextActive,
-                locked && styles.levelTabTextLocked,
-              ]}>
-                {lvl}
-              </Text>
-              {locked && <AppIcon name="lock.fill" size={11} color={Colors.outline} />}
-            </TouchableOpacity>
-          );
-        })}
+        <SegmentedControl
+          options={LEVEL_TABS.map(lvl => {
+            const locked = isLevelLocked(lvl);
+            return {
+              value: lvl,
+              label: lvl,
+              disabled: locked,
+              icon: locked ? 'lock.fill' : undefined,
+              accessibilityLabel: locked ? `Seviye ${lvl}, kilitli` : `Seviye ${lvl}`,
+            };
+          })}
+          value={activeLevel}
+          onChange={setActiveLevel}
+        />
       </View>
 
-      {/* Topics List */}
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {filteredTopics.length === 0 ? (
-          <View style={styles.empty}>
-            <AppIcon name="magnifyingglass" size={34} color={Colors.outlineVariant} />
-            <Text style={styles.emptyText}>Konu bulunamadı</Text>
-          </View>
+          <EmptyState
+            icon="magnifyingglass"
+            title="Konu bulunamadı"
+            description="Aramayı değiştirmeyi dene."
+          />
         ) : (
           filteredTopics.map((topic) => (
             <TopicCard
@@ -132,14 +103,10 @@ function TopicCard({ topic, onPress }: { topic: Topic; onPress: () => void }) {
       accessibilityLabel={`${topic.title}, ${topic.wordCount} kelime, ${topic.level}`}
       accessibilityHint="Alıştırma türlerini açar"
     >
-      <View style={styles.topicLeft}>
-        <View style={styles.topicEmojiBox}>
-          <AppIcon name={topicSymbol(topic.id)} size={22} color={Colors.secondary} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.topicTitle}>{topic.title}</Text>
-          <Text style={styles.topicMeta}>{topic.wordCount} kelime · {topic.level}</Text>
-        </View>
+      <IconTile name={topicSymbol(topic.id)} size={48} />
+      <View style={styles.topicText}>
+        <Text style={styles.topicTitle} numberOfLines={2}>{topic.title}</Text>
+        <Text style={styles.topicMeta}>{topic.wordCount} kelime · {topic.level}</Text>
       </View>
       <AppIcon name="chevron.right" size={15} color={Colors.outline} />
     </TouchableOpacity>
@@ -148,47 +115,15 @@ function TopicCard({ topic, onPress }: { topic: Topic; onPress: () => void }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
-  header: { paddingHorizontal: Spacing.marginMain, paddingTop: Spacing.md, paddingBottom: Spacing.sm },
-  title: { fontSize: 24, fontWeight: '700', color: Colors.primary },
-  subtitle: { fontSize: 13, color: Colors.onSurfaceVariant, marginTop: 2 },
-  searchWrapper: {
-    flexDirection: 'row', alignItems: 'center',
-    marginHorizontal: Spacing.marginMain, marginBottom: Spacing.sm,
-    backgroundColor: Colors.surfaceContainerLowest,
-    borderRadius: BorderRadius.lg, paddingHorizontal: Spacing.md, height: 44,
-    gap: Spacing.sm, ...Shadows.level1,
-  },
-  searchInput: { flex: 1, fontSize: 15, color: Colors.primary },
-  clearButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  levelTabs: {
-    flexDirection: 'row', paddingHorizontal: Spacing.marginMain,
-    gap: Spacing.sm, marginBottom: Spacing.md,
-  },
-  levelTab: {
-    flex: 1, minHeight: Spacing.touchTargetMin, alignItems: 'center', justifyContent: 'center',
-    flexDirection: 'row', gap: Spacing.xs,
-    borderRadius: BorderRadius.md, backgroundColor: Colors.surfaceContainer,
-  },
-  levelTabActive: { backgroundColor: Colors.primary },
-  levelTabLocked: { opacity: 0.5 },
-  levelTabText: { fontSize: 13, fontWeight: '600', color: Colors.onSurfaceVariant },
-  levelTabTextActive: { color: Colors.golden },
-  levelTabTextLocked: { color: Colors.outlineVariant },
+  search: { marginHorizontal: Spacing.marginMain, marginBottom: Spacing.md },
+  levelTabs: { paddingHorizontal: Spacing.marginMain, marginBottom: Spacing.md },
   scroll: { flex: 1 },
-  content: { paddingHorizontal: Spacing.marginMain, paddingBottom: 100, gap: Spacing.sm },
+  content: { paddingHorizontal: Spacing.marginMain, paddingBottom: 100, gap: Spacing.sm + 2 },
   topicCard: {
-    backgroundColor: Colors.surfaceContainerLowest, borderRadius: BorderRadius.xl,
-    padding: Spacing.md, flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', ...Shadows.level1,
+    ...Cards.surface, padding: Spacing.md, minHeight: 76,
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
   },
-  topicLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, flex: 1 },
-  topicEmojiBox: {
-    width: 48, height: 48, borderRadius: 14,
-    backgroundColor: Colors.surfaceContainerLow,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  topicTitle: { fontSize: 15, fontWeight: '600', color: Colors.primary, marginBottom: 2 },
+  topicText: { flex: 1 },
+  topicTitle: { fontSize: 16, fontWeight: '700', color: Colors.primary, marginBottom: 2 },
   topicMeta: { fontSize: 12, color: Colors.onSurfaceVariant },
-  empty: { alignItems: 'center', marginTop: 60, gap: Spacing.md },
-  emptyText: { fontSize: 15, color: Colors.onSurfaceVariant },
 });
