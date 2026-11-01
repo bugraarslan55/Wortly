@@ -104,6 +104,19 @@ export const Shadows = {
   },
 };
 
+// Ortak kart yüzeyi: ince kenarlık + hafif gölge (tüm ekranlarda aynı yükseklik hissi).
+export const Cards = {
+  borderColor: 'rgba(26, 31, 43, 0.07)',
+  surface: {
+    backgroundColor: '#ffffff',
+    borderRadius: BorderRadius.xl,
+    borderCurve: 'continuous' as const,
+    borderWidth: 1,
+    borderColor: 'rgba(26, 31, 43, 0.07)',
+    boxShadow: '0 2px 12px rgba(26, 31, 43, 0.06)',
+  },
+};
+
 export const Fonts = {
   regular: 'HankenGrotesk_400Regular',
   medium: 'HankenGrotesk_500Medium',

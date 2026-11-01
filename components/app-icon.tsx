@@ -3,8 +3,8 @@ import { StyleProp, View, ViewStyle } from 'react-native';
 import {
   ArrowRight, AudioLines, BadgeCheck, Bell, BookOpen, Briefcase, Bus, ChartColumn,
   ChevronLeft, ChevronRight, Circle, CircleCheck, CircleQuestionMark, CircleUser, CircleX,
-  Check, Copy, EyeOff, Flame, Hand, Hash, House, Inbox, Layers, Library, Lightbulb, List, Lock,
-  Mail, MapPin, MessagesSquare, Mic, Palette, Pause, PencilLine, Play, Quote, RefreshCw,
+  Check, Copy, Eye, EyeOff, Flame, Hand, Hash, House, Inbox, Layers, Library, Lightbulb, List, Lock,
+  Mail, MapPin, MessagesSquare, Mic, Palette, Pause, PencilLine, Play, Plus, Quote, RefreshCw,
   RotateCw, Search, Square, SquarePen, Target, ThumbsUp, Trash, Trophy, Turtle, Users,
   Utensils, Volume2,
 } from 'lucide-react-native';
@@ -47,6 +47,7 @@ const ICONS: Record<string, IconDef> = {
   'pause.fill': { Icon: Pause, solid: true },
   'stop.fill': { Icon: Square, solid: true },
   'lock.fill': { Icon: Lock, solid: true },
+  'plus': { Icon: Plus },
   'trash': { Icon: Trash },
   'square.and.pencil': { Icon: SquarePen },
   'pencil.line': { Icon: PencilLine },
@@ -67,6 +68,8 @@ const ICONS: Record<string, IconDef> = {
   'hand.thumbsup.fill': { Icon: ThumbsUp, solid: true },
   'hand.wave.fill': { Icon: Hand },
   'lightbulb.fill': { Icon: Lightbulb, solid: true },
+  'eye': { Icon: Eye },
+  'eye.slash': { Icon: EyeOff },
   'eye.slash.fill': { Icon: EyeOff },
   'number': { Icon: Hash },
   'paintpalette.fill': { Icon: Palette },
