@@ -6,7 +6,7 @@ import {
   Check, Copy, Eye, EyeOff, Flame, Hand, Hash, House, Inbox, Layers, Library, Lightbulb, List, Lock,
   Mail, MapPin, MessagesSquare, Mic, Palette, Pause, PencilLine, Play, Plus, Quote, RefreshCw,
   RotateCw, Search, Square, SquarePen, Target, ThumbsUp, Trash, Trophy, Turtle, Users,
-  Utensils, Volume2,
+  Utensils, Volume2, X,
 } from 'lucide-react-native';
 import { Colors } from '../constants/theme';
 
@@ -48,6 +48,7 @@ const ICONS: Record<string, IconDef> = {
   'stop.fill': { Icon: Square, solid: true },
   'lock.fill': { Icon: Lock, solid: true },
   'plus': { Icon: Plus },
+  'xmark': { Icon: X },
   'trash': { Icon: Trash },
   'square.and.pencil': { Icon: SquarePen },
   'pencil.line': { Icon: PencilLine },
