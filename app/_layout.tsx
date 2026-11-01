@@ -41,7 +41,7 @@ export default function RootLayout() {
     syncedUserId: wordsSyncedUserId,
   } = useWordStore();
   const {
-    loadSessions, syncSessions, isLoaded: areSessionsLoaded,
+    loadSessions, loadScenarioResults, syncSessions, isLoaded: areSessionsLoaded,
     syncedUserId: sessionsSyncedUserId,
   } = useSessionStore();
   const {
@@ -80,6 +80,11 @@ export default function RootLayout() {
     if (!isAuthLoaded || !areSessionsLoaded || !session?.user.id) return;
     void syncSessions(session.user.id);
   }, [isAuthLoaded, areSessionsLoaded, session?.user.id, syncSessions]);
+
+  useEffect(() => {
+    if (!isAuthLoaded || !session?.user.id) return;
+    void loadScenarioResults(session.user.id);
+  }, [isAuthLoaded, session?.user.id, loadScenarioResults]);
 
   // Oturum açık bir kullanıcı varsa, o kullanıcı için profil/kelime/geçmiş
   // senkronizasyonu en az bir kez tamamlanana kadar uygulamayı render etme.
@@ -205,6 +210,10 @@ export default function RootLayout() {
         />
         <Stack.Screen
           name="profile"
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
+          name="analiz"
           options={{ animation: 'slide_from_right' }}
         />
         <Stack.Screen

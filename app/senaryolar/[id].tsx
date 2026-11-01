@@ -3,7 +3,8 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Speech from 'expo-speech';
-import { useUserStore } from '../../store';
+import { useSessionStore, useUserStore } from '../../store';
+import { useAuthStore } from '../../store/auth';
 import {
   getScenarioById, isScenarioLevelLocked, ReplyStep, Scenario, ScenarioStep,
 } from '../../constants/scenarios';
@@ -72,6 +73,8 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
   const [shownTranslations, setShownTranslations] = useState<Record<number, boolean>>({});
   const [speakingMode, setSpeakingMode] = useState<'normal' | 'slow' | null>(null);
   const speechRunRef = useRef(0);
+  const { session } = useAuthStore();
+  const { saveScenarioResult } = useSessionStore();
 
   const steps = scenario.steps;
   const step = steps[index];
@@ -124,6 +127,21 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
   const stepProgress = progress[index] ?? EMPTY_PROGRESS;
   const canContinue = step.type === 'say' || stepProgress.solved;
 
+  const correctCount = steps.reduce((count, item, stepIndex) => {
+    const state = progress[stepIndex];
+    return item.type === 'reply' && state?.solved && state.firstTry ? count + 1 : count;
+  }, 0);
+  const percent = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
+
+  useEffect(() => {
+    if (!finished || !session?.user.id) return;
+    void saveScenarioResult(session.user.id, {
+      scenarioId: scenario.id,
+      score: correctCount,
+      total: totalQuestions,
+    });
+  }, [finished, session?.user.id, scenario.id, correctCount, totalQuestions, saveScenarioResult]);
+
   const handleOptionPress = (option: Option) => {
     if (stepProgress.solved) return;
     setProgress(current => {
@@ -163,12 +181,6 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
   };
 
   if (finished) {
-    const correctCount = steps.reduce((count, item, stepIndex) => {
-      const state = progress[stepIndex];
-      return item.type === 'reply' && state?.solved && state.firstTry ? count + 1 : count;
-    }, 0);
-    const percent = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
-
     return (
       <SafeAreaView style={styles.safe}>
         <ScrollView contentContainerStyle={styles.resultContent} showsVerticalScrollIndicator={false}>

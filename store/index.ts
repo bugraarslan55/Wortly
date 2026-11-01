@@ -4,6 +4,7 @@ import { Word, UserProfile, QuizSession, Level, MasteryLevel } from '../types';
 import { findDuplicateCustomWord } from '../utils/word-validation';
 import { supabase } from '../utils/supabase';
 import { ReviewStateMap } from '../utils/spaced-repetition';
+import { ScenarioResult } from '../utils/learning-analysis';
 
 // ─── STORAGE KEYS ───────────────────────────────────────────────────────────
 const KEYS = {
@@ -17,6 +18,8 @@ const KEYS = {
   SESSIONS_OWNER: '@wortly:sessions-owner',
   PENDING_CHANGES: '@wortly:pending-changes',
 };
+
+const scenarioResultsKey = (userId: string) => `@wortly:scenario-results:${userId}`;
 
 const devWarn = (...args: unknown[]) => {
   if (__DEV__) console.warn(...args);
@@ -818,19 +821,23 @@ export const useUserStore = create<UserStore>((set, get) => ({
 // ─── SESSION STORE ──────────────────────────────────────────────────────────
 interface SessionStore {
   sessions: QuizSession[];
+  scenarioResults: ScenarioResult[];
   currentSession: QuizSession | null;
   isLoaded: boolean;
   syncedUserId: string | null;
   loadSessions: () => Promise<void>;
+  loadScenarioResults: (userId: string) => Promise<void>;
   syncSessions: (userId: string) => Promise<void>;
   resetLocal: () => Promise<void>;
   startSession: (session: Omit<QuizSession, 'id' | 'date'>) => void;
   saveSession: (session: QuizSession) => Promise<void>;
+  saveScenarioResult: (userId: string, result: Omit<ScenarioResult, 'id' | 'date'>) => Promise<void>;
   clearCurrentSession: () => void;
 }
 
 export const useSessionStore = create<SessionStore>((set, get) => ({
   sessions: [],
+  scenarioResults: [],
   currentSession: null,
   isLoaded: false,
   syncedUserId: null,
@@ -844,6 +851,16 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       set({ isLoaded: true });
     } finally {
       devLog('[Wortly][load] loadSessions tamamlandı');
+    }
+  },
+
+  loadScenarioResults: async (userId) => {
+    try {
+      const raw = await safeGetItem(scenarioResultsKey(userId));
+      const parsed = raw ? JSON.parse(raw) : [];
+      set({ scenarioResults: Array.isArray(parsed) ? parsed : [] });
+    } catch {
+      set({ scenarioResults: [] });
     }
   },
 
@@ -918,7 +935,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   }),
 
   resetLocal: async () => {
-    set({ sessions: [], currentSession: null, syncedUserId: null });
+    set({ sessions: [], scenarioResults: [], currentSession: null, syncedUserId: null });
     await safeMultiRemove([KEYS.SESSIONS, KEYS.SESSIONS_OWNER]);
   },
 
@@ -941,6 +958,17 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       await clearPendingChange('session', session.id);
       await safeSetItem(KEYS.SESSIONS_OWNER, userId);
     }
+  },
+
+  saveScenarioResult: async (userId, result) => {
+    const nextResult: ScenarioResult = {
+      ...result,
+      id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
+      date: Date.now(),
+    };
+    const updated = [nextResult, ...get().scenarioResults].slice(0, 100);
+    set({ scenarioResults: updated });
+    await safeSetItem(scenarioResultsKey(userId), JSON.stringify(updated));
   },
 
   clearCurrentSession: () => set({ currentSession: null }),
