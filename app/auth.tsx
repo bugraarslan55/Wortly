@@ -1,20 +1,14 @@
-import React, { useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useRef, useState } from 'react';
+import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../store/auth';
-import { BorderRadius, Colors, Shadows, Spacing, Typography } from '../constants/theme';
+import { Colors, Spacing } from '../constants/theme';
+import { AuthLayout } from '../components/auth-layout';
+import { FormField, Notice, PasswordField, PrimaryButton, TextField } from '../components/ui';
 
 type AuthMode = 'signIn' | 'signUp';
+
+const MIN_PASSWORD_LENGTH = 6;
 
 export default function AuthScreen() {
   const router = useRouter();
@@ -25,8 +19,17 @@ export default function AuthScreen() {
   const [passwordAgain, setPasswordAgain] = useState('');
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState<'error' | 'success' | null>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const passwordAgainRef = useRef<TextInput>(null);
+  // Store'daki isBusy bir sonraki render'da görünür; hızlı çift dokunuşu burada engelle.
+  const submittingRef = useRef(false);
 
   const isSignUp = mode === 'signUp';
+
+  const showError = (text: string) => {
+    setMessage(text);
+    setMessageType('error');
+  };
 
   const switchMode = () => {
     setMode(isSignUp ? 'signIn' : 'signUp');
@@ -36,186 +39,171 @@ export default function AuthScreen() {
   };
 
   const handleSubmit = async () => {
+    if (submittingRef.current || isBusy) return;
+
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail || !password) {
-      setMessage('E-posta ve şifre alanlarını doldur.');
-      setMessageType('error');
+      showError('E-posta ve şifre alanlarını doldur.');
+      return;
+    }
+
+    if (isSignUp && password.length < MIN_PASSWORD_LENGTH) {
+      showError(`Şifre en az ${MIN_PASSWORD_LENGTH} karakter olmalı.`);
       return;
     }
 
     if (isSignUp && password !== passwordAgain) {
-      setMessage('Şifreler aynı olmalı.');
-      setMessageType('error');
+      showError('Şifreler aynı olmalı.');
       return;
     }
 
+    submittingRef.current = true;
     setMessage('');
     setMessageType(null);
-    const result = isSignUp
-      ? await signUp(normalizedEmail, password)
-      : await signIn(normalizedEmail, password);
+    try {
+      const result = isSignUp
+        ? await signUp(normalizedEmail, password)
+        : await signIn(normalizedEmail, password);
 
-    if (!result.ok) {
-      setMessage(result.message);
-      setMessageType('error');
-      return;
+      if (!result.ok) {
+        showError(result.message);
+        return;
+      }
+
+      if (isSignUp && !result.session) {
+        setMessage('Kayıt başarılı. Devam etmek için e-posta adresini doğrula.');
+        setMessageType('success');
+        setMode('signIn');
+        setPassword('');
+        setPasswordAgain('');
+        return;
+      }
+
+      router.replace('/');
+    } finally {
+      submittingRef.current = false;
     }
-
-    if (isSignUp && !result.session) {
-      setMessage('Kayıt başarılı. Devam etmek için e-posta adresini doğrula.');
-      setMessageType('success');
-      setMode('signIn');
-      setPassword('');
-      setPasswordAgain('');
-      return;
-    }
-
-    router.replace('/');
   };
 
   const handleForgotPassword = async () => {
+    if (submittingRef.current || isBusy) return;
+
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) {
-      setMessage('Şifre sıfırlama bağlantısı için önce e-posta adresini gir.');
-      setMessageType('error');
+      showError('Şifre sıfırlama bağlantısı için önce e-posta adresini gir.');
       return;
     }
 
+    submittingRef.current = true;
     setMessage('');
     setMessageType(null);
-    const result = await resetPasswordForEmail(normalizedEmail);
-    setMessage(result.message);
-    setMessageType(result.ok ? 'success' : 'error');
+    try {
+      const result = await resetPasswordForEmail(normalizedEmail);
+      setMessage(result.message);
+      setMessageType(result.ok ? 'success' : 'error');
+    } finally {
+      submittingRef.current = false;
+    }
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={styles.container}
-          keyboardShouldPersistTaps="handled"
+    <AuthLayout
+      title={isSignUp ? 'Kendi öğrenme alanını oluştur.' : 'Tekrar hoş geldin.'}
+      subtitle={
+        isSignUp
+          ? 'İlerlemeni ve kişisel kelimelerini güvenle saklayalım.'
+          : 'İlerlemeni kaldığın yerden sürdür.'
+      }
+      footer={
+        <View style={styles.switchRow}>
+          <Text style={styles.switchPrompt}>{isSignUp ? 'Zaten hesabın var mı?' : 'Hesabın yok mu?'}</Text>
+          <TouchableOpacity
+            style={styles.switchButton}
+            onPress={switchMode}
+            disabled={isBusy}
+            accessibilityRole="button"
+            accessibilityLabel={isSignUp ? 'Giriş yap ekranına geç' : 'Kayıt ol ekranına geç'}
+          >
+            <Text style={styles.switchText}>{isSignUp ? 'Giriş yap' : 'Kayıt ol'}</Text>
+          </TouchableOpacity>
+        </View>
+      }
+    >
+      <FormField label="E-posta">
+        <TextField
+          value={email}
+          onChangeText={setEmail}
+          placeholder="ornek@mail.com"
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
+          textContentType="emailAddress"
+          autoComplete="email"
+          returnKeyType="next"
+          onSubmitEditing={() => passwordRef.current?.focus()}
+          accessibilityLabel="E-posta"
+        />
+      </FormField>
+
+      <FormField label="Şifre" hint={isSignUp ? `En az ${MIN_PASSWORD_LENGTH} karakter.` : undefined}>
+        <PasswordField
+          ref={passwordRef}
+          value={password}
+          onChangeText={setPassword}
+          placeholder={isSignUp ? `En az ${MIN_PASSWORD_LENGTH} karakter` : 'Şifren'}
+          textContentType={isSignUp ? 'newPassword' : 'password'}
+          autoComplete={isSignUp ? 'new-password' : 'password'}
+          returnKeyType={isSignUp ? 'next' : 'done'}
+          onSubmitEditing={() => (isSignUp ? passwordAgainRef.current?.focus() : handleSubmit())}
+          accessibilityLabel="Şifre"
+        />
+      </FormField>
+
+      {isSignUp && (
+        <FormField label="Şifre tekrar">
+          <PasswordField
+            ref={passwordAgainRef}
+            value={passwordAgain}
+            onChangeText={setPasswordAgain}
+            placeholder="Şifreni tekrar yaz"
+            textContentType="newPassword"
+            autoComplete="new-password"
+            returnKeyType="done"
+            onSubmitEditing={handleSubmit}
+            accessibilityLabel="Şifre tekrar"
+          />
+        </FormField>
+      )}
+
+      {!isSignUp && (
+        <TouchableOpacity
+          style={styles.forgotButton}
+          onPress={handleForgotPassword}
+          disabled={isBusy}
+          accessibilityRole="button"
+          accessibilityLabel="Şifremi unuttum"
+          accessibilityHint="E-posta adresine şifre sıfırlama bağlantısı gönderir"
         >
-          <View style={styles.header}>
-            <Text style={styles.eyebrow}>WORTLY · ALMANCA ÖĞREN</Text>
-            <Text style={styles.headline}>
-              {isSignUp ? 'Kendi öğrenme alanını oluştur.' : 'Tekrar hoş geldin.'}
-            </Text>
-            <Text style={styles.subtext}>
-              {isSignUp
-                ? 'İlerlemeni ve kişisel kelimelerini güvenle saklayalım.'
-                : 'İlerlemeni kaldığın yerden sürdür.'}
-            </Text>
-          </View>
+          <Text style={styles.forgotText}>Şifremi unuttum?</Text>
+        </TouchableOpacity>
+      )}
 
-          <View style={styles.form}>
-            <View style={styles.inputWrapper}>
-              <Text style={styles.inputLabel}>E-posta</Text>
-              <TextInput
-                style={styles.input}
-                value={email}
-                onChangeText={setEmail}
-                placeholder="ornek@mail.com"
-                placeholderTextColor={Colors.outlineVariant}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-                textContentType="emailAddress"
-                autoComplete="email"
-              />
-            </View>
+      {!!message && messageType && <Notice type={messageType}>{message}</Notice>}
 
-            <View style={styles.inputWrapper}>
-              <Text style={styles.inputLabel}>Şifre</Text>
-              <TextInput
-                style={styles.input}
-                value={password}
-                onChangeText={setPassword}
-                placeholder="En az 6 karakter"
-                placeholderTextColor={Colors.outlineVariant}
-                secureTextEntry
-                textContentType={isSignUp ? 'newPassword' : 'password'}
-                autoComplete={isSignUp ? 'new-password' : 'password'}
-              />
-            </View>
-
-            {isSignUp && (
-              <View style={styles.inputWrapper}>
-                <Text style={styles.inputLabel}>Şifre tekrar</Text>
-                <TextInput
-                  style={styles.input}
-                  value={passwordAgain}
-                  onChangeText={setPasswordAgain}
-                  placeholder="Şifreni tekrar yaz"
-                  placeholderTextColor={Colors.outlineVariant}
-                  secureTextEntry
-                  textContentType="newPassword"
-                  autoComplete="new-password"
-                />
-              </View>
-            )}
-
-            {!isSignUp && (
-              <TouchableOpacity
-                style={styles.forgotButton}
-                onPress={handleForgotPassword}
-                disabled={isBusy}
-              >
-                <Text style={styles.forgotText}>Şifremi unuttum?</Text>
-              </TouchableOpacity>
-            )}
-
-            {!!message && (
-              <Text style={[styles.message, messageType === 'success' ? styles.success : styles.error]}>
-                {message}
-              </Text>
-            )}
-
-            <TouchableOpacity
-              style={[styles.cta, isBusy && styles.disabled]}
-              onPress={handleSubmit}
-              disabled={isBusy}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.ctaText}>
-                {isBusy ? 'Bekleyin…' : isSignUp ? 'Kayıt Ol' : 'Giriş Yap'}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.switchButton} onPress={switchMode} disabled={isBusy}>
-              <Text style={styles.switchText}>
-                {isSignUp ? 'Zaten hesabın var mı? Giriş yap' : 'Hesabın yok mu? Kayıt ol'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      <PrimaryButton
+        label={isBusy ? 'Bekleyin…' : isSignUp ? 'Kayıt Ol' : 'Giriş Yap'}
+        onPress={handleSubmit}
+        loading={isBusy}
+      />
+    </AuthLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.warmWhite },
-  flex: { flex: 1 },
-  container: { flexGrow: 1, justifyContent: 'center', padding: Spacing.marginMain },
-  header: { alignItems: 'center', marginBottom: Spacing.xl },
-  eyebrow: { ...Typography.labelMd, color: Colors.secondary, letterSpacing: 1.2, marginBottom: Spacing.md },
-  headline: { fontSize: 26, fontWeight: '700', color: Colors.primary, textAlign: 'center', lineHeight: 33, marginBottom: Spacing.sm },
-  subtext: { fontSize: 15, color: Colors.onSurfaceVariant, textAlign: 'center', lineHeight: 22, maxWidth: 300 },
-  form: { gap: Spacing.md },
-  inputWrapper: { gap: Spacing.sm },
-  inputLabel: { fontSize: 13, fontWeight: '600', color: Colors.primary, letterSpacing: 0.5 },
-  input: { backgroundColor: Colors.surfaceContainerLowest, borderRadius: BorderRadius.lg, padding: Spacing.md, fontSize: 17, color: Colors.primary, borderWidth: 1.5, borderColor: Colors.outlineVariant, ...Shadows.level1 },
-  forgotButton: { alignItems: 'flex-end' },
-  forgotText: { fontSize: 13, color: Colors.secondary, fontWeight: '600' },
-  message: { fontSize: 14, lineHeight: 20, textAlign: 'center', marginTop: Spacing.xs },
-  error: { color: Colors.error },
-  success: { color: Colors.success },
-  cta: { backgroundColor: Colors.golden, borderRadius: BorderRadius.lg, height: 50, alignItems: 'center', justifyContent: 'center', marginTop: Spacing.sm },
-  disabled: { opacity: 0.55 },
-  ctaText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
-  switchButton: { alignItems: 'center', paddingVertical: Spacing.sm },
-  switchText: { fontSize: 14, color: Colors.secondary, fontWeight: '600' },
+  forgotButton: { alignSelf: 'flex-end', minHeight: Spacing.touchTargetMin, justifyContent: 'center', marginTop: -Spacing.sm },
+  forgotText: { fontSize: 14, color: Colors.secondary, fontWeight: '700' },
+  switchRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center' },
+  switchPrompt: { fontSize: 14, color: Colors.onSurfaceVariant },
+  switchButton: { minHeight: Spacing.touchTargetMin, paddingHorizontal: Spacing.sm, justifyContent: 'center' },
+  switchText: { fontSize: 14, color: Colors.secondary, fontWeight: '700' },
 });

@@ -1,18 +1,9 @@
-import React, { useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useRef, useState } from 'react';
+import { TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../utils/supabase';
-import { BorderRadius, Colors, Shadows, Spacing, Typography } from '../../constants/theme';
+import { AuthLayout } from '../../components/auth-layout';
+import { FormField, Notice, PasswordField, PrimaryButton } from '../../components/ui';
 
 export default function ResetPasswordScreen() {
   const router = useRouter();
@@ -21,8 +12,12 @@ export default function ResetPasswordScreen() {
   const [isBusy, setIsBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState<'error' | 'success' | null>(null);
+  const passwordAgainRef = useRef<TextInput>(null);
+  const submittingRef = useRef(false);
 
   const handleSubmit = async () => {
+    if (submittingRef.current) return;
+
     if (!password || !passwordAgain) {
       setMessage('Yeni şifreni ve tekrarını gir.');
       setMessageType('error');
@@ -41,11 +36,13 @@ export default function ResetPasswordScreen() {
       return;
     }
 
+    submittingRef.current = true;
     setMessage('');
     setMessageType(null);
     setIsBusy(true);
     const { error } = await supabase.auth.updateUser({ password });
     setIsBusy(false);
+    submittingRef.current = false;
 
     if (error) {
       setMessage('Şifre güncellenemedi. Lütfen tekrar dene.');
@@ -61,91 +58,41 @@ export default function ResetPasswordScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={styles.container}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.header}>
-            <Text style={styles.eyebrow}>WORTLY · ŞİFRE SIFIRLAMA</Text>
-            <Text style={styles.headline}>Yeni şifreni belirle.</Text>
-            <Text style={styles.subtext}>
-              Hesabın için yeni bir şifre oluştur.
-            </Text>
-          </View>
+    <AuthLayout title="Yeni şifreni belirle." subtitle="Hesabın için yeni bir şifre oluştur.">
+      <FormField label="Yeni şifre" hint="En az 6 karakter.">
+        <PasswordField
+          value={password}
+          onChangeText={setPassword}
+          placeholder="En az 6 karakter"
+          textContentType="newPassword"
+          autoComplete="new-password"
+          returnKeyType="next"
+          onSubmitEditing={() => passwordAgainRef.current?.focus()}
+          accessibilityLabel="Yeni şifre"
+        />
+      </FormField>
 
-          <View style={styles.form}>
-            <View style={styles.inputWrapper}>
-              <Text style={styles.inputLabel}>Yeni şifre</Text>
-              <TextInput
-                style={styles.input}
-                value={password}
-                onChangeText={setPassword}
-                placeholder="En az 6 karakter"
-                placeholderTextColor={Colors.outlineVariant}
-                secureTextEntry
-                textContentType="newPassword"
-                autoComplete="new-password"
-              />
-            </View>
+      <FormField label="Yeni şifre (tekrar)">
+        <PasswordField
+          ref={passwordAgainRef}
+          value={passwordAgain}
+          onChangeText={setPasswordAgain}
+          placeholder="Şifreni tekrar yaz"
+          textContentType="newPassword"
+          autoComplete="new-password"
+          returnKeyType="done"
+          onSubmitEditing={handleSubmit}
+          accessibilityLabel="Yeni şifre tekrar"
+        />
+      </FormField>
 
-            <View style={styles.inputWrapper}>
-              <Text style={styles.inputLabel}>Yeni şifre (tekrar)</Text>
-              <TextInput
-                style={styles.input}
-                value={passwordAgain}
-                onChangeText={setPasswordAgain}
-                placeholder="Şifreni tekrar yaz"
-                placeholderTextColor={Colors.outlineVariant}
-                secureTextEntry
-                textContentType="newPassword"
-                autoComplete="new-password"
-              />
-            </View>
+      {!!message && messageType && <Notice type={messageType}>{message}</Notice>}
 
-            {!!message && (
-              <Text style={[styles.message, messageType === 'success' ? styles.success : styles.error]}>
-                {message}
-              </Text>
-            )}
-
-            <TouchableOpacity
-              style={[styles.cta, isBusy && styles.disabled]}
-              onPress={handleSubmit}
-              disabled={isBusy}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.ctaText}>
-                {isBusy ? 'Bekleyin…' : 'Şifreyi Güncelle'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      <PrimaryButton
+        label={isBusy ? 'Bekleyin…' : 'Şifreyi Güncelle'}
+        onPress={handleSubmit}
+        loading={isBusy}
+      />
+    </AuthLayout>
   );
 }
-
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.warmWhite },
-  flex: { flex: 1 },
-  container: { flexGrow: 1, justifyContent: 'center', padding: Spacing.marginMain },
-  header: { alignItems: 'center', marginBottom: Spacing.xl },
-  eyebrow: { ...Typography.labelMd, color: Colors.secondary, letterSpacing: 1.2, marginBottom: Spacing.md },
-  headline: { fontSize: 26, fontWeight: '700', color: Colors.primary, textAlign: 'center', lineHeight: 33, marginBottom: Spacing.sm },
-  subtext: { fontSize: 15, color: Colors.onSurfaceVariant, textAlign: 'center', lineHeight: 22, maxWidth: 300 },
-  form: { gap: Spacing.md },
-  inputWrapper: { gap: Spacing.sm },
-  inputLabel: { fontSize: 13, fontWeight: '600', color: Colors.primary, letterSpacing: 0.5 },
-  input: { backgroundColor: Colors.surfaceContainerLowest, borderRadius: BorderRadius.lg, padding: Spacing.md, fontSize: 17, color: Colors.primary, borderWidth: 1.5, borderColor: Colors.outlineVariant, ...Shadows.level1 },
-  message: { fontSize: 14, lineHeight: 20, textAlign: 'center', marginTop: Spacing.xs },
-  error: { color: Colors.error },
-  success: { color: Colors.success },
-  cta: { backgroundColor: Colors.golden, borderRadius: BorderRadius.lg, height: 50, alignItems: 'center', justifyContent: 'center', marginTop: Spacing.sm },
-  disabled: { opacity: 0.55 },
-  ctaText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
-});
