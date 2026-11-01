@@ -1,10 +1,14 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useEffect, useMemo } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useUserStore } from '../../store';
-import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { useUserStore, useSessionStore, useWordStore } from '../../store';
+import { Colors, Spacing, BorderRadius } from '../../constants/theme';
 import { AppIcon } from '../../components/app-icon';
+import { Card, IconTile, PrimaryButton, SecondaryButton } from '../../components/ui';
+import { getActiveStreak } from '../../utils/progress-stats';
+import { getReviewState } from '../../utils/spaced-repetition';
+import { ALL_TOPICS } from '../../constants/topics';
 
 const TYPE_LABELS: Record<string, string> = {
   flashcard: 'Flashcard',
@@ -16,6 +20,23 @@ const TYPE_LABELS: Record<string, string> = {
   bosluk: 'Boşluk Doldurma',
 };
 
+// Aynı alıştırmayı yeniden başlatabilen türler ve rotaları.
+const RESTART_ROUTES: Record<string, string> = {
+  yazma: '/alistirma/yazma',
+  'dogru-yanlis': '/alistirma/dogru-yanlis',
+  'dinle-sec': '/alistirma/dinle-sec',
+  'dinle-yaz': '/alistirma/dinle-yaz',
+  cumle: '/alistirma/cumle',
+};
+const RETRY_WRONG_TYPES = new Set(['dinle-sec', 'dinle-yaz', 'yazma', 'dogru-yanlis', 'cumle']);
+
+function getMessage(percentage: number) {
+  if (percentage >= 90) return 'Harika bir sonuç. Bu kelimeler artık yerine oturuyor.';
+  if (percentage >= 70) return 'İyi iş. Küçük bir tekrarla pekiştirebilirsin.';
+  if (percentage >= 50) return 'Fena değil. Yanlışları tekrar çalışmak işe yarar.';
+  return 'Zor bir tur oldu. Kelimeleri biraz daha tekrar edip yeniden dene.';
+}
+
 export default function SonucScreen() {
   const router = useRouter();
   const { score, total, type, topicId, wrongIds } = useLocalSearchParams<{
@@ -26,159 +47,157 @@ export default function SonucScreen() {
     wrongIds?: string;
   }>();
   const { profile, updateStreak } = useUserStore();
+  const { reviewStates, words } = useWordStore();
+  const sessions = useSessionStore(state => state.sessions);
 
-  const scoreNum = parseInt(score || '0');
-  const totalNum = parseInt(total || '1');
-  const percentage = totalNum > 0 ? (scoreNum / totalNum) * 100 : 0;
-  const canRetryWrongAnswers = (
-    type === 'dinle-yaz' || type === 'dinle-sec' || type === 'yazma'
-  ) && Boolean(wrongIds);
+  const totalNum = Math.max(0, parseInt(total || '0', 10) || 0);
+  const scoreNum = Math.min(totalNum, Math.max(0, parseInt(score || '0', 10) || 0));
+  const wrongNum = totalNum - scoreNum;
+  const percentage = totalNum > 0 ? Math.round((scoreNum / totalNum) * 100) : 0;
+  const typeKey = type || '';
+  const canRetryWrongAnswers = RETRY_WRONG_TYPES.has(typeKey) && Boolean(wrongIds);
+  const restartRoute = RESTART_ROUTES[typeKey];
+  const hasTopic = Boolean(topicId);
+
+  useEffect(() => {
+    void updateStreak();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Öğrenme ilerlemesi: bu çalışmanın kelimelerinden kaçı "Bilinçli" (2) veya "Öğrenildi" (3)
+  // düzeyinde. Yalnızca bu sonuca ait kayıtlı oturumdan ve gerçek mastery verisinden hesaplanır.
+  const progress = useMemo(() => {
+    const session = sessions.find(
+      item => item.type === typeKey && item.score === scoreNum && item.total === totalNum,
+    );
+    if (!session) return null;
+    const pool = new Map(ALL_TOPICS.flatMap(topic => topic.words).map(word => [word.id, word]));
+    for (const word of words) pool.set(word.id, word);
+    const sessionWords = Array.from(new Set(session.wordIds))
+      .map(id => pool.get(id))
+      .filter((word): word is NonNullable<typeof word> => Boolean(word));
+    if (sessionWords.length === 0) return null;
+    const strong = sessionWords.filter(word => getReviewState(word, reviewStates).masteryLevel >= 2).length;
+    return { strong, count: sessionWords.length };
+  }, [sessions, words, reviewStates, typeKey, scoreNum, totalNum]);
+
+  const streak = getActiveStreak(profile?.streak, profile?.lastStudyDate);
+  const resultIcon = percentage >= 80 ? 'trophy.fill' : percentage >= 50 ? 'hand.thumbsup.fill' : 'arrow.clockwise';
 
   const retryWrongAnswers = () => {
     if (!canRetryWrongAnswers) return;
-
-    const pathname = type === 'dinle-sec'
-      ? '/alistirma/dinle-sec'
-      : type === 'yazma'
-        ? '/alistirma/yazma'
-        : '/alistirma/dinle-yaz';
     router.replace({
-      pathname,
-      params: {
-        ...(topicId ? { topicId } : {}),
-        wordIds: wrongIds,
-      },
+      pathname: RESTART_ROUTES[typeKey],
+      params: { ...(topicId ? { topicId } : {}), wordIds: wrongIds },
     } as any);
   };
 
-  useEffect(() => {
-    updateStreak();
-  }, []);
+  const restart = () => {
+    if (!restartRoute) return;
+    router.replace({ pathname: restartRoute, params: topicId ? { topicId } : {} } as any);
+  };
 
-  const resultIcon = percentage >= 80 ? 'trophy.fill' : percentage >= 50 ? 'hand.thumbsup.fill' : 'arrow.clockwise';
-
-  const getMessage = () => {
-    if (percentage >= 80) return 'Mükemmel! Harika iş çıkardın.';
-    if (percentage >= 50) return 'İyi gidiyorsun! Biraz daha pratik yap.';
-    return 'Vazgeçme! Tekrar dene.';
+  const goBackToTopic = () => {
+    router.replace((hasTopic ? `/konu/${topicId}/alistirma` : '/(tabs)/kelimelerim') as any);
   };
 
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.container}>
-        <View style={styles.resultIconBox}>
-          <AppIcon name={resultIcon} size={38} color={Colors.secondary} />
-        </View>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+        <IconTile name={resultIcon} size={72} />
+        <Text style={styles.typeLabel} accessibilityRole="header">
+          {TYPE_LABELS[typeKey] || 'Alıştırma'} tamamlandı
+        </Text>
 
-        {/* Alıştırma tipi */}
-        <Text style={styles.typeLabel}>{TYPE_LABELS[type || ''] || 'Alıştırma'} Tamamlandı!</Text>
-
-        {/* Score */}
-        <View style={styles.scoreCard}>
-          <View style={styles.scoreCircle}>
-            <Text style={styles.scoreNumber}>{scoreNum}</Text>
-            <Text style={styles.scoreDivider}>/{totalNum}</Text>
+        <Card style={styles.scoreCard}>
+          <View style={styles.scoreCircle} accessible accessibilityLabel={`${totalNum} sorudan ${scoreNum} doğru`}>
+            <Text style={styles.scoreNumber} maxFontSizeMultiplier={1.2}>{scoreNum}</Text>
+            <Text style={styles.scoreOf} maxFontSizeMultiplier={1.2}>/{totalNum}</Text>
           </View>
           <View style={styles.scoreRight}>
-            <Text style={styles.scorePercent}>{Math.round(percentage)}%</Text>
-            <Text style={styles.scoreMessage}>{getMessage()}</Text>
+            <Text style={styles.scorePercent} accessibilityLabel={`Başarı yüzde ${percentage}`}>%{percentage}</Text>
+            <Text style={styles.scoreMessage}>{getMessage(percentage)}</Text>
           </View>
-        </View>
+        </Card>
 
-        {/* Stats row */}
         <View style={styles.statsRow}>
-          <View style={styles.statBox}>
+          <Card style={styles.statBox}>
             <AppIcon name="checkmark.circle.fill" size={20} color={Colors.success} />
             <Text style={styles.statNumber}>{scoreNum}</Text>
             <Text style={styles.statLabel}>Doğru</Text>
-          </View>
-          <View style={styles.statBox}>
+          </Card>
+          <Card style={styles.statBox}>
             <AppIcon name="xmark.circle.fill" size={20} color={Colors.error} />
-            <Text style={styles.statNumber}>{totalNum - scoreNum}</Text>
+            <Text style={styles.statNumber}>{wrongNum}</Text>
             <Text style={styles.statLabel}>Yanlış</Text>
-          </View>
-          <View style={styles.statBox}>
+          </Card>
+          <Card style={styles.statBox}>
             <AppIcon name="flame.fill" size={20} color={Colors.secondary} />
-            <Text style={styles.statNumber}>{profile?.streak || 0}</Text>
-            <Text style={styles.statLabel}>Seri</Text>
-          </View>
+            <Text style={styles.statNumber}>{streak}</Text>
+            <Text style={styles.statLabel}>Günlük seri</Text>
+          </Card>
         </View>
 
-        {/* Message */}
-        {percentage < 80 && (
-          <View style={styles.tipBox}>
-            <Text style={styles.tipText}>
-              {totalNum - scoreNum} kelimeyi tekrar çalışmanı öneririz.
+        {progress && (
+          <View style={styles.progressBox} accessibilityLiveRegion="polite">
+            <Text style={styles.progressTitle}>Öğrenme ilerlemesi</Text>
+            <Text style={styles.progressText}>
+              Bu çalışmadaki {progress.count} kelimeden {progress.strong} tanesi “Bilinçli” veya “Öğrenildi” düzeyinde.
             </Text>
           </View>
         )}
 
-        {/* Buttons */}
+        {wrongNum > 0 && percentage < 80 && (
+          <View style={styles.tipBox}>
+            <Text style={styles.tipText}>{wrongNum} kelimeyi tekrar çalışmanı öneririz.</Text>
+          </View>
+        )}
+
         <View style={styles.buttonGroup}>
           {canRetryWrongAnswers && (
-            <TouchableOpacity
-              style={styles.retryBtn}
-              onPress={retryWrongAnswers}
-              activeOpacity={0.85}
-              accessibilityRole="button"
-              accessibilityLabel="Yanlış cevaplanan kelimeleri tekrar çalış"
-            >
-              <Text style={styles.retryBtnText}>Yanlışları Tekrarla</Text>
-            </TouchableOpacity>
+            <PrimaryButton label="Yanlışları Tekrarla" onPress={retryWrongAnswers} />
           )}
-          <TouchableOpacity
-            style={styles.homeBtn}
-            onPress={() => router.replace('/(tabs)' as any)}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.homeBtnText}>Ana Sayfaya Dön</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.topicsBtn}
-            onPress={() => router.replace('/(tabs)/konular' as any)}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.topicsBtnText}>Konulara Git</Text>
-          </TouchableOpacity>
+          {restartRoute && (
+            canRetryWrongAnswers
+              ? <SecondaryButton label="Baştan Çalış" onPress={restart} />
+              : <PrimaryButton label="Tekrar Çalış" onPress={restart} />
+          )}
+          <SecondaryButton label={hasTopic ? 'Konuya Dön' : 'Kelimelerime Dön'} onPress={goBackToTopic} />
+          <SecondaryButton label="Ana Sayfa" onPress={() => router.replace('/(tabs)' as any)} />
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
-  container: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.marginMain, gap: Spacing.lg },
-  resultIconBox: {
-    width: 72, height: 72, borderRadius: BorderRadius.xxl,
-    backgroundColor: Colors.surfaceContainerLow,
-    alignItems: 'center', justifyContent: 'center',
+  container: {
+    flexGrow: 1, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: Spacing.marginMain, paddingVertical: Spacing.lg, gap: Spacing.md,
   },
-  typeLabel: { fontSize: 20, fontWeight: '700', color: Colors.primary, textAlign: 'center' },
-  scoreCard: {
-    backgroundColor: Colors.surfaceContainerLowest, borderRadius: 24, padding: Spacing.lg,
-    flexDirection: 'row', alignItems: 'center', gap: Spacing.lg, width: '100%', ...Shadows.level2,
+  typeLabel: { fontSize: 22, fontWeight: '700', color: Colors.primary, textAlign: 'center' },
+  scoreCard: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, width: '100%' },
+  scoreCircle: {
+    width: 84, height: 84, borderRadius: 42, backgroundColor: Colors.golden,
+    alignItems: 'center', justifyContent: 'center', flexDirection: 'row',
   },
-  scoreCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: Colors.golden, alignItems: 'center', justifyContent: 'center' },
   scoreNumber: { fontSize: 28, fontWeight: '700', color: Colors.primary },
-  scoreDivider: { fontSize: 12, color: Colors.primary, fontWeight: '600' },
-  scoreRight: { flex: 1 },
-  scorePercent: { fontSize: 32, fontWeight: '700', color: Colors.primary, marginBottom: 4 },
+  scoreOf: { fontSize: 13, color: Colors.primary, fontWeight: '600', marginTop: 8 },
+  scoreRight: { flex: 1, gap: 2 },
+  scorePercent: { fontSize: 30, fontWeight: '700', color: Colors.primary },
   scoreMessage: { fontSize: 13, color: Colors.onSurfaceVariant, lineHeight: 18 },
-  statsRow: { flexDirection: 'row', gap: Spacing.md, width: '100%' },
-  statBox: {
-    flex: 1, backgroundColor: Colors.surfaceContainerLowest, borderRadius: 16, padding: Spacing.md,
-    alignItems: 'center', ...Shadows.level1,
-  },
+  statsRow: { flexDirection: 'row', gap: Spacing.sm, width: '100%' },
+  statBox: { flex: 1, alignItems: 'center', gap: 4, paddingVertical: Spacing.md, paddingHorizontal: Spacing.sm },
   statNumber: { fontSize: 22, fontWeight: '700', color: Colors.primary },
-  statLabel: { fontSize: 11, color: Colors.onSurfaceVariant, marginTop: 2 },
-  tipBox: { backgroundColor: Colors.surfaceContainerLow, borderRadius: 12, padding: Spacing.md, width: '100%' },
-  tipText: { fontSize: 13, color: Colors.onSurfaceVariant, lineHeight: 20 },
-  buttonGroup: { width: '100%', gap: Spacing.sm },
-  retryBtn: { backgroundColor: Colors.secondary, borderRadius: BorderRadius.lg, height: 54, alignItems: 'center', justifyContent: 'center' },
-  retryBtnText: { fontSize: 16, fontWeight: '700', color: Colors.surfaceContainerLowest },
-  homeBtn: { backgroundColor: Colors.golden, borderRadius: BorderRadius.lg, height: 54, alignItems: 'center', justifyContent: 'center' },
-  homeBtnText: { fontSize: 16, fontWeight: '700', color: Colors.primary },
-  topicsBtn: { borderRadius: BorderRadius.lg, height: 50, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: Colors.outlineVariant },
-  topicsBtnText: { fontSize: 15, color: Colors.onSurfaceVariant, fontWeight: '600' },
+  statLabel: { fontSize: 11, color: Colors.onSurfaceVariant, textAlign: 'center' },
+  progressBox: {
+    width: '100%', backgroundColor: Colors.successContainer, borderRadius: BorderRadius.lg,
+    padding: Spacing.md, gap: 2,
+  },
+  progressTitle: { fontSize: 13, fontWeight: '700', color: Colors.success },
+  progressText: { fontSize: 13, color: Colors.primary, lineHeight: 19 },
+  tipBox: { width: '100%', backgroundColor: Colors.surfaceContainerLow, borderRadius: BorderRadius.lg, padding: Spacing.md },
+  tipText: { fontSize: 13, color: Colors.onSurfaceVariant, lineHeight: 19 },
+  buttonGroup: { width: '100%', gap: Spacing.sm, marginTop: Spacing.sm },
 });

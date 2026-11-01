@@ -1,5 +1,16 @@
 import { Article, Word } from '../types';
 
+/**
+ * Örnek cümle (Almanca ve Türkçe) için en fazla karakter. Gerçek Almanca öğrenme cümleleri
+ * genellikle 100 karakterin altındadır; 200, uzun bileşik cümleleri de karşılar ve Cümle Yazma
+ * ekranında girdinin taşmasını önler. Sınır yazarken görünür biçimde uygulanır, metin sessizce kesilmez.
+ */
+export const MAX_EXAMPLE_LENGTH = 200;
+
+/** Kayıtlı bir cümleyi tam yazabilmek için Cümle Yazma giriş sınırı (eski, daha uzun kayıtlar dahil). */
+export const getSentenceInputLimit = (reference: string): number =>
+  Math.max(MAX_EXAMPLE_LENGTH + 20, reference.length + 20);
+
 export function normalizeGermanWord(value: string): string {
   return value
     .normalize('NFKC')

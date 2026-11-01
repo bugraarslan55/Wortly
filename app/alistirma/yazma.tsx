@@ -11,49 +11,14 @@ import { Word } from '../../types';
 import { ColoredGermanWord } from '../../components/colored-german-word';
 import { getArticlePalette } from '../../constants/article-colors';
 import { selectWordsForReview } from '../../utils/spaced-repetition';
+import { checkGermanAnswer, describeAnswerNote } from '../../utils/answer-check';
+import { KeyboardSafeView } from '../../components/keyboard-safe-view';
+import { ExerciseHeader, ExerciseProgress, confirmLeaveExercise, useActionLock } from '../../components/exercise-ui';
 
 const GERMAN_CHARS = ['ä', 'ö', 'ü', 'ß', 'Ä', 'Ö', 'Ü'];
 const SESSION_SIZE = 10;
 
 type Phase = 'input' | 'result';
-
-const ANSWER_ALTERNATIVES: Record<string, string[]> = {
-  // "istemek" iki yaygın A1 karşılığı da doğru olduğundan ikisini kabul et.
-  'goethe-a1-wollen': ['möchten'],
-};
-
-function normalizeGermanAnswer(value: string): string {
-  return value
-    .normalize('NFKC')
-    .trim()
-    .toLocaleLowerCase('de-DE')
-    .replace(/\s+/g, ' ')
-    .replace(/ä/g, 'ae')
-    .replace(/ö/g, 'oe')
-    .replace(/ü/g, 'ue')
-    .replace(/ß/g, 'ss');
-}
-
-function getAcceptedAnswers(word: Word): string[] {
-  const answers = [word.german, ...(ANSWER_ALTERNATIVES[word.id] ?? [])];
-
-  if (word.article) {
-    answers.push(`${word.article} ${word.german}`);
-  }
-
-  // Birleşik Goethe kayıtlarında tek tek verilen biçimleri de kabul et.
-  if (word.german.includes('/')) {
-    answers.push(...word.german.split('/'));
-  }
-
-  // "(sich) anmelden" için hem "sich anmelden" hem "anmelden" geçerlidir.
-  const optionalPart = word.german.match(/^\(([^)]+)\)\s*(.+)$/);
-  if (optionalPart) {
-    answers.push(`${optionalPart[1]} ${optionalPart[2]}`, optionalPart[2]);
-  }
-
-  return answers.map(normalizeGermanAnswer);
-}
 
 export default function YazmaScreen() {
   const router = useRouter();
@@ -103,6 +68,9 @@ export default function YazmaScreen() {
   const [score, setScore] = useState(0);
   const [wrongWordIds, setWrongWordIds] = useState<string[]>([]);
   const [isAdvancing, setIsAdvancing] = useState(false);
+  const [answerNote, setAnswerNote] = useState('');
+  // State asenkron güncellendiği için hızlı çift dokunuşta aynı soru iki kez puanlanabilirdi.
+  const answerLock = useActionLock();
   const inputRef = useRef<TextInput>(null);
 
   const currentWord = sessionWords[currentIndex];
@@ -116,10 +84,12 @@ export default function YazmaScreen() {
   }, [sessionWords]);
 
   const checkAnswer = () => {
-    if (phase === 'result' || !currentWord) return; // Aynı sorunun cevabı iki kez işlenmesin.
+    // Boş cevap puanlanmaz; aynı sorunun cevabı iki kez işlenmez.
+    if (phase === 'result' || !currentWord || !input.trim() || !answerLock.acquire()) return;
     Keyboard.dismiss();
-    const given = normalizeGermanAnswer(input);
-    const correct = getAcceptedAnswers(currentWord).includes(given);
+    const verdict = checkGermanAnswer(currentWord, input);
+    const correct = verdict.correct;
+    setAnswerNote(describeAnswerNote(verdict));
     updateMastery(currentWord.id, correct);
     if (correct) setScore(s => s + 1);
     else setWrongWordIds(current => [...current, currentWord.id]);
@@ -154,8 +124,10 @@ export default function YazmaScreen() {
     } else {
       setCurrentIndex(i => i + 1);
       setInput('');
+      setAnswerNote('');
       setPhase('input');
       setIsAdvancing(false);
+      answerLock.release();
       setTimeout(() => inputRef.current?.focus(), 300);
     }
   };
@@ -166,7 +138,7 @@ export default function YazmaScreen() {
   };
 
   const handleSkip = async () => {
-    if (phase !== 'input' || !currentWord || isAdvancing) return;
+    if (phase !== 'input' || !currentWord || isAdvancing || !answerLock.acquire()) return;
 
     Keyboard.dismiss();
     const nextWrongWordIds = wrongWordIds.includes(currentWord.id)
@@ -198,20 +170,15 @@ export default function YazmaScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn}>
-          <Text style={styles.closeBtnText}>✕</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Yazarak Tekrar</Text>
-        <Text style={styles.counter}>{currentIndex + 1}/{sessionWords.length}</Text>
-      </View>
+      <ExerciseHeader
+        title="Yazarak Tekrar"
+        current={currentIndex + 1}
+        total={sessionWords.length}
+        onClose={() => confirmLeaveExercise(currentIndex > 0 || phase === 'result', () => router.back())}
+      />
+      <ExerciseProgress current={currentIndex + 1} total={sessionWords.length} />
 
-      {/* Progress */}
-      <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: `${progress}%` }]} />
-      </View>
-
+      <KeyboardSafeView>
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
@@ -236,6 +203,9 @@ export default function YazmaScreen() {
                 Artikel: {currentWord.article}
               </Text>
             </View>
+          ) : null}
+          {currentWord.article ? (
+            <Text style={styles.articleNote}>Artikel ipucu olarak verildi; cevaba yazman isteğe bağlıdır.</Text>
           ) : null}
         </View>
 
@@ -281,6 +251,8 @@ export default function YazmaScreen() {
         {phase === 'result' && (
           <View style={[styles.resultBox, isCorrect ? styles.resultBoxCorrect : styles.resultBoxWrong]}>
             <Text style={styles.resultEmoji}>{isCorrect ? 'Mükemmel!' : 'Neredeyse!'}</Text>
+            {isCorrect && !!answerNote && <Text style={styles.resultTurkish}>{answerNote}</Text>}
+            {!isCorrect && !!input.trim() && <Text style={styles.resultTurkish}>Senin cevabın: {input.trim()}</Text>}
             {!isCorrect && (
               <>
                 <Text style={styles.resultLabel}>Doğru cevap:</Text>
@@ -340,11 +312,13 @@ export default function YazmaScreen() {
           </Text>
         </TouchableOpacity>
       )}
+      </KeyboardSafeView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  articleNote: { fontSize: 12, color: Colors.onSurfaceVariant, textAlign: 'center', marginTop: Spacing.xs },
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.marginMain, paddingVertical: Spacing.md },
   closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.surfaceContainer, alignItems: 'center', justifyContent: 'center' },
