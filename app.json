@@ -10,7 +10,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.wortly.app",
-      "buildNumber": "4",
+      "buildNumber": "5",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
