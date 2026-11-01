@@ -13,7 +13,7 @@ import { ReviewReminderCard } from '../components/review-reminder-card';
 import { isReminderSupported } from '../utils/review-reminder';
 import { Level } from '../types';
 import {
-  countCompletedExercises, countLearnedWords, DAILY_GOAL_OPTIONS, getActiveStreak, normalizeDailyGoal,
+  countLearnedWords, DAILY_GOAL_OPTIONS, getActiveStreak, normalizeDailyGoal, summarizeCompletedExercises,
 } from '../utils/progress-stats';
 
 const LEVELS: Level[] = ['A1', 'A2', 'B1'];
@@ -37,6 +37,7 @@ export default function ProfileScreen() {
   const reviewStates = useWordStore(state => state.reviewStates);
   const sessions = useSessionStore(state => state.sessions);
   const scenarioResults = useSessionStore(state => state.scenarioResults);
+  const sessionTotal = useSessionStore(state => state.sessionTotal);
 
   const email = session?.user?.email ?? '';
   const level: Level = profile?.level ?? 'A1';
@@ -48,9 +49,15 @@ export default function ProfileScreen() {
 
   // Tüm sayılar yerel gerçek veriden hesaplanır; veri yoksa 0 görünür.
   const learnedCount = useMemo(() => countLearnedWords(reviewStates, words), [reviewStates, words]);
-  const exerciseCount = useMemo(
-    () => countCompletedExercises(sessions, scenarioResults),
-    [sessions, scenarioResults],
+  // Gerçek toplam buluttan sayılır; bilinmiyorsa (çevrimdışı/ilk açılış) yerel sayı "N+" olarak gösterilir.
+  const currentUserId = session?.user?.id;
+  const exercises = useMemo(
+    () => summarizeCompletedExercises(
+      sessionTotal && sessionTotal.userId === currentUserId ? sessionTotal.count : null,
+      sessions,
+      scenarioResults,
+    ),
+    [sessionTotal, currentUserId, sessions, scenarioResults],
   );
   const streak = getActiveStreak(profile?.streak, profile?.lastStudyDate);
 
@@ -170,7 +177,7 @@ export default function ProfileScreen() {
         <View style={styles.statsRow}>
           <StatBox icon="checkmark.seal.fill" value={learnedCount} label="Öğrenilen kelime" />
           <StatBox icon="flame.fill" value={streak} label="Günlük seri" />
-          <StatBox icon="chart.bar.fill" value={exerciseCount} label="Tamamlanan alıştırma" />
+          <StatBox icon="chart.bar.fill" value={exercises.exact ? exercises.count : `${exercises.count}+`} label="Tamamlanan alıştırma" />
         </View>
 
         {/* Öğrenme tercihleri */}
@@ -231,7 +238,7 @@ export default function ProfileScreen() {
   );
 }
 
-function StatBox({ icon, value, label }: { icon: string; value: number; label: string }) {
+function StatBox({ icon, value, label }: { icon: string; value: number | string; label: string }) {
   return (
     <View style={[Cards.surface, styles.statBox]} accessible accessibilityLabel={`${label}: ${value}`}>
       <IconTile name={icon} size={34} />

@@ -72,6 +72,37 @@ export function countLearnedWords(
   return learned.size;
 }
 
+/** Cihazda tutulan en fazla oturum / senaryo sonucu sayısı (yerel liste sınırı). */
+export const LOCAL_SESSION_LIMIT = 100;
+export const LOCAL_SCENARIO_LIMIT = 100;
+
+export interface ExerciseCountSummary {
+  count: number;
+  /** false ise gerçek toplam gösterilen sayıdan büyük olabilir ("N+" biçiminde gösterilmeli). */
+  exact: boolean;
+}
+
+/**
+ * Tamamlanan alıştırma toplamı.
+ * - Oturumlar: buluttan okunan gerçek toplam (`knownSessionTotal`) biliniyorsa o; bilinmiyorsa
+ *   yerel liste, ve liste sınıra ulaştıysa "en az" (exact=false).
+ * - Senaryo sonuçları yalnızca cihazda ve en fazla 100 tutulur; sınıra ulaştıysa exact=false.
+ * Bilinmeyen kısım için sayı uydurulmaz.
+ */
+export function summarizeCompletedExercises(
+  knownSessionTotal: number | null | undefined,
+  sessions: QuizSession[] | null | undefined,
+  scenarioResults: ScenarioResult[] | null | undefined,
+): ExerciseCountSummary {
+  const localSessions = Array.isArray(sessions) ? sessions.length : 0;
+  const localScenarios = Array.isArray(scenarioResults) ? scenarioResults.length : 0;
+  const sessionsKnown = typeof knownSessionTotal === 'number' && knownSessionTotal >= 0;
+  const sessionCount = sessionsKnown ? Math.max(knownSessionTotal as number, localSessions) : localSessions;
+  const sessionsExact = sessionsKnown || localSessions < LOCAL_SESSION_LIMIT;
+  const scenariosExact = localScenarios < LOCAL_SCENARIO_LIMIT;
+  return { count: sessionCount + localScenarios, exact: sessionsExact && scenariosExact };
+}
+
 /** Tamamlanan alıştırma/çalışma oturumu: kayıtlı oturumlar + senaryo sonuçları. */
 export function countCompletedExercises(
   sessions: QuizSession[] | null | undefined,

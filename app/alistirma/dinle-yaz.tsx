@@ -1,49 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import * as Speech from 'expo-speech';
 import { Keyboard, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppIcon } from '../../components/app-icon';
 import { BorderRadius, Colors, Shadows, Spacing } from '../../constants/theme';
 import { getTopicById } from '../../constants/topics';
 import { getGermanSpeechText } from '../../utils/german-speech';
+import { useGermanSpeech } from '../../utils/use-german-speech';
 import { selectWordsForReview } from '../../utils/spaced-repetition';
+import { checkGermanAnswer, describeAnswerNote } from '../../utils/answer-check';
+import { GermanCharacterBar } from '../../components/german-character-bar';
+import { KeyboardSafeView } from '../../components/keyboard-safe-view';
+import { ExerciseHeader, ExerciseProgress, confirmLeaveExercise, useActionLock } from '../../components/exercise-ui';
 import { Word } from '../../types';
 import { useSessionStore, useWordStore } from '../../store';
 
 const SESSION_SIZE = 10;
-const GERMAN_CHARACTERS = ['ä', 'ö', 'ü', 'ß'] as const;
-
-const ANSWER_ALTERNATIVES: Record<string, string[]> = {
-  'goethe-a1-wollen': ['möchten'],
-};
-
-function normalizeGermanAnswer(value: string): string {
-  return value
-    .normalize('NFKC')
-    .trim()
-    .toLocaleLowerCase('de-DE')
-    .replace(/\s+/g, ' ')
-    .replace(/ä/g, 'ae')
-    .replace(/ö/g, 'oe')
-    .replace(/ü/g, 'ue')
-    .replace(/ß/g, 'ss');
-}
-
-function getAcceptedAnswers(word: Word): string[] {
-  const answers = [word.german, ...(ANSWER_ALTERNATIVES[word.id] ?? [])];
-
-  if (word.article) answers.push(`${word.article} ${word.german}`);
-  if (word.german.includes('/')) answers.push(...word.german.split('/'));
-
-  const optionalPart = word.german.match(/^\(([^)]+)\)\s*(.+)$/);
-  if (optionalPart) {
-    answers.push(`${optionalPart[1]} ${optionalPart[2]}`, optionalPart[2]);
-  }
-
-  return answers.map(normalizeGermanAnswer);
-}
-
 export default function DinleYazScreen() {
   const router = useRouter();
   const { topicId, wordIds } = useLocalSearchParams<{ topicId?: string; wordIds?: string }>();
@@ -75,8 +47,11 @@ export default function DinleYazScreen() {
   const totalQuestions = sessionWords.length;
   const [answer, setAnswer] = useState('');
   const [answerResult, setAnswerResult] = useState<boolean | null>(null);
-  const [speakingRate, setSpeakingRate] = useState<'normal' | 'slow' | null>(null);
-  const speechRunRef = useRef(0);
+  const { speak, stop: stopSpeech, speakingRate } = useGermanSpeech();
+  const [answerNote, setAnswerNote] = useState('');
+  // State asenkron güncellendiği için hızlı çift dokunuşta aynı soru iki kez puanlanabilirdi.
+  const answerLock = useActionLock();
+  const completeLock = useActionLock();
 
   useEffect(() => {
     if (sessionWords.length === 0) return;
@@ -90,38 +65,20 @@ export default function DinleYazScreen() {
     });
   }, [sessionWords]);
 
-  const speakWord = async (mode: 'normal' | 'slow') => {
-    if (!currentWord) return;
-
-    const runId = speechRunRef.current + 1;
-    speechRunRef.current = runId;
-    setSpeakingRate(mode);
-    await Speech.stop();
-
-    if (speechRunRef.current !== runId) return;
-
-    const finish = () => {
-      if (speechRunRef.current === runId) setSpeakingRate(null);
-    };
-
-    Speech.speak(getGermanSpeechText(currentWord), {
-      language: 'de-DE',
-      rate: mode === 'slow' ? 0.30 : 0.92,
-      pitch: 1,
-      onDone: finish,
-      onError: finish,
-      onStopped: finish,
-    });
+  const speakWord = (mode: 'normal' | 'slow') => {
+    if (currentWord) void speak(getGermanSpeechText(currentWord), mode);
   };
 
   useEffect(() => {
     setAnswer('');
     setAnswerResult(null);
+    setAnswerNote('');
+    answerLock.release();
     void speakWord('normal');
 
     return () => {
-      speechRunRef.current += 1;
-      void Speech.stop();
+      // Sorular arasında geçerken ve ekran kapanırken önceki ses kesilir.
+      stopSpeech();
     };
   }, [currentWord?.id]);
 
@@ -135,10 +92,13 @@ export default function DinleYazScreen() {
   };
 
   const checkAnswer = () => {
-    if (!currentWord || !answer.trim() || answerResult !== null) return;
+    if (!currentWord || !answer.trim() || answerResult !== null || !answerLock.acquire()) return;
 
     Keyboard.dismiss();
-    const isCorrect = getAcceptedAnswers(currentWord).includes(normalizeGermanAnswer(answer));
+    stopSpeech(); // Cevap verilince devam eden ses durur.
+    const verdict = checkGermanAnswer(currentWord, answer);
+    const isCorrect = verdict.correct;
+    setAnswerNote(describeAnswerNote(verdict));
     void updateMastery(currentWord.id, isCorrect);
     if (isCorrect) setScore((current) => current + 1);
     else setWrongWordIds((current) => [...current, currentWord.id]);
@@ -149,6 +109,7 @@ export default function DinleYazScreen() {
     if (answerResult === null || isCompleting) return;
 
     if (currentIndex >= totalQuestions - 1) {
+      if (!completeLock.acquire()) return;
       setIsCompleting(true);
       await saveSession({
         id: Date.now().toString(36),
@@ -195,33 +156,19 @@ export default function DinleYazScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={handleBack}
-          style={styles.backButton}
-          accessibilityRole="button"
-          accessibilityLabel="Geri"
-        >
-          <Text style={styles.backText}>← Geri</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Dinle ve Yaz</Text>
-        <Text style={styles.counter}>
-          {totalQuestions > 0 ? `${currentIndex + 1}/${totalQuestions}` : '—'}
-        </Text>
-      </View>
+      <ExerciseHeader
+        title="Dinle ve Yaz"
+        current={currentIndex + 1}
+        total={totalQuestions}
+        onClose={() => confirmLeaveExercise(currentIndex > 0 || answerResult !== null, handleBack)}
+      />
+      <ExerciseProgress current={currentIndex + 1} total={totalQuestions} />
 
-      <View style={styles.progressTrack}>
-        <View style={[
-          styles.progressFill,
-          { width: totalQuestions > 0 ? `${((currentIndex + 1) / totalQuestions) * 100}%` : '0%' },
-        ]} />
-      </View>
-
+      <KeyboardSafeView>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
         contentInsetAdjustmentBehavior="automatic"
-        automaticallyAdjustKeyboardInsets
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -284,24 +231,13 @@ export default function DinleYazScreen() {
             accessibilityLabel="Almanca cevap alanı"
           />
           {answerResult === null && (
-            <View style={styles.characterRow} accessibilityLabel="Almanca karakter kısayolları">
-              {GERMAN_CHARACTERS.map((character) => (
-                <TouchableOpacity
-                  key={character}
-                  style={styles.characterButton}
-                  onPress={() => setAnswer((current) => `${current}${character}`)}
-                  activeOpacity={0.75}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${character} karakterini ekle`}
-                >
-                  <Text style={styles.characterButtonText}>{character}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <GermanCharacterBar onSelect={(character) => setAnswer((current) => current + character)} />
           )}
           {answerResult !== null && (
             <View style={[styles.resultBox, answerResult ? styles.resultBoxCorrect : styles.resultBoxWrong]}>
               <Text style={styles.resultTitle}>{answerResult ? 'Doğru!' : 'Yanlış cevap'}</Text>
+              {answerResult && !!answerNote && <Text style={styles.correctAnswer}>{answerNote}</Text>}
+              {!answerResult && <Text style={styles.correctAnswerTurkish}>Senin cevabın: {answer.trim()}</Text>}
               {!answerResult && currentWord && (
                 <>
                   <Text style={styles.correctAnswer}>
@@ -341,6 +277,7 @@ export default function DinleYazScreen() {
           <Text style={styles.unavailableText}>Bu çalışma A1, A2, B1 veya kişisel kelimelerle kullanılabilir.</Text>
         )}
       </ScrollView>
+      </KeyboardSafeView>
     </SafeAreaView>
   );
 }

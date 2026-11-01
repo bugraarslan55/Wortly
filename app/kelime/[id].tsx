@@ -13,7 +13,7 @@ import { AppIcon } from '../../components/app-icon';
 import { GermanCharacterBar } from '../../components/german-character-bar';
 import { PronunciationRecorder } from '../../components/pronunciation-recorder';
 import { ColoredGermanPlural, ColoredGermanWord } from '../../components/colored-german-word';
-import { findDuplicateCustomWord } from '../../utils/word-validation';
+import { findDuplicateCustomWord, MAX_EXAMPLE_LENGTH } from '../../utils/word-validation';
 import { getArticlePalette } from '../../constants/article-colors';
 import { getGermanSpeechText } from '../../utils/german-speech';
 
@@ -328,6 +328,7 @@ export default function KelimeDetayScreen() {
                   onChangeText={setExample}
                   placeholder="Almanca örnek cümle"
                   multiline
+                  maxLength={MAX_EXAMPLE_LENGTH}
                 />
                 <GermanCharacterBar onSelect={(character) => setExample(value => value + character)} />
                 <TextInput
@@ -336,6 +337,7 @@ export default function KelimeDetayScreen() {
                   onChangeText={setExampleTurkish}
                   placeholder="Türkçe çevirisi"
                   multiline
+                  maxLength={MAX_EXAMPLE_LENGTH}
                 />
               </>
             )}

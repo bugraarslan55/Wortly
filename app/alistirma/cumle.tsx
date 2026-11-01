@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  TextInput, KeyboardAvoidingView, Platform, Keyboard,
+  TextInput, Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -10,6 +10,9 @@ import { useWordStore, useSessionStore } from '../../store';
 import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
 import { Word } from '../../types';
 import { GermanCharacterBar } from '../../components/german-character-bar';
+import { getSentenceInputLimit } from '../../utils/word-validation';
+import { KeyboardSafeView } from '../../components/keyboard-safe-view';
+import { ExerciseHeader, ExerciseProgress, confirmLeaveExercise, useActionLock } from '../../components/exercise-ui';
 import { ColoredGermanWord } from '../../components/colored-german-word';
 
 type Phase = 'write' | 'checked';
@@ -34,9 +37,13 @@ export default function CumleScreen() {
 
   const allBuiltIn = ALL_TOPICS.flatMap(t => t.words);
   const ids = wordIds?.split(',').filter(Boolean) || [];
-  const allWords: Word[] = ids.length > 0
-    ? ids.map(id => allBuiltIn.find(w => w.id === id) || customWords.find(w => w.id === id)).filter(Boolean) as Word[]
-    : (topicId ? getTopicById(topicId)?.words : undefined) ?? customWords;
+  const allWords: Word[] = useMemo(
+    () => ids.length > 0
+      ? ids.map(id => allBuiltIn.find(w => w.id === id) || customWords.find(w => w.id === id)).filter(Boolean) as Word[]
+      : (topicId ? getTopicById(topicId)?.words : undefined) ?? customWords,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [wordIds, topicId, customWords],
+  );
 
   // Türkçe cümle soru, daha önce kaydedilen Almanca cümle beklenen cevaptır.
   const words = useMemo(
@@ -55,6 +62,10 @@ export default function CumleScreen() {
   const [attempt, setAttempt] = useState<1 | 2>(1);
   const [firstAttemptWrong, setFirstAttemptWrong] = useState(false);
   const [answerMatched, setAnswerMatched] = useState<boolean | null>(null);
+  const [wrongWordIds, setWrongWordIds] = useState<string[]>([]);
+  // Hızlı çift dokunuşta aynı cümle iki kez puanlanmasın / oturum iki kez kaydedilmesin.
+  const checkLock = useActionLock();
+  const finishLock = useActionLock();
 
   const currentWord = words[currentIndex];
   const progress = words.length > 0 ? ((currentIndex + 1) / words.length) * 100 : 0;
@@ -67,11 +78,12 @@ export default function CumleScreen() {
   }, [words.length]);
 
   const handleCheck = () => {
-    if (phase !== 'write') return;
+    if (phase !== 'write' || !checkLock.acquire()) return;
     Keyboard.dismiss();
     const trimmed = input.trim();
     if (!trimmed) {
       setValidationError('Önce Almanca cümleyi yazmalısın.');
+      checkLock.release();
       return;
     }
 
@@ -81,12 +93,14 @@ export default function CumleScreen() {
       setFirstAttemptWrong(true);
       setAttempt(2);
       setValidationError('Henüz doğru değil. Cümleni düzeltip bir kez daha dene.');
+      checkLock.release();
       return;
     }
 
     const earnedPoint = matched && !firstAttemptWrong;
     updateMastery(currentWord.id, earnedPoint);
     if (earnedPoint) setScore(current => current + 1);
+    else setWrongWordIds(current => (current.includes(currentWord.id) ? current : [...current, currentWord.id]));
 
     setValidationError(null);
     setAnswerMatched(matched);
@@ -95,6 +109,7 @@ export default function CumleScreen() {
 
   const handleNext = () => {
     if (currentIndex + 1 >= words.length) {
+      if (!finishLock.acquire()) return;
       saveSession({
         id: Date.now().toString(36),
         date: Date.now(),
@@ -104,7 +119,7 @@ export default function CumleScreen() {
         total: words.length,
         topicId,
       });
-      router.replace(`/alistirma/sonuc?score=${score}&total=${words.length}&type=cumle` as any);
+      router.replace(`/alistirma/sonuc?score=${score}&total=${words.length}&type=cumle&topicId=${topicId ?? ''}&wrongIds=${wrongWordIds.join(',')}` as any);
     } else {
       setCurrentIndex(i => i + 1);
       setInput('');
@@ -113,6 +128,7 @@ export default function CumleScreen() {
       setAttempt(1);
       setFirstAttemptWrong(false);
       setAnswerMatched(null);
+      checkLock.release();
     }
   };
 
@@ -135,24 +151,15 @@ export default function CumleScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn}>
-          <Text style={styles.closeBtnText}>✕</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Cümle Yazma</Text>
-        <Text style={styles.counter}>{currentIndex + 1}/{words.length}</Text>
-      </View>
+      <ExerciseHeader
+        title="Cümle Yazma"
+        current={currentIndex + 1}
+        total={words.length}
+        onClose={() => confirmLeaveExercise(currentIndex > 0 || phase === 'checked', () => router.back())}
+      />
+      <ExerciseProgress current={currentIndex + 1} total={words.length} />
 
-      {/* Progress */}
-      <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: `${progress}%` }]} />
-      </View>
-
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <KeyboardSafeView>
         <ScrollView
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
@@ -185,6 +192,7 @@ export default function CumleScreen() {
               placeholder="Kayıtlı Almanca cümleyi yaz..."
               placeholderTextColor={Colors.outlineVariant}
               multiline
+              maxLength={getSentenceInputLimit(currentWord.example ?? '')}
               editable={phase === 'write'}
             />
           </View>
@@ -196,6 +204,12 @@ export default function CumleScreen() {
                 setValidationError(null);
               }}
             />
+          )}
+
+          {phase === 'write' && input.length >= getSentenceInputLimit(currentWord.example ?? '') - 30 && (
+            <Text style={styles.limitNote} accessibilityLiveRegion="polite">
+              {input.length}/{getSentenceInputLimit(currentWord.example ?? '')} karakter. Sınıra yaklaştın.
+            </Text>
           )}
 
           {validationError && (
@@ -225,9 +239,7 @@ export default function CumleScreen() {
             </View>
           )}
         </ScrollView>
-      </KeyboardAvoidingView>
-
-      {/* Bottom CTA */}
+      {/* Bottom CTA (klavye açıkken de görünür kalması için KeyboardSafeView içinde) */}
       {phase === 'write' ? (
         <TouchableOpacity
           style={[styles.ctaBtn, !input.trim() && styles.ctaBtnDisabled]}
@@ -244,6 +256,7 @@ export default function CumleScreen() {
           </Text>
         </TouchableOpacity>
       )}
+      </KeyboardSafeView>
     </SafeAreaView>
   );
 }
@@ -274,8 +287,10 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: Colors.outlineVariant, padding: Spacing.md, ...Shadows.level1,
   },
   inputDone: { borderColor: Colors.secondaryFixedDim, backgroundColor: Colors.surfaceContainerLow },
-  input: { minHeight: 80, fontSize: 16, color: Colors.primary, textAlignVertical: 'top' },
+  // Çok uzun cümlelerde alan sınırsız büyümez; içeride kaydırılır ve alttaki düğme erişilebilir kalır.
+  input: { minHeight: 80, maxHeight: 180, fontSize: 16, color: Colors.primary, textAlignVertical: 'top' },
   errorText: { fontSize: 13, color: Colors.error, fontWeight: '600' },
+  limitNote: { fontSize: 12, color: Colors.onSurfaceVariant, textAlign: 'right' },
   referenceBox: { borderRadius: 16, padding: Spacing.md, gap: 4, borderWidth: 1 },
   referenceBoxCorrect: { backgroundColor: Colors.successContainer, borderColor: Colors.success },
   referenceBoxWrong: { backgroundColor: Colors.errorContainer, borderColor: Colors.error },

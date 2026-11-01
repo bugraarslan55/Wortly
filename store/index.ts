@@ -5,7 +5,10 @@ import { findDuplicateCustomWord } from '../utils/word-validation';
 import { supabase } from '../utils/supabase';
 import { ReviewStateMap } from '../utils/spaced-repetition';
 import { ScenarioResult } from '../utils/learning-analysis';
-import { previousLocalDateKey, toLocalDateKey } from '../utils/progress-stats';
+import {
+  LOCAL_SCENARIO_LIMIT, LOCAL_SESSION_LIMIT, previousLocalDateKey, toLocalDateKey,
+} from '../utils/progress-stats';
+import { nextMasteryLevel } from '../utils/mastery';
 
 // ─── STORAGE KEYS ───────────────────────────────────────────────────────────
 const KEYS = {
@@ -17,6 +20,7 @@ const KEYS = {
   PROFILE_OWNER: '@wortly:profile-owner',
   SESSIONS: '@wortly:sessions',
   SESSIONS_OWNER: '@wortly:sessions-owner',
+  SESSION_TOTAL: '@wortly:session-total',
   PENDING_CHANGES: '@wortly:pending-changes',
 };
 
@@ -210,7 +214,7 @@ interface WordStore {
   addWord: (word: Omit<Word, 'id' | 'addedAt' | 'masteryLevel'>) => Promise<WordSaveResult>;
   updateWord: (id: string, updates: Partial<Word>) => Promise<WordSaveResult>;
   deleteWord: (id: string) => Promise<void>;
-  updateMastery: (id: string, correct: boolean) => Promise<void>;
+  updateMastery: (id: string, correct: boolean, options?: { maxLevel?: MasteryLevel }) => Promise<void>;
   getCustomWords: () => Word[];
   getWordsByTopic: (topicId: string) => Word[];
 }
@@ -551,7 +555,7 @@ export const useWordStore = create<WordStore>((set, get) => ({
     }
   },
 
-  updateMastery: async (id, correct) => {
+  updateMastery: async (id, correct, options) => {
     const word = get().words.find(w => w.id === id);
     const currentReview = get().reviewStates[id] ?? (word ? {
       masteryLevel: word.masteryLevel,
@@ -559,9 +563,7 @@ export const useWordStore = create<WordStore>((set, get) => ({
     } : {
       masteryLevel: 0 as MasteryLevel,
     });
-    const newLevel = correct
-      ? Math.min(3, currentReview.masteryLevel + 1) as MasteryLevel
-      : Math.max(0, currentReview.masteryLevel - 1) as MasteryLevel;
+    const newLevel = nextMasteryLevel(currentReview.masteryLevel, correct, options?.maxLevel);
     const lastReviewed = Date.now();
     const reviewStates = {
       ...get().reviewStates,
@@ -824,6 +826,11 @@ export const useUserStore = create<UserStore>((set, get) => ({
 interface SessionStore {
   sessions: QuizSession[];
   scenarioResults: ScenarioResult[];
+  /**
+   * Kullanıcının bulutta kayıtlı gerçek toplam oturum sayısı (yerel liste yalnızca son 100'ü tutar).
+   * Bilinmiyorsa null; sahibi (userId) uyuşmayan değer kullanılmaz.
+   */
+  sessionTotal: { userId: string; count: number } | null;
   currentSession: QuizSession | null;
   isLoaded: boolean;
   syncedUserId: string | null;
@@ -840,6 +847,7 @@ interface SessionStore {
 export const useSessionStore = create<SessionStore>((set, get) => ({
   sessions: [],
   scenarioResults: [],
+  sessionTotal: null,
   currentSession: null,
   isLoaded: false,
   syncedUserId: null,
@@ -848,7 +856,17 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     devLog('[Wortly][load] loadSessions başladı');
     try {
       const raw = await safeGetItem(KEYS.SESSIONS);
-      set({ sessions: raw ? JSON.parse(raw) : [], isLoaded: true });
+      const totalRaw = await safeGetItem(KEYS.SESSION_TOTAL);
+      let sessionTotal: { userId: string; count: number } | null = null;
+      try {
+        const parsed = totalRaw ? JSON.parse(totalRaw) : null;
+        if (parsed && typeof parsed.userId === 'string' && Number.isFinite(parsed.count) && parsed.count >= 0) {
+          sessionTotal = { userId: parsed.userId, count: Math.floor(parsed.count) };
+        }
+      } catch {
+        sessionTotal = null;
+      }
+      set({ sessions: raw ? JSON.parse(raw) : [], sessionTotal, isLoaded: true });
     } catch {
       set({ isLoaded: true });
     } finally {
@@ -928,6 +946,21 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       set({ sessions: nextSessions });
       await safeSetItem(KEYS.SESSIONS, JSON.stringify(nextSessions));
       await safeSetItem(KEYS.SESSIONS_OWNER, userId);
+
+      // Gerçek toplam: satırları indirmeden bulut sayısı (migration gerekmez). Başarısızsa mevcut
+      // değer korunur; sayı uydurulmaz.
+      const { count, error: countError } = await withTimeout(
+        supabase
+          .from('study_sessions')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', userId),
+        { count: null, error: TIMEOUT_ERROR } as any,
+      );
+      if (!countError && typeof count === 'number') {
+        const total = { userId, count };
+        set({ sessionTotal: total });
+        await safeSetItem(KEYS.SESSION_TOTAL, JSON.stringify(total));
+      }
     } catch (err) {
       devWarn('[Wortly] Çalışma geçmişi senkronizasyonunda beklenmeyen hata:', err);
     } finally {
@@ -937,8 +970,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   }),
 
   resetLocal: async () => {
-    set({ sessions: [], scenarioResults: [], currentSession: null, syncedUserId: null });
-    await safeMultiRemove([KEYS.SESSIONS, KEYS.SESSIONS_OWNER]);
+    set({ sessions: [], scenarioResults: [], sessionTotal: null, currentSession: null, syncedUserId: null });
+    await safeMultiRemove([KEYS.SESSIONS, KEYS.SESSIONS_OWNER, KEYS.SESSION_TOTAL]);
   },
 
   startSession: (sessionData) => {
@@ -951,10 +984,22 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   },
 
   saveSession: async (session) => {
-    const updated = [session, ...get().sessions].slice(0, 100); // Son 100 oturum
-    set({ sessions: updated, currentSession: null });
+    const updated = [session, ...get().sessions].slice(0, LOCAL_SESSION_LIMIT); // Yerelde son N oturum
+    // Yerel durum hemen güncellenir (ekranlar beklemeden sonuca geçer). Bilinen gerçek toplam 1
+    // artırılır; bir sonraki senkron bulut sayısıyla düzeltir.
+    const previousTotal = get().sessionTotal;
+    const bumpedTotal = previousTotal ? { ...previousTotal, count: previousTotal.count + 1 } : null;
+    set({ sessions: updated, sessionTotal: bumpedTotal, currentSession: null });
     await safeSetItem(KEYS.SESSIONS, JSON.stringify(updated));
     const userId = await getMutationUserId(KEYS.SESSIONS_OWNER);
+    if (bumpedTotal) {
+      if (userId && bumpedTotal.userId === userId) {
+        await safeSetItem(KEYS.SESSION_TOTAL, JSON.stringify(bumpedTotal));
+      } else {
+        // Toplam başka bir kullanıcıya aitse bu hesapta kullanılmaz.
+        set({ sessionTotal: previousTotal });
+      }
+    }
     await queuePendingChange({ entity: 'session', id: session.id, operation: 'upsert', userId });
     if (userId && await saveCloudSession(userId, session)) {
       await clearPendingChange('session', session.id);
@@ -968,7 +1013,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
       date: Date.now(),
     };
-    const updated = [nextResult, ...get().scenarioResults].slice(0, 100);
+    const updated = [nextResult, ...get().scenarioResults].slice(0, LOCAL_SCENARIO_LIMIT);
     set({ scenarioResults: updated });
     await safeSetItem(scenarioResultsKey(userId), JSON.stringify(updated));
   },

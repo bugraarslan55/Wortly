@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import * as Speech from 'expo-speech';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppIcon } from '../../components/app-icon';
 import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
 import { getTopicById } from '../../constants/topics';
 import { getGermanSpeechText } from '../../utils/german-speech';
+import { useGermanSpeech } from '../../utils/use-german-speech';
 import { Word } from '../../types';
 import { useSessionStore, useWordStore } from '../../store';
 import { selectWordsForReview } from '../../utils/spaced-repetition';
+import { ExerciseHeader, ExerciseProgress, confirmLeaveExercise, useActionLock } from '../../components/exercise-ui';
 
 const SESSION_SIZE = 20;
 
@@ -46,14 +47,16 @@ export default function DinleSecScreen() {
   const { words: customWords, reviewStates, updateMastery } = useWordStore();
   const customWordList = useMemo(() => customWords.filter(word => word.isCustom), [customWords]);
   const { startSession, saveSession } = useSessionStore();
-  const [speakingRate, setSpeakingRate] = useState<'normal' | 'slow' | null>(null);
   const [isHintVisible, setIsHintVisible] = useState(false);
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [wrongWordIds, setWrongWordIds] = useState<string[]>([]);
   const [isCompleting, setIsCompleting] = useState(false);
-  const speechRunRef = useRef(0);
+  const { speak, stop: stopSpeech, speakingRate } = useGermanSpeech();
+  // State asenkron güncellendiği için hızlı çift dokunuşta aynı soru iki kez puanlanabilirdi.
+  const answerLock = useActionLock();
+  const completeLock = useActionLock();
   const sessionQuestions = useMemo(() => {
     const sourceWords = topic ? topic.words : customWordList;
     const isSupported = topic
@@ -91,38 +94,19 @@ export default function DinleSecScreen() {
     }
   }, [sessionQuestions]);
 
-  const speakWord = async (mode: 'normal' | 'slow') => {
-    if (!question) return;
-
-    const runId = speechRunRef.current + 1;
-    speechRunRef.current = runId;
-    setSpeakingRate(mode);
-    await Speech.stop();
-
-    if (speechRunRef.current !== runId) return;
-
-    const finish = () => {
-      if (speechRunRef.current === runId) setSpeakingRate(null);
-    };
-
-    Speech.speak(getGermanSpeechText(question.word), {
-      language: 'de-DE',
-      rate: mode === 'slow' ? 0.30 : 0.92,
-      pitch: 1,
-      onDone: finish,
-      onError: finish,
-      onStopped: finish,
-    });
+  const speakWord = (mode: 'normal' | 'slow') => {
+    if (question) void speak(getGermanSpeechText(question.word), mode);
   };
 
   useEffect(() => {
     setSelectedOptionId(null);
     setIsHintVisible(false);
+    answerLock.release();
     void speakWord('normal');
 
     return () => {
-      speechRunRef.current += 1;
-      void Speech.stop();
+      // Sorular arasında geçerken ve ekran kapanırken önceki ses kesilir.
+      stopSpeech();
     };
   }, [question?.word.id]);
 
@@ -138,7 +122,8 @@ export default function DinleSecScreen() {
   };
 
   const handleSelect = (optionId: string) => {
-    if (selectedOptionId || !question) return;
+    if (selectedOptionId || !question || !answerLock.acquire()) return;
+    stopSpeech(); // Cevap verilince devam eden ses durur.
     setSelectedOptionId(optionId);
     const isCorrect = optionId === question.word.id;
     void updateMastery(question.word.id, isCorrect);
@@ -150,6 +135,7 @@ export default function DinleSecScreen() {
     if (!selectedOptionId || isCompleting) return;
 
     if (currentIndex >= totalQuestions - 1) {
+      if (!completeLock.acquire()) return;
       setIsCompleting(true);
       await saveSession({
         id: Date.now().toString(36),
@@ -196,25 +182,13 @@ export default function DinleSecScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={handleBack}
-          style={styles.backButton}
-          accessibilityRole="button"
-          accessibilityLabel="Geri"
-        >
-          <Text style={styles.backText}>← Geri</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Dinle ve Seç</Text>
-        <Text style={styles.counter}>{Math.min(currentIndex + 1, totalQuestions)}/{totalQuestions}</Text>
-      </View>
-
-      <View style={styles.progressTrack}>
-        <View style={[
-          styles.progressFill,
-          { width: `${totalQuestions > 0 ? ((currentIndex + 1) / totalQuestions) * 100 : 0}%` },
-        ]} />
-      </View>
+      <ExerciseHeader
+        title="Dinle ve Seç"
+        current={currentIndex + 1}
+        total={totalQuestions}
+        onClose={() => confirmLeaveExercise(currentIndex > 0 || selectedOptionId !== null, handleBack)}
+      />
+      <ExerciseProgress current={currentIndex + 1} total={totalQuestions} />
 
       <ScrollView
         style={styles.scroll}

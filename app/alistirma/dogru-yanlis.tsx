@@ -10,6 +10,7 @@ import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
 import { Word } from '../../types';
 import { ColoredGermanWord } from '../../components/colored-german-word';
 import { selectWordsForReview } from '../../utils/spaced-repetition';
+import { ExerciseHeader, ExerciseProgress, confirmLeaveExercise, useActionLock } from '../../components/exercise-ui';
 
 type Phase = 'show' | 'reveal';
 
@@ -60,11 +61,18 @@ export default function DogruYanlisScreen() {
   }, [wordIds, words.length]);
 
   // Her kelimeye rastgele yanlış Türkçe eşleştir
+  const isRetry = Boolean(wordIds);
+  const distractorPool = useMemo<Word[]>(() => {
+    if (!isRetry) return sessionWords;
+    const topicWords = topicId ? getTopicById(topicId)?.words : undefined;
+    return topicWords ?? customWords;
+  }, [isRetry, sessionWords, topicId, customWords]);
+
   const quizItems = useMemo(() => {
     return sessionWords.map((word) => {
       // Aynı Türkçe anlama sahip kelimeler yanlış seçenek olamaz. Tek kelimelik
       // alıştırmada da alternatif bulunmadığı için eşleşme zorunlu olarak doğrudur.
-      const alternatives = sessionWords.filter(candidate => (
+      const alternatives = distractorPool.filter(candidate => (
         candidate.id !== word.id
         && candidate.turkish.trim().toLocaleLowerCase('tr-TR')
           !== word.turkish.trim().toLocaleLowerCase('tr-TR')
@@ -79,12 +87,17 @@ export default function DogruYanlisScreen() {
       }
       return { word, shownTurkish, isCorrect: showCorrect };
     });
-  }, [sessionWords]);
+  }, [sessionWords, distractorPool]);
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [phase, setPhase] = useState<Phase>('show');
   const [score, setScore] = useState(0);
   const [lastAnswer, setLastAnswer] = useState<boolean | null>(null);
+  const [wrongWordIds, setWrongWordIds] = useState<string[]>([]);
+  // State asenkron güncellendiği için hızlı çift dokunuşta aynı soru iki kez puanlanabilir,
+  // son soruda oturum iki kez kaydedilebilirdi.
+  const answerLock = useActionLock();
+  const finishLock = useActionLock();
 
   const current = quizItems[currentIndex];
   const progress = quizItems.length > 0 ? ((currentIndex + 1) / quizItems.length) * 100 : 0;
@@ -98,16 +111,21 @@ export default function DogruYanlisScreen() {
 
   const handleAnswer = (answer: boolean) => {
     // Aynı sorunun cevabı iki kez işlenmesin.
-    if (phase === 'reveal') return;
+    if (phase === 'reveal' || !answerLock.acquire()) return;
     const correct = answer === current.isCorrect;
     updateMastery(current.word.id, correct);
     if (correct) setScore(s => s + 1);
+    else {
+      const wrongId = current.word.id;
+      setWrongWordIds(ids => (ids.includes(wrongId) ? ids : [...ids, wrongId]));
+    }
     setLastAnswer(correct);
     setPhase('reveal');
   };
 
   const handleNext = () => {
     if (currentIndex + 1 >= quizItems.length) {
+      if (!finishLock.acquire()) return;
       saveSession({
         id: Date.now().toString(36),
         date: Date.now(),
@@ -117,11 +135,12 @@ export default function DogruYanlisScreen() {
         total: quizItems.length,
         topicId,
       });
-      router.replace(`/alistirma/sonuc?score=${score}&total=${quizItems.length}&type=dogru-yanlis` as any);
+      router.replace(`/alistirma/sonuc?score=${score}&total=${quizItems.length}&type=dogru-yanlis&topicId=${topicId ?? ''}&wrongIds=${wrongWordIds.join(',')}` as any);
     } else {
       setCurrentIndex(i => i + 1);
       setPhase('show');
       setLastAnswer(null);
+      answerLock.release();
     }
   };
 
@@ -140,19 +159,13 @@ export default function DogruYanlisScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn}>
-          <Text style={styles.closeBtnText}>✕</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Doğru / Yanlış</Text>
-        <Text style={styles.counter}>{currentIndex + 1}/{quizItems.length}</Text>
-      </View>
-
-      {/* Progress */}
-      <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: `${progress}%` }]} />
-      </View>
+      <ExerciseHeader
+        title="Doğru / Yanlış"
+        current={currentIndex + 1}
+        total={quizItems.length}
+        onClose={() => confirmLeaveExercise(currentIndex > 0 || phase === 'reveal', () => router.back())}
+      />
+      <ExerciseProgress current={currentIndex + 1} total={quizItems.length} />
 
       {/* Score badge */}
       <View style={styles.scoreBadge}>
