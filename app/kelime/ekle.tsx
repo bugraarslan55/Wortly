@@ -14,7 +14,7 @@ import { ColoredGermanPlural, ColoredGermanWord } from '../../components/colored
 import {
   Card, FormField, PrimaryButton, SectionTitle, SegmentedControl, TextField,
 } from '../../components/ui';
-import { findDuplicateCustomWord } from '../../utils/word-validation';
+import { findDuplicateCustomWord, MAX_EXAMPLE_LENGTH } from '../../utils/word-validation';
 import { getArticlePalette } from '../../constants/article-colors';
 
 const ARTICLES: Article[] = ['der', 'die', 'das', ''];
@@ -201,25 +201,31 @@ export default function KelimeEkleScreen() {
               <GermanCharacterBar onSelect={(character) => setPlural(value => value + character)} />
             </FormField>
 
-            <FormField label="Almanca örnek cümle" optional>
+            <FormField
+              label="Almanca örnek cümle"
+              optional
+              hint={`${example.length}/${MAX_EXAMPLE_LENGTH} karakter`}
+            >
               <TextField
                 value={example}
                 onChangeText={setExample}
                 placeholder="örn: Ich esse einen Apfel."
                 multiline
                 numberOfLines={2}
+                maxLength={MAX_EXAMPLE_LENGTH}
               />
               <GermanCharacterBar onSelect={(character) => setExample(value => value + character)} />
             </FormField>
 
             {example.trim().length > 0 && (
-              <FormField label="Türkçe çevirisi" optional>
+              <FormField label="Türkçe çevirisi" optional hint={`${exampleTurkish.length}/${MAX_EXAMPLE_LENGTH} karakter`}>
                 <TextField
                   value={exampleTurkish}
                   onChangeText={setExampleTurkish}
                   placeholder="örn: Bir elma yiyorum."
                   multiline
                   numberOfLines={2}
+                  maxLength={MAX_EXAMPLE_LENGTH}
                 />
               </FormField>
             )}
