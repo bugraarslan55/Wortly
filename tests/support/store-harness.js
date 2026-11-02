@@ -205,11 +205,13 @@ function createWorld() {
       const ownership = require(path.join(ROOT, 'utils', 'data-ownership.ts'));
       const gate = require(path.join(ROOT, 'utils', 'access-gate.ts'));
       const isolation = require(path.join(ROOT, 'utils', 'data-isolation.ts'));
+      const mini = require(path.join(ROOT, 'utils', 'mini-quiz.ts'));
+      const route = require(path.join(ROOT, 'utils', 'review-route.ts'));
       const W = store.useWordStore;
       const U = store.useUserStore;
       const S = store.useSessionStore;
       return {
-        store, W, U, S, ownership, gate, isolation, storage: world.asyncStorage,
+        store, W, U, S, ownership, gate, isolation, mini, route, storage: world.asyncStorage,
         /** Açılışta yapılan yerel yüklemeler (auth'tan bağımsız). */
         async load() {
           await Promise.all([W.getState().loadWords(), U.getState().loadProfile(), S.getState().loadSessions()]);

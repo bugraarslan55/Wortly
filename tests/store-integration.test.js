@@ -842,3 +842,66 @@ test('aynı milisaniyede başlatılan iki oturum farklı kimlik alır (kimlik ç
   }
   assert.equal(ids.size, 200);
 });
+
+// ─── Mini quiz bildirimi: hesap sahipliği (GERÇEK mağaza + sahte depolama/bulut) ───────────────────────
+async function onboarded(world, userId, words = ['Haus', 'Baum', 'Auto']) {
+  world.cloud.session = userId;
+  const app = world.boot();
+  await app.load();
+  await app.sync(userId);
+  await app.U.getState().completeOnboarding('Test ' + userId, 'A1');
+  for (const german of words) await addWord(app, german);
+  return app;
+}
+
+test('mini quiz bildirimi: kelime yalnızca bildirimi alan hesabın kendi verisinden seçilir; hariç tutulan kelime tekrarlanmaz', async () => {
+  const world = createWorld();
+  const app = await onboarded(world, 'A');
+  const first = app.mini.getMiniQuizReminderContent('A');
+  assert.ok(first && first.wordId && first.body.includes('Bugünün kelimesi'), 'içerik üretildi');
+  const second = app.mini.getMiniQuizReminderContent('A', [first.wordId]);
+  assert.ok(!second || second.wordId !== first.wordId, 'hariç tutulan kelime tekrarlanmaz');
+  assert.equal(app.mini.getMiniQuizReminderContent(''), null, 'kullanıcı kimliği yoksa içerik yok');
+});
+
+test('mini quiz: bellekteki veri başka hesaba aitse (hesap değişimi/yarım çıkış) HİÇBİR kelime seçilmez ve A\'nın kelimesi B\'ye sızmaz', async () => {
+  const world = createWorld();
+  let app = await onboarded(world, 'A', ['GeheimWort', 'Baum', 'Auto']);
+  const secretId = app.W.getState().words.find(w => w.german === 'GeheimWort').id;
+
+  // Oturum B'ye geçti ama çıkış temizliği yapılmadı (uygulama kapandı): henüz eşitleme olmadan bellekte A'nın verisi var.
+  world.cloud.session = 'B';
+  app = world.boot();
+  await app.load();
+  assert.equal(app.mini.getMiniQuizReminderContent('B'), null, 'sahibi başka hesap: içerik yok');
+
+  await app.sync('B');
+  const content = app.mini.getMiniQuizReminderContent('B');
+  assert.ok(!content || (content.wordId !== secretId && !content.body.includes('GeheimWort')), 'B\'ye A\'nın kelimesi sızmadı');
+  assert.equal(app.mini.getMiniQuizReminderContent('A'), null, 'bellekte B var: A için içerik üretilmez');
+  assert.equal(app.route.getNotificationRoute({ wordId: secretId }).startsWith('/mini-quiz'), false, 'B, A\'nın kelime kimliğiyle mini quiz açamaz');
+});
+
+test('mini quiz: sahibi bilinmeyen eski kayıtlar bildirime/yönlendirmeye girmez (onaylanana kadar gizli)', async () => {
+  const world = createWorld();
+  seedLegacy(world, { sessions: 1, words: 3 });
+  world.cloud.session = 'A';
+  const app = world.boot();
+  await app.load();
+  await app.sync('A');
+  await app.U.getState().completeOnboarding('A', 'A1');
+  const content = app.mini.getMiniQuizReminderContent('A');
+  assert.ok(!content || !/Alt\d/.test(content.body), 'eski (sahipsiz) kelime bildirim metnine girmedi');
+  assert.equal(app.route.getNotificationRoute({ wordId: 'leg0' }).startsWith('/mini-quiz'), false);
+});
+
+test('bildirim rotası: bu hesapta var olan kelime mini quiz\'i açar; silinmiş/bilinmeyen kimlik tekrar akışına düşer', async () => {
+  const world = createWorld();
+  const app = await onboarded(world, 'A');
+  const own = app.W.getState().words.find(w => w.german === 'Haus').id;
+  assert.equal(app.route.getNotificationRoute({ wordId: own }), `/mini-quiz?wordId=${encodeURIComponent(own)}`);
+  assert.equal(app.route.getNotificationRoute({ wordId: 'yok-boyle-bir-id' }).startsWith('/mini-quiz'), false);
+  assert.equal(app.route.getNotificationRoute({}).startsWith('/mini-quiz'), false);
+  await app.W.getState().deleteWord(own);
+  assert.equal(app.route.getNotificationRoute({ wordId: own }).startsWith('/mini-quiz'), false, 'silinen kelime için mini quiz açılmaz');
+});
