@@ -376,11 +376,15 @@ test('çıkış sırasında devam eden yazma: resetLocal yazmayı bekler, siline
   const app = world.boot();
   await app.load();
   await login(world, app, 'A');
-  world.cloud.delayMs = 15;                                         // bulut yazımı yavaş
+  // Zamanlayıcı yok: bulut isteği kapıda bekler, çıkış başlatılır, SONRA kapı açılır (yük altında da aynı sıra).
+  let release;
+  world.cloud.gate = new Promise(resolve => { release = resolve; });
   const pending = addWord(app, 'Geç-Yazılan');
-  await new Promise(resolve => setTimeout(resolve, 5));
+  for (let i = 0; i < 5; i += 1) await new Promise(resolve => setImmediate(resolve));
   world.cloud.session = null;
-  await app.wipe();                                                 // çıkış, yazma sürerken
+  const wiping = app.wipe();                                        // çıkış, yazma sürerken
+  release();
+  await wiping;
   await pending;
   assert.equal(world.disk.has(KEY.words), false, 'yerel kelime listesi çıkıştan sonra yeniden oluşmadı');
   assert.equal(world.disk.has(KEY.wordsOwner), false);
@@ -825,4 +829,16 @@ test('başka kimlik, tek-hesap cihazda aktarım yapamaz; boş kimlikle arşiv bo
   const blocked = await app.store.restoreLegacyRecords('NOT-A');
   assert.equal(blocked.blocked, true);
   assert.deepEqual(app.S.getState().sessions, []);
+});
+
+test('aynı milisaniyede başlatılan iki oturum farklı kimlik alır (kimlik çakışması kaydı sessizce düşürmez)', async () => {
+  const world = createWorld();
+  const app = world.boot();
+  await app.load();
+  const ids = new Set();
+  for (let i = 0; i < 200; i += 1) {
+    app.S.getState().startSession({ type: 'yazma', wordIds: [], score: 0, total: 1 });
+    ids.add(app.S.getState().currentSession.id);
+  }
+  assert.equal(ids.size, 200);
 });

@@ -88,6 +88,7 @@ function createCloud() {
     tables: { user_words: new Map(), study_sessions: new Map(), profiles: new Map() },
     calls: [],               // { table, op, userId, ids } — ağa giden her yazma kaydedilir
     failWrites: false,
+    gate: null,              // Promise ise her bulut isteği çözülene kadar bekler (zamanlayıcısız, belirlenimci yarış testleri için)
     delayMs: 0,              // her bulut isteğine eklenen gecikme (yarış testleri için)
   };
 }
@@ -99,6 +100,7 @@ function createSupabase(cloud) {
     const q = { table, op: 'select', filters: [], opts: null, payload: null, single: false, order: null };
     const exec = async () => {
       await tick();
+      if (cloud.gate) await cloud.gate;
       if (cloud.delayMs) await new Promise(resolve => setTimeout(resolve, cloud.delayMs));
       if (!cloud.online) return { data: null, count: null, error: { message: 'çevrimdışı' } };
       const store = cloud.tables[table];
