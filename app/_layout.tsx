@@ -223,6 +223,10 @@ export default function RootLayout() {
           options={{ animation: 'slide_from_right' }}
         />
         <Stack.Screen
+          name="basarilarim"
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
           name="analiz"
           options={{ animation: 'slide_from_right' }}
         />
