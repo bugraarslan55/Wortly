@@ -13,7 +13,9 @@ import { useAuthStore } from '../store/auth';
 import { useAchievementStore } from '../store/achievements';
 import { AchievementTracker } from '../components/use-achievements';
 import { BrandMark } from '../components/ui';
-import { REVIEW_NOTIFICATION_TYPE, syncReminderForUser, useLastNotificationResponse } from '../utils/review-reminder';
+import { loadHandledTaps, markTapHandled, useLastNotificationResponse } from '../utils/review-reminder';
+import { decideTap } from '../utils/notification-routing';
+import { useReminderSync } from '../components/use-reminder-sync';
 import { getReviewRoute } from '../utils/review-route';
 import { Colors } from '../constants/theme';
 
@@ -34,7 +36,10 @@ export default function RootLayout() {
   const router = useRouter();
   const navigationState = useRootNavigationState();
   const lastNotificationResponse = useLastNotificationResponse();
-  const handledNotificationRef = useRef<string | null>(null);
+  // İşlenmiş bildirim dokunmaları (kalıcı kayıttan yüklenir) ve bir dokunmanın ilk görüldüğü an.
+  const handledTapsRef = useRef<Set<string>>(new Set());
+  const firstSeenTapRef = useRef<Map<string, number>>(new Map());
+  const [handledTapsLoaded, setHandledTapsLoaded] = useState(false);
   const {
     profile, loadProfile, syncProfile, isLoaded,
     syncedUserId: profileSyncedUserId,
@@ -182,26 +187,51 @@ export default function RootLayout() {
     };
   }, [currentUserId, isUserDataSynced]);
 
-  // Kayıtlı ayardan günlük hatırlatmayı yeniden planlar; çıkış yapılmışsa iptal eder.
-  useEffect(() => {
-    if (!isAuthLoaded) return;
-    void syncReminderForUser(currentUserId);
-  }, [isAuthLoaded, currentUserId]);
+  // Hatırlatma planını güncel veriden yeniden kurar (açılış, öne gelme, çalışma/ayar/gün değişimi);
+  // çıkış yapılmışsa Wortly hatırlatmalarını iptal eder. Veri eşitlenmeden planlanmaz.
+  useReminderSync(currentUserId, isAuthLoaded && isUserDataSynced);
 
-  // Bildirime dokunulunca, uygulama hazır olduktan sonra mevcut tekrar akışına gider.
+  // Bildirime dokunma: karar saf mantıkta verilir (utils/notification-routing.ts).
+  // - Oturum yoksa korumalı ekrana gidilmez; bildirim sahibi giriş yaparsa (süre dolmadıysa) işlenir.
+  // - Başka hesabın bildirimi hiçbir şey göstermez ve yönlendirmez.
+  // - Aynı dokunma bir kez işlenir; işlenenler kalıcıdır (uygulama yeniden açılınca tekrar tetiklenmez).
+  useEffect(() => {
+    let active = true;
+    void loadHandledTaps().then((keys) => {
+      if (!active) return;
+      keys.forEach(key => handledTapsRef.current.add(key));
+      setHandledTapsLoaded(true);
+    });
+    return () => { active = false; };
+  }, []);
+
   const isAppReady =
     isLoaded && isAuthLoaded && isUserDataSynced && !!currentUserId && !!profile?.onboardingCompleted;
   useEffect(() => {
-    if (!isAppReady || !navigationState?.key || !lastNotificationResponse) return;
+    if (!handledTapsLoaded || !isAuthLoaded || !navigationState?.key || !lastNotificationResponse) return;
     const request = lastNotificationResponse.notification.request;
-    const data = request.content.data;
-    if (data?.type !== REVIEW_NOTIFICATION_TYPE || data.userId !== currentUserId) return;
+    const key = `${request.identifier}:${lastNotificationResponse.notification.date}`;
+    const now = Date.now();
+    if (!firstSeenTapRef.current.has(key)) firstSeenTapRef.current.set(key, now);
 
-    const handledKey = `${request.identifier}:${lastNotificationResponse.notification.date}`;
-    if (handledNotificationRef.current === handledKey) return;
-    handledNotificationRef.current = handledKey;
-    router.push(getReviewRoute() as any);
-  }, [isAppReady, navigationState?.key, lastNotificationResponse, currentUserId, router]);
+    const decision = decideTap({
+      tap: { key, data: request.content.data },
+      currentUserId,
+      appReady: isAppReady,
+      handled: handledTapsRef.current,
+      firstSeenAt: firstSeenTapRef.current.get(key) ?? now,
+      now,
+    });
+    if (decision.markHandled) {
+      handledTapsRef.current.add(key);
+      void markTapHandled(key);
+    }
+    if (decision.action !== 'navigate') return;
+    // Tekrar bildirimi tekrar akışına, diğerleri Ana Sayfa'ya gider. Rota dokunma anındaki gerçek veriden
+    // hesaplanır; Ana Sayfa için navigate, yığında ikinci bir Ana Sayfa oluşturmaz.
+    if (decision.target === 'review') router.push(getReviewRoute() as any);
+    else router.navigate('/(tabs)' as any);
+  }, [handledTapsLoaded, isAuthLoaded, isAppReady, navigationState?.key, lastNotificationResponse, currentUserId, router]);
 
   // Veriler yüklenirken (ağ yavaşsa birkaç saniye sürebilir) boş ekran yerine marka ve yükleme göstergesi.
   if (!isLoaded || !isAuthLoaded || !isUserDataSynced) {
