@@ -10,6 +10,7 @@ import {
 } from '../utils/progress-stats';
 import { nextMasteryLevel } from '../utils/mastery';
 import { withoutReviewState } from '../utils/known-words';
+import { createLatestGuard } from '../utils/latest-guard';
 
 // ─── STORAGE KEYS ───────────────────────────────────────────────────────────
 const KEYS = {
@@ -824,10 +825,14 @@ export const useUserStore = create<UserStore>((set, get) => ({
   },
 }));
 
+const scenarioLoads = createLatestGuard();
+
 // ─── SESSION STORE ──────────────────────────────────────────────────────────
 interface SessionStore {
   sessions: QuizSession[];
   scenarioResults: ScenarioResult[];
+  /** Bellekteki senaryo sonuçlarının sahibi; farklı kullanıcıya ait sonuçlar hiçbir ekranda kullanılmaz. */
+  scenarioResultsOwner: string | null;
   /**
    * Kullanıcının bulutta kayıtlı gerçek toplam oturum sayısı (yerel liste yalnızca son 100'ü tutar).
    * Bilinmiyorsa null; sahibi (userId) uyuşmayan değer kullanılmaz.
@@ -849,6 +854,7 @@ interface SessionStore {
 export const useSessionStore = create<SessionStore>((set, get) => ({
   sessions: [],
   scenarioResults: [],
+  scenarioResultsOwner: null,
   sessionTotal: null,
   currentSession: null,
   isLoaded: false,
@@ -877,12 +883,15 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   },
 
   loadScenarioResults: async (userId) => {
+    // Hesap değişiminde ESKİ hesabın geç gelen okuması yeni hesabın sonuçlarını ezmesin: yalnızca en yeni istek yazar.
+    const token = scenarioLoads.begin();
     try {
       const raw = await safeGetItem(scenarioResultsKey(userId));
       const parsed = raw ? JSON.parse(raw) : [];
-      set({ scenarioResults: Array.isArray(parsed) ? parsed : [] });
+      if (!scenarioLoads.isLatest(token)) return;
+      set({ scenarioResults: Array.isArray(parsed) ? parsed : [], scenarioResultsOwner: userId });
     } catch {
-      set({ scenarioResults: [] });
+      if (scenarioLoads.isLatest(token)) set({ scenarioResults: [], scenarioResultsOwner: userId });
     }
   },
 
@@ -972,7 +981,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   }),
 
   resetLocal: async () => {
-    set({ sessions: [], scenarioResults: [], sessionTotal: null, currentSession: null, syncedUserId: null });
+    scenarioLoads.invalidate(); // süren senaryo okumaları çıkıştan sonra veri yazamaz
+    set({ sessions: [], scenarioResults: [], scenarioResultsOwner: null, sessionTotal: null, currentSession: null, syncedUserId: null });
     await safeMultiRemove([KEYS.SESSIONS, KEYS.SESSIONS_OWNER, KEYS.SESSION_TOTAL]);
   },
 
@@ -1015,8 +1025,20 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
       date: Date.now(),
     };
-    const updated = [nextResult, ...get().scenarioResults].slice(0, LOCAL_SCENARIO_LIMIT);
-    set({ scenarioResults: updated });
+    // Bellekteki liste başka kullanıcıya aitse (veya henüz yüklenmediyse) üzerine yazarak kayıt kaybettirmemek
+    // için bu kullanıcının kayıtlı listesi depodan okunur.
+    let base = get().scenarioResults;
+    if (get().scenarioResultsOwner !== userId) {
+      try {
+        const raw = await safeGetItem(scenarioResultsKey(userId));
+        const parsed = raw ? JSON.parse(raw) : [];
+        base = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        base = [];
+      }
+    }
+    const updated = [nextResult, ...base].slice(0, LOCAL_SCENARIO_LIMIT);
+    set({ scenarioResults: updated, scenarioResultsOwner: userId });
     await safeSetItem(scenarioResultsKey(userId), JSON.stringify(updated));
   },
 

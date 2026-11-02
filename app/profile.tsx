@@ -9,7 +9,7 @@ import { useAuthStore } from '../store/auth';
 import { Colors, Spacing, BorderRadius, Cards } from '../constants/theme';
 import { AppIcon } from '../components/app-icon';
 import { Card, IconTile, SecondaryButton, SectionTitle, SegmentedControl } from '../components/ui';
-import { useAchievementViews } from '../components/use-achievements';
+import { useAchievementViews, useOwnScenarioResults } from '../components/use-achievements';
 import { makeIsKnownWordId } from '../utils/known-words';
 import { isStaticWordId } from '../utils/static-word-ids';
 import { buildSignOutPlan, countUnverifiedProgress } from '../utils/signout-plan';
@@ -43,7 +43,7 @@ export default function ProfileScreen() {
   const words = useWordStore(state => state.words);
   const reviewStates = useWordStore(state => state.reviewStates);
   const sessions = useSessionStore(state => state.sessions);
-  const scenarioResults = useSessionStore(state => state.scenarioResults);
+  const scenarioResults = useOwnScenarioResults();
   const sessionTotal = useSessionStore(state => state.sessionTotal);
 
   const { badges, earnedCount } = useAchievementViews();

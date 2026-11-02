@@ -3,6 +3,7 @@ import { AppState } from 'react-native';
 import { useSessionStore, useUserStore, useWordStore } from '../store';
 import { useAuthStore } from '../store/auth';
 import { useAchievementStore } from '../store/achievements';
+import type { ScenarioResult } from '../utils/learning-analysis';
 import { makeIsKnownWordId } from '../utils/known-words';
 import { isStaticWordId } from '../utils/static-word-ids';
 import {
@@ -63,6 +64,19 @@ export function useDayTick(): number {
   return now;
 }
 
+const EMPTY_RESULTS: ScenarioResult[] = [];
+
+/**
+ * Yalnızca oturumdaki kullanıcıya ait senaryo sonuçları. Başka kullanıcıya ait (veya sahibi henüz bilinmeyen)
+ * sonuçlar hiçbir ekranda kullanılmaz; hesap değişiminde eski hesabın verisi yeni hesapta görünmez.
+ */
+export function useOwnScenarioResults(): ScenarioResult[] {
+  const userId = useAuthStore(state => state.session?.user.id);
+  const raw = useSessionStore(state => state.scenarioResults);
+  const owner = useSessionStore(state => state.scenarioResultsOwner);
+  return useMemo(() => (userId && owner === userId ? raw : EMPTY_RESULTS), [raw, owner, userId]);
+}
+
 /** Mevcut yerel öğrenme verisinin anlık görüntüsü (yeni kayıt veya ağ isteği yok). */
 export function useLearningSnapshot(now: number): LearningSnapshot {
   const userId = useAuthStore(state => state.session?.user.id);
@@ -70,7 +84,7 @@ export function useLearningSnapshot(now: number): LearningSnapshot {
   const words = useWordStore(state => state.words);
   const reviewStates = useWordStore(state => state.reviewStates);
   const sessions = useSessionStore(state => state.sessions);
-  const scenarioResults = useSessionStore(state => state.scenarioResults);
+  const scenarioResults = useOwnScenarioResults();
   const sessionTotal = useSessionStore(state => state.sessionTotal);
 
   // Silinmiş kelimelerin kalıntı ilerleme kayıtları "öğrenilen kelime" sayısına ve rozetlere girmesin.

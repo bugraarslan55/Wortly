@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useSessionStore, useUserStore } from '../../store';
+import { useUserStore } from '../../store';
+import { useOwnScenarioResults } from '../../components/use-achievements';
 import {
   getScenarioMeta, getScenariosForLevel, isScenarioLevelLocked, Scenario, SCENARIO_LEVELS,
 } from '../../constants/scenarios';
@@ -14,7 +15,7 @@ import { AppIcon } from '../../components/app-icon';
 export default function ScenariosScreen() {
   const router = useRouter();
   const { profile } = useUserStore();
-  const scenarioResults = useSessionStore(state => state.scenarioResults);
+  const scenarioResults = useOwnScenarioResults();
   const userLevel: Level = SCENARIO_LEVELS.includes(profile?.level as Level) ? (profile!.level as Level) : 'A1';
   const [activeLevel, setActiveLevel] = useState<Level>(userLevel);
   const [lockedNotice, setLockedNotice] = useState('');
