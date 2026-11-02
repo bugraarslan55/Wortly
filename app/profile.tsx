@@ -13,6 +13,7 @@ import { useAchievementViews } from '../components/use-achievements';
 import { makeIsKnownWordId } from '../utils/known-words';
 import { isStaticWordId } from '../utils/static-word-ids';
 import { buildSignOutPlan, countUnverifiedProgress } from '../utils/signout-plan';
+import { replanReminders } from '../utils/reminder-sync';
 import { readPronunciationRecordings } from '../utils/pronunciation-storage';
 import { ReviewReminderCard } from '../components/review-reminder-card';
 import { isReminderSupported } from '../utils/review-reminder';
@@ -91,7 +92,14 @@ export default function ProfileScreen() {
   const signingOutRef = useRef(false);
 
   const performSignOut = async () => {
-    await signOut();
+    const userId = session?.user?.id;
+    const result = await signOut();
+    if (!result.ok) {
+      // Oturum açık kaldı: bildirim planını yeniden kur ve kullanıcıyı bilgilendir (veri silinmedi).
+      if (userId) void replanReminders(userId);
+      Alert.alert('Çıkış yapılamadı', result.message);
+      return;
+    }
     router.replace('/auth' as any);
   };
 
@@ -285,7 +293,7 @@ export default function ProfileScreen() {
             <View style={styles.infoRow}>
               <IconTile name="bell.fill" size={40} />
               <View style={styles.infoText}>
-                <Text style={styles.prefLabel}>Günlük tekrar bildirimi</Text>
+                <Text style={styles.prefLabel}>Çalışma hatırlatıcıları</Text>
                 <Text style={styles.prefHint}>
                   Bu ortamda (Android Expo Go) bildirimler desteklenmiyor. Development build veya mağaza sürümünde kullanılabilir.
                 </Text>
