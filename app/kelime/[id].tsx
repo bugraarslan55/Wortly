@@ -1,13 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, TextInput,
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useWordStore } from '../../store';
+import { useAuthStore } from '../../store/auth';
+import { confirmDeleteWord } from '../../utils/confirm-word-delete';
 import { KeyboardSafeView } from '../../components/keyboard-safe-view';
 import { useActionLock } from '../../components/exercise-ui';
 import { useGermanSpeech } from '../../utils/use-german-speech';
+import { useRecordingActive } from '../../utils/use-recording-active';
 import { getReviewState } from '../../utils/spaced-repetition';
 import { ALL_TOPICS } from '../../constants/topics';
 import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
@@ -27,6 +30,7 @@ export default function KelimeDetayScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { words, reviewStates, updateWord, deleteWord } = useWordStore();
+  const sessionUserId = useAuthStore(state => state.session?.user.id);
 
   const builtInTopic = ALL_TOPICS.find(topic =>
     topic.words.some(candidate => candidate.id === id)
@@ -48,6 +52,8 @@ export default function KelimeDetayScreen() {
   const [saving, setSaving] = useState(false);
   const saveLock = useActionLock();
   const { speak, speakingRate } = useGermanSpeech();
+  // Mikrofon kaydı sürerken referans sesi kayda karışmasın diye dinleme düğmeleri pasiftir.
+  const recordingActive = useRecordingActive();
   const [errors, setErrors] = useState<{ german?: string; turkish?: string; duplicate?: string }>({});
 
   // Almanca okuma hem hazır konu kelimeleri hem kişisel kelimeler için kullanılabilir.
@@ -121,18 +127,17 @@ export default function KelimeDetayScreen() {
   };
 
   const handleDelete = () => {
-    Alert.alert(
-      'Kelimeyi Sil',
-      `"${word.german}" kelimesini silmek istiyor musun?`,
-      [
-        { text: 'İptal', style: 'cancel' },
-        { text: 'Sil', style: 'destructive', onPress: async () => {
-            await deleteWord(id);
-            if (router.canGoBack()) router.back();
-            else router.replace('/(tabs)/kelimelerim' as any);
-          } },
-      ]
-    );
+    // Telaffuz kaydı varsa kullanıcıya ayrıca sorulur; onay olmadan ses dosyası silinmez.
+    void confirmDeleteWord({
+      userId: sessionUserId,
+      wordId: id,
+      label: word.german,
+      onDeleteWord: async () => {
+        await deleteWord(id);
+        if (router.canGoBack()) router.back();
+        else router.replace('/(tabs)/kelimelerim' as any);
+      },
+    });
   };
 
   const handleSpeak = (mode: 'normal' | 'slow') => {
@@ -183,7 +188,8 @@ export default function KelimeDetayScreen() {
               {canUseSpeech && (
                 <View style={styles.speechRow}>
                   <TouchableOpacity
-                    style={[styles.speechBtn, speakingRate === 'normal' && styles.speechBtnActive]}
+                    style={[styles.speechBtn, speakingRate === 'normal' && styles.speechBtnActive, recordingActive && { opacity: 0.45 }]}
+                    disabled={recordingActive}
                     onPress={() => handleSpeak('normal')}
                     activeOpacity={0.8}
                     accessibilityRole="button"
@@ -193,7 +199,8 @@ export default function KelimeDetayScreen() {
                     <Text style={styles.speechBtnText}>Dinle</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.speechBtn, speakingRate === 'slow' && styles.speechBtnActive]}
+                    style={[styles.speechBtn, speakingRate === 'slow' && styles.speechBtnActive, recordingActive && { opacity: 0.45 }]}
+                    disabled={recordingActive}
                     onPress={() => handleSpeak('slow')}
                     activeOpacity={0.8}
                     accessibilityRole="button"

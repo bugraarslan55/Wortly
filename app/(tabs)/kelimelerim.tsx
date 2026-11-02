@@ -1,10 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, FlatList,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useWordStore } from '../../store';
+import { useAuthStore } from '../../store/auth';
+import { confirmDeleteWord } from '../../utils/confirm-word-delete';
 import { Colors, Spacing, BorderRadius, Cards } from '../../constants/theme';
 import { Word, MasteryLevel } from '../../types';
 import { AppIcon } from '../../components/app-icon';
@@ -22,6 +24,7 @@ const FILTERS: ('all' | MasteryLevel)[] = ['all', 0, 1, 2, 3];
 export default function KelimelerimScreen() {
   const router = useRouter();
   const { words, deleteWord } = useWordStore();
+  const sessionUserId = useAuthStore(state => state.session?.user.id);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | MasteryLevel>('all');
 
@@ -38,14 +41,13 @@ export default function KelimelerimScreen() {
   }), [customWords, search, filter]);
 
   const handleDelete = (word: Word) => {
-    Alert.alert(
-      'Kelimeyi Sil',
-      `"${word.article ? word.article + ' ' : ''}${word.german}" kelimesini silmek istiyor musun?`,
-      [
-        { text: 'İptal', style: 'cancel' },
-        { text: 'Sil', style: 'destructive', onPress: () => deleteWord(word.id) },
-      ]
-    );
+    // Telaffuz kaydı varsa kullanıcıya ayrıca sorulur; onay olmadan ses dosyası silinmez.
+    void confirmDeleteWord({
+      userId: sessionUserId,
+      wordId: word.id,
+      label: `${word.article ? word.article + ' ' : ''}${word.german}`,
+      onDeleteWord: () => deleteWord(word.id),
+    });
   };
 
   return (

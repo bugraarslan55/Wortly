@@ -16,6 +16,7 @@ import { buildSignOutPlan, countUnverifiedProgress } from '../utils/signout-plan
 import { replanReminders } from '../utils/reminder-sync';
 import { readPronunciationRecordings } from '../utils/pronunciation-storage';
 import { ReviewReminderCard } from '../components/review-reminder-card';
+import { RecordingStorageCard } from '../components/recording-storage-card';
 import { isReminderSupported } from '../utils/review-reminder';
 import { Level } from '../types';
 import {
@@ -122,7 +123,7 @@ export default function ProfileScreen() {
     if (!userId) return message;
     const count = Object.keys(await readPronunciationRecordings(userId).catch(() => ({}))).length;
     return count > 0
-      ? `${message}\n\nAyrıca bu cihazdaki ${count} telaffuz kaydın da silinir.`
+      ? `${message}\n\nAyrıca bu cihazdaki ${count} telaffuz kaydın da silinir. Kayıtlar yalnızca bu cihazda saklandığı için başka cihaza aktarılamaz ve geri getirilemez.`
       : message;
   };
 
@@ -301,6 +302,9 @@ export default function ProfileScreen() {
             </View>
           </Card>
         )}
+
+        {/* Kullanılmayan telaffuz kayıtları varsa görünür; silme yalnızca onayla */}
+        <RecordingStorageCard userId={session?.user?.id ?? null} />
 
         {/* Hesap */}
         <SectionTitle>Hesap</SectionTitle>
