@@ -9,8 +9,14 @@ import type { PlannedReminder } from './reminder-plan';
 
 export const QUIZ_REMINDER_KINDS: ReadonlyArray<PlannedReminder['kind']> = ['daily', 'review'];
 
+/**
+ * Mini quiz bildiriminin sabit metni. Kilit ekranında kullanıcıya ait HİÇBİR kelime, çeviri veya ilerleme verisi görünmez;
+ * kelime yalnızca bildirimin gizli verisinde (data.wordId) taşınır ve dokunulunca uygulama içinde sorulur.
+ */
+export const QUIZ_REMINDER_BODY = 'Günün mini sorusu hazır. Dokun ve kısa bir soruyu cevapla.';
+
 export interface QuizContent {
-  body: string;
+  body?: string;
   wordId?: string;
 }
 
@@ -27,8 +33,9 @@ export function decoratePlanWithQuiz(
     } catch {
       content = null;
     }
-    if (!content || !content.wordId || !content.body) return item;
+    if (!content || typeof content.wordId !== 'string' || !content.wordId) return item;
     used.push(content.wordId);
-    return { ...item, body: content.body, wordId: content.wordId };
+    // Sağlayıcının metni YOK SAYILIR: gövde her zaman sabit ve veri içermeyen metindir.
+    return { ...item, body: QUIZ_REMINDER_BODY, wordId: content.wordId };
   });
 }

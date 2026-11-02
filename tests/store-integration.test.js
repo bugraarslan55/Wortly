@@ -858,7 +858,11 @@ test('mini quiz bildirimi: kelime yalnızca bildirimi alan hesabın kendi verisi
   const world = createWorld();
   const app = await onboarded(world, 'A');
   const first = app.mini.getMiniQuizReminderContent('A');
-  assert.ok(first && first.wordId && first.body.includes('Bugünün kelimesi'), 'içerik üretildi');
+  assert.ok(first && first.wordId, 'içerik üretildi');
+  assert.equal(first.body, require('../utils/reminder-quiz.ts').QUIZ_REMINDER_BODY, 'bildirim gövdesi sabit: kelime/çeviri yok');
+  for (const word of app.W.getState().words) {
+    assert.ok(!first.body.includes(word.german) && !first.body.includes(word.turkish), 'gövdede kullanıcı verisi yok');
+  }
   const second = app.mini.getMiniQuizReminderContent('A', [first.wordId]);
   assert.ok(!second || second.wordId !== first.wordId, 'hariç tutulan kelime tekrarlanmaz');
   assert.equal(app.mini.getMiniQuizReminderContent(''), null, 'kullanıcı kimliği yoksa içerik yok');
@@ -904,4 +908,45 @@ test('bildirim rotası: bu hesapta var olan kelime mini quiz\'i açar; silinmiş
   assert.equal(app.route.getNotificationRoute({}).startsWith('/mini-quiz'), false);
   await app.W.getState().deleteWord(own);
   assert.equal(app.route.getNotificationRoute({ wordId: own }).startsWith('/mini-quiz'), false, 'silinen kelime için mini quiz açılmaz');
+});
+
+test('mini quiz yanıtı (GERÇEK mağaza): kelime ilerlemesi güncellenir, çalışma oturumu OLUŞMAZ, aynı soru iki kez kaydedilmez', async () => {
+  const world = createWorld();
+  const app = await onboarded(world, 'A');
+  const [staticId] = app.staticIds();
+  const guard = require('../utils/mini-quiz-answer.ts').createMiniQuizAnswerGuard();
+  const deps = { updateMastery: app.W.getState().updateMastery, updateStreak: app.U.getState().updateStreak };
+  const results = await Promise.all([
+    require('../utils/mini-quiz-answer.ts').recordMiniQuizAnswer(guard, '0:' + staticId, staticId, true, deps),
+    require('../utils/mini-quiz-answer.ts').recordMiniQuizAnswer(guard, '0:' + staticId, staticId, true, deps),
+  ]);
+  assert.deepEqual(results, [true, false]);
+  assert.equal(app.W.getState().reviewStates[staticId].masteryLevel, 1, 'seviye bir kez yükseldi (iki kez değil)');
+  assert.deepEqual(app.S.getState().sessions, [], 'tek soruluk mini quiz çalışma oturumu kaydetmez');
+  assert.equal(world.cloud.tables.study_sessions.size, 0);
+  assert.deepEqual(JSON.parse(world.disk.get(KEY.sessions) ?? '[]'), [], 'diskte de oturum yok');
+});
+
+test('mini quiz yanıtı + öğrenme senkronu AÇIK: ilerleme bir kez kuyruğa girip buluta gider; bayrak kapalıyken yeni tabloya istek yok', async () => {
+  for (const flag of [false, true]) {
+    const world = createWorld();
+    world.cloud.session = 'A';
+    const app = world.boot({ learningSync: flag ? true : null });
+    await app.load();
+    await app.sync('A');
+    await app.U.getState().completeOnboarding('A', 'A1');
+    const [staticId] = app.staticIds();
+    const guard = require('../utils/mini-quiz-answer.ts').createMiniQuizAnswerGuard();
+    const deps = { updateMastery: app.W.getState().updateMastery, updateStreak: app.U.getState().updateStreak };
+    await require('../utils/mini-quiz-answer.ts').recordMiniQuizAnswer(guard, '0:' + staticId, staticId, true, deps);
+    await require('../utils/mini-quiz-answer.ts').recordMiniQuizAnswer(guard, '0:' + staticId, staticId, true, deps);
+    await app.store.flushPendingChanges('A');
+    if (flag) {
+      assert.equal(world.cloud.tables.user_word_progress.get(staticId).mastery_level, 1);
+      assert.equal(world.cloud.calls.filter(c => c.table === 'user_word_progress').length, 1, 'ilerleme yalnızca bir kez gönderildi');
+    } else {
+      assert.equal(world.cloud.requests.filter(r => r.table === 'user_word_progress' || r.table === 'scenario_results').length, 0);
+    }
+    assert.deepEqual(app.S.getState().sessions, []);
+  }
 });

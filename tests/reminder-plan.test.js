@@ -79,12 +79,13 @@ test('günlük hedef tamamlandıysa bugünün bildirimi planlanmaz, yarınki pla
   assert.equal(plan.length, R.PLAN_DAYS - 1);
 });
 
-test('hedef tamamlanmadıysa bugünkü mesaj gerçek kalan sayıyı söyler', () => {
+test('hedef tamamlanmadıysa bugünkü hedef hatırlatması gelir (kilit ekranında sayı yok)', () => {
   const ids = ['a', 'b', 'c'];
   const reviewStates = Object.fromEntries(ids.map(id => [id, { masteryLevel: 1, lastReviewed: NOW - 60 * 1000 }]));
   const plan = R.buildReminderPlan(base({ reviewStates, prefs: prefs({ review: false }) }));
   assert.equal(plan[0].kind, 'goal');
-  assert.match(plan[0].body, /10 kelime hedefine 7 kelime kaldı/);
+  assert.match(plan[0].body, /çalışma hedefin seni bekliyor/);
+  assert.doesNotMatch(plan[0].body, /\d/);
 });
 
 test('tekrar bekleyen kelime yoksa tekrar mesajı ve yanlış sayı gösterilmez', () => {
@@ -99,14 +100,15 @@ test('tekrar bekleyen kelime yoksa tekrar mesajı ve yanlış sayı gösterilmez
   assert.equal(plan[0].body, 'Bugün birkaç kelime tekrar ederek öğrenmene devam et.');
 });
 
-test('tekrar bekleyen kelime varsa gerçek sayı yazılır; yalnızca yakın günler için iddia edilir', () => {
+test('tekrar bekleyen kelime varsa tekrar mesajı çıkar (sayı yok); yalnızca yakın günler için iddia edilir', () => {
   const ids = ['a', 'b', 'c'];
   const plan = R.buildReminderPlan(base({
     candidates: ids.map(id => word(id)), reviewStates: dueStates(ids), prefs: prefs({ goal: false }),
   }));
   const reviews = plan.filter(p => p.kind === 'review');
   assert.equal(reviews.length, R.REVIEW_CLAIM_DAYS);
-  assert.match(reviews[0].body, /^3 kelime tekrarını bekliyor/);
+  assert.match(reviews[0].body, /^Tekrar edeceğin kelimeler seni bekliyor/);
+  assert.doesNotMatch(reviews[0].body, /\d/);
   assert.equal(plan[R.REVIEW_CLAIM_DAYS].kind, 'daily', 'uzak günlerde sayı iddiası yok');
 });
 
@@ -118,12 +120,13 @@ test('tekrar mesajı kapatılabilir; hedef/genel mesaja düşer', () => {
   assert.ok(plan.every(p => p.kind === 'daily'));
 });
 
-test('kişisel olmayan (konu) kelimeler de tekrar sayısına girer; kimlik tekrar etse bile bir kez sayılır', () => {
+test('kişisel olmayan (konu) kelimeler de tekrar mesajını tetikler; kimlik tekrar etse bile tek mesaj üretilir', () => {
   const topicWord = word('goethe-a1-haus', { isCustom: false });
   const plan = R.buildReminderPlan(base({
     candidates: [topicWord, topicWord], reviewStates: dueStates(['goethe-a1-haus']), prefs: prefs({ goal: false }),
   }));
-  assert.match(plan[0].body, /^1 kelime tekrarını/);
+  assert.match(plan[0].body, /^Tekrar edeceğin kelimeler/);
+  assert.equal(plan.filter(p => p.kind === 'review' && p.date === plan[0].date).length, 1);
 });
 
 test('seri hatırlatması varsayılan kapalı; açıkken yalnızca bilinen durumlarda', () => {
@@ -132,7 +135,8 @@ test('seri hatırlatması varsayılan kapalı; açıkken yalnızca bilinen durum
   assert.ok(off.every(p => p.kind !== 'streak'));
   const on = R.buildReminderPlan(base({ ...profile, prefs: prefs({ streak: true }) }));
   assert.equal(on[0].kind, 'streak');
-  assert.match(on[0].body, /4 günlük serin/);
+  assert.match(on[0].body, /Çalışma serin seni bekliyor/);
+  assert.doesNotMatch(on[0].body, /\d/);
   assert.ok(on.slice(1).every(p => p.kind !== 'streak'), 'ileri günler için seri iddiası yapılmaz');
 });
 
@@ -208,4 +212,22 @@ test('iptal yalnızca Wortly bildirim türlerini kapsar (başka bildirimlere dok
   assert.equal(R.isManagedReminderData({}), false);
   assert.equal(R.isManagedReminderData(null), false);
   assert.equal(R.isManagedReminderData(undefined), false);
+});
+
+test('KİLİT EKRANI GİZLİLİĞİ: hiçbir bildirim başlığı/gövdesi sayı, kelime, çeviri veya ilerleme verisi içermez', () => {
+  const secret = word('gizli-kelime', { german: 'Geheimwort', turkish: 'sirli' });
+  const states = dueStates(['gizli-kelime', 'a', 'b']);
+  const scenarios = [
+    base({ candidates: [secret, word('a'), word('b')], reviewStates: states }),
+    base({ candidates: [secret, word('a'), word('b')], reviewStates: states, prefs: prefs({ streak: true, review: true, goal: true }), streak: 12, lastStudyDate: '2026-11-01' }),
+    base({ candidates: [secret], reviewStates: { 'gizli-kelime': { masteryLevel: 1, lastReviewed: NOW - 60 * 1000 } }, prefs: prefs({ review: false }) }),
+    base({ candidates: [], reviewStates: {}, prefs: prefs({ review: false, goal: false }) }),
+  ];
+  for (const input of scenarios) {
+    for (const item of R.buildReminderPlan(input)) {
+      const text = item.title + ' ' + item.body;
+      assert.doesNotMatch(text, /\d/, 'sayı yok: ' + text);
+      assert.doesNotMatch(text, /Geheimwort|sirli|gizli/i, 'kelime/çeviri yok: ' + text);
+    }
+  }
 });

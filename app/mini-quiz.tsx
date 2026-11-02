@@ -6,10 +6,11 @@ import { AppIcon } from '../components/app-icon';
 import { ColoredGermanWord } from '../components/colored-german-word';
 import { Spacing, BorderRadius, Shadows } from '../constants/theme';
 import { makeStyles, useColors } from '../hooks/use-theme';
-import { useSessionStore, useUserStore, useWordStore } from '../store';
+import { useUserStore, useWordStore } from '../store';
 import {
   buildMiniQuizQuestion, findMiniQuizWord, getMiniQuizCandidates, MiniQuizQuestion, pickMiniQuizQuestion,
 } from '../utils/mini-quiz';
+import { createMiniQuizAnswerGuard, recordMiniQuizAnswer } from '../utils/mini-quiz-answer';
 
 export default function MiniQuizScreen() {
   const styles = useStyles();
@@ -21,11 +22,12 @@ export default function MiniQuizScreen() {
   const words = useWordStore(state => state.words);
   const reviewStates = useWordStore(state => state.reviewStates);
   const updateMastery = useWordStore(state => state.updateMastery);
-  const saveSession = useSessionStore(state => state.saveSession);
 
   const shownIdsRef = useRef<string[]>([]);
-  // Hızlı çift dokunuş aynı soruyu iki kez saymasın (state güncellenmeden ikinci çağrı gelebilir).
-  const answeredRef = useRef(false);
+  // Hızlı çift dokunuş aynı soruyu iki kez kaydetmesin (state güncellenmeden ikinci çağrı gelebilir).
+  const answerGuardRef = useRef(createMiniQuizAnswerGuard());
+  const questionSerialRef = useRef(0);
+  const lockedSerialRef = useRef(-1);
 
   // Bildirimdeki kelime önce denenir; bulunamaz ya da soru kurulamazsa normal kelime seçimi yapılır.
   const createQuestion = (preferredWordId?: string): MiniQuizQuestion | null => {
@@ -56,24 +58,16 @@ export default function MiniQuizScreen() {
   };
 
   const handleSelect = (index: number) => {
-    if (!question || answered || answeredRef.current) return;
-    answeredRef.current = true;
+    if (!question || answered || lockedSerialRef.current === questionSerialRef.current) return;
+    lockedSerialRef.current = questionSerialRef.current; // aynı soruda ikinci dokunuş cevabı değiştiremez
     const correct = index === question.correctIndex;
     setSelectedIndex(index);
 
-    // Mevcut alıştırmalarla aynı kayıt: kelime seviyesi + çalışma oturumu (analiz bunları okur).
-    const { word } = question;
-    void updateMastery(word.id, correct).catch(() => undefined);
-    void saveSession({
-      id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-      date: Date.now(),
-      type: 'dogru-yanlis',
-      wordIds: [word.id],
-      score: correct ? 1 : 0,
-      total: 1,
-      topicId: word.topicId,
-    }).catch(() => undefined);
-    void updateStreak().catch(() => undefined);
+    // Yalnızca kelime ilerlemesi (+ gün serisi) güncellenir; çalışma oturumu kaydedilmez, görev/rozet sayılarına girmez.
+    void recordMiniQuizAnswer(
+      answerGuardRef.current, `${questionSerialRef.current}:${question.word.id}`, question.word.id, correct,
+      { updateMastery, updateStreak },
+    );
     // Kelime durumu değişince bildirim planı useReminderSync tarafından yeniden kurulur (yeni kelime seçilir).
   };
 
@@ -84,7 +78,7 @@ export default function MiniQuizScreen() {
       return;
     }
     shownIdsRef.current.push(next.word.id);
-    answeredRef.current = false;
+    questionSerialRef.current += 1;
     setQuestion(next);
     setSelectedIndex(null);
   };

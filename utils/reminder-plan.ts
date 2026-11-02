@@ -91,10 +91,6 @@ export function normalizePrefs(value: Partial<ReminderPrefs> | null | undefined)
 
 export const reminderId = (date: number | Date) => `wortly-reminder-${toLocalDateKey(date)}`;
 
-function wordsText(count: number) {
-  return `${count} kelime`;
-}
-
 export function buildReminderPlan(input: PlanInput): PlannedReminder[] {
   const { prefs, now } = input;
   if (!prefs.enabled) return [];
@@ -124,7 +120,8 @@ export function buildReminderPlan(input: PlanInput): PlannedReminder[] {
       reminder = {
         kind: 'streak',
         title: 'Serini koru',
-        body: `${activeStreak} günlük serin devam ediyor. ${k === 0 ? 'Bugün' : 'Yarın'} da çalışarak koru.`,
+        // Kilit ekranında görünür: sayı/ilerleme verisi yok.
+        body: `Çalışma serin seni bekliyor. ${k === 0 ? 'Bugün' : 'Yarın'} da çalışarak koru.`,
       };
     }
 
@@ -135,7 +132,7 @@ export function buildReminderPlan(input: PlanInput): PlannedReminder[] {
         reminder = {
           kind: 'review',
           title: 'Tekrar zamanı',
-          body: `${wordsText(due)} tekrarını bekliyor. Kısa bir tekrarla aklında tut.`,
+          body: 'Tekrar edeceğin kelimeler seni bekliyor. Kısa bir tekrarla aklında tut.',
         };
       }
     }
@@ -146,12 +143,12 @@ export function buildReminderPlan(input: PlanInput): PlannedReminder[] {
         ? {
             kind: 'goal',
             title: 'Günlük hedefin seni bekliyor',
-            body: `Bugünkü ${wordsText(goal)} hedefine ${wordsText(goal - reviewedToday)} kaldı.`,
+            body: 'Bugünkü çalışma hedefin seni bekliyor. Birkaç dakikada başlayabilirsin.',
           }
         : {
             kind: 'goal',
             title: 'Günlük hedefin seni bekliyor',
-            body: `Bugünkü hedefin ${wordsText(goal)}. Birkaç dakikada başlayabilirsin.`,
+            body: 'Bugünkü çalışma hedefin seni bekliyor. Birkaç dakikada başlayabilirsin.',
           };
     }
 

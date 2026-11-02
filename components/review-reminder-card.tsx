@@ -177,7 +177,7 @@ export function ReviewReminderCard({ userId }: { userId: string | null }) {
       <SettingRow
         icon
         label="Günlük hatırlatıcı"
-        hint="Her gün seçtiğin saatte kısa bir çalışma hatırlatması alırsın; bazı bildirimler tek dokunuşla açılan bir kelime sorusudur."
+        hint="Her gün seçtiğin saatte kısa bir çalışma hatırlatması alırsın; bazı bildirimler dokununca açılan bir mini sorudur. Kilit ekranında kelime, çeviri veya sayı gösterilmez."
         value={settings.enabled}
         onChange={handleToggle}
         disabled={disabled}
@@ -223,7 +223,7 @@ export function ReviewReminderCard({ userId }: { userId: string | null }) {
 
       <SettingRow
         label="Kelime tekrarı"
-        hint="Tekrar zamanı gelen kelime varsa, kaç kelime beklediğini söyler. Bekleyen yoksa sayı gösterilmez."
+        hint="Tekrar zamanı gelen kelime varsa bunu hatırlatır. Bekleyen yoksa bu mesaj gelmez."
         value={settings.review}
         onChange={setFlag('review')}
         disabled={disabled || off}

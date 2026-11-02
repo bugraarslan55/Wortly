@@ -4,6 +4,7 @@ import { useUserStore, useWordStore } from '../store';
 import { findDueWords } from './learning-analysis';
 import { getNextReviewAt, getReviewState, ReviewStateMap } from './spaced-repetition';
 import type { ReminderContent } from './review-reminder';
+import { QUIZ_REMINDER_BODY } from './reminder-quiz';
 
 // Bildirimden açılan mini quiz: tek bir Almanca kelime, 3 Türkçe seçenek (1 doğru, 2 yanlış).
 
@@ -131,13 +132,6 @@ export function pickMiniQuizQuestion(source: MiniQuizSource = {}): MiniQuizQuest
   return null;
 }
 
-const displayGerman = (word: Word) => {
-  const german = word.german.trim();
-  return word.article && !german.toLocaleLowerCase('de-DE').startsWith(`${word.article} `)
-    ? `${word.article} ${german}`
-    : german;
-};
-
 /** Bellekteki veri bu kullanıcıya mı ait? Sahibi başka/bilinmiyorsa (ve veri varsa) kullanılmaz. */
 const ownedBy = (userId: string, owner: string | null | undefined, hasData: boolean) =>
   owner === userId || ((owner === null || owner === undefined) && !hasData);
@@ -157,10 +151,8 @@ export function getMiniQuizReminderContent(userId: string, excludeIds: string[] 
     if (!ownedBy(userId, wordsOwner, words.length > 0) || !ownedBy(userId, reviewOwner, Object.keys(reviewStates).length > 0)) return null;
     const question = pickMiniQuizQuestion({ level: profile.level, customWords: words, reviewStates, excludeIds });
     if (!question) return null;
-    return {
-      wordId: question.word.id,
-      body: `Bugünün kelimesi: ${displayGerman(question.word)} — anlamını hatırlıyor musun?`,
-    };
+    // Metin SABİTTİR: kilit ekranında kelime/çeviri/ilerleme verisi görünmez; kelime yalnızca gizli veride (wordId) taşınır.
+    return { wordId: question.word.id, body: QUIZ_REMINDER_BODY };
   } catch {
     return null;
   }

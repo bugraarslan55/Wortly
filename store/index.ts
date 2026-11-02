@@ -1455,7 +1455,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   startSession: (sessionData) => {
     const session: QuizSession = {
       ...sessionData,
-      id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, // aynı milisaniyede iki oturum çakışmasın
+      id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`, // aynı milisaniyede iki oturum çakışmasın
       date: Date.now(),
     };
     set({ currentSession: session });
