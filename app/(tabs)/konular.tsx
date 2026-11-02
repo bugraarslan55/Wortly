@@ -7,13 +7,16 @@ import { useRouter } from 'expo-router';
 import { useUserStore } from '../../store';
 import { getTopicsForLevel } from '../../constants/topics';
 import { topicSymbol } from '../../constants/symbols';
-import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { makeStyles, useColors } from '../../hooks/use-theme';
 import { Level, Topic } from '../../types';
 import { AppIcon } from '../../components/app-icon';
 
 const LEVEL_TABS: Level[] = ['A1', 'A2', 'B1'];
 
 export default function KonularScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const { profile } = useUserStore();
   // Güvenlik: profile.level her ne olursa olsun (eski/geçersiz veri dahil),
@@ -49,11 +52,11 @@ export default function KonularScreen() {
 
       {/* Search */}
       <View style={styles.searchWrapper}>
-        <AppIcon name="magnifyingglass" size={16} color={Colors.outline} />
+        <AppIcon name="magnifyingglass" size={16} color={colors.outline} />
         <TextInput
           style={styles.searchInput}
           placeholder="Konu ara..."
-          placeholderTextColor={Colors.outlineVariant}
+          placeholderTextColor={colors.outlineVariant}
           value={search}
           onChangeText={setSearch}
         />
@@ -64,7 +67,7 @@ export default function KonularScreen() {
             accessibilityRole="button"
             accessibilityLabel="Aramayı temizle"
           >
-            <AppIcon name="xmark.circle.fill" size={18} color={Colors.outline} />
+            <AppIcon name="xmark.circle.fill" size={18} color={colors.outline} />
           </TouchableOpacity>
         )}
       </View>
@@ -91,7 +94,7 @@ export default function KonularScreen() {
               ]}>
                 {lvl}
               </Text>
-              {locked && <AppIcon name="lock.fill" size={11} color={Colors.outline} />}
+              {locked && <AppIcon name="lock.fill" size={11} color={colors.outline} />}
             </TouchableOpacity>
           );
         })}
@@ -105,7 +108,7 @@ export default function KonularScreen() {
       >
         {filteredTopics.length === 0 ? (
           <View style={styles.empty}>
-            <AppIcon name="magnifyingglass" size={34} color={Colors.outlineVariant} />
+            <AppIcon name="magnifyingglass" size={34} color={colors.outlineVariant} />
             <Text style={styles.emptyText}>Konu bulunamadı</Text>
           </View>
         ) : (
@@ -123,6 +126,8 @@ export default function KonularScreen() {
 }
 
 function TopicCard({ topic, onPress }: { topic: Topic; onPress: () => void }) {
+  const styles = useStyles();
+  const colors = useColors();
   return (
     <TouchableOpacity
       style={styles.topicCard}
@@ -134,19 +139,19 @@ function TopicCard({ topic, onPress }: { topic: Topic; onPress: () => void }) {
     >
       <View style={styles.topicLeft}>
         <View style={styles.topicEmojiBox}>
-          <AppIcon name={topicSymbol(topic.id)} size={22} color={Colors.secondary} />
+          <AppIcon name={topicSymbol(topic.id)} size={22} color={colors.secondary} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.topicTitle}>{topic.title}</Text>
           <Text style={styles.topicMeta}>{topic.wordCount} kelime · {topic.level}</Text>
         </View>
       </View>
-      <AppIcon name="chevron.right" size={15} color={Colors.outline} />
+      <AppIcon name="chevron.right" size={15} color={colors.outline} />
     </TouchableOpacity>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   header: { paddingHorizontal: Spacing.marginMain, paddingTop: Spacing.md, paddingBottom: Spacing.sm },
   title: { fontSize: 24, fontWeight: '700', color: Colors.primary },
@@ -169,7 +174,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', gap: Spacing.xs,
     borderRadius: BorderRadius.md, backgroundColor: Colors.surfaceContainer,
   },
-  levelTabActive: { backgroundColor: Colors.primary },
+  levelTabActive: { backgroundColor: Colors.primaryContainer },
   levelTabLocked: { opacity: 0.5 },
   levelTabText: { fontSize: 13, fontWeight: '600', color: Colors.onSurfaceVariant },
   levelTabTextActive: { color: Colors.golden },
@@ -191,4 +196,4 @@ const styles = StyleSheet.create({
   topicMeta: { fontSize: 12, color: Colors.onSurfaceVariant },
   empty: { alignItems: 'center', marginTop: 60, gap: Spacing.md },
   emptyText: { fontSize: 15, color: Colors.onSurfaceVariant },
-});
+}));

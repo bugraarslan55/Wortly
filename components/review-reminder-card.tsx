@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { AppIcon } from './app-icon';
-import { BorderRadius, Colors, Shadows, Spacing } from '../constants/theme';
+import { BorderRadius, Shadows, Spacing } from '../constants/theme';
+import { makeStyles, useColors } from '../hooks/use-theme';
 import {
   applyReminder,
   DEFAULT_REMINDER,
@@ -20,6 +21,8 @@ const MINUTE_STEP = 5;
 const pad = (value: number) => String(value).padStart(2, '0');
 
 export function ReviewReminderCard({ userId }: { userId: string | null }) {
+  const styles = useStyles();
+  const colors = useColors();
   const [settings, setSettings] = useState<ReminderSettings>(DEFAULT_REMINDER);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -92,16 +95,16 @@ export function ReviewReminderCard({ userId }: { userId: string | null }) {
   return (
     <View style={styles.card}>
       <View style={styles.row}>
-        <AppIcon name="bell.fill" size={18} color={Colors.secondary} />
+        <AppIcon name="bell.fill" size={18} color={colors.secondary} />
         <View style={styles.textBox}>
           <Text style={styles.label}>Günlük tekrar bildirimi</Text>
-          <Text style={styles.hint}>Her gün seçtiğin saatte “Bugünkü kelime tekrarın hazır” bildirimi gelir.</Text>
+          <Text style={styles.hint}>Her gün seçtiğin saatte kısa bir kelime sorusu bildirimi gelir.</Text>
         </View>
         <Switch
           value={settings.enabled}
           onValueChange={handleToggle}
           disabled={busy || !loaded}
-          trackColor={{ true: Colors.golden }}
+          trackColor={{ true: colors.golden }}
           accessibilityLabel="Günlük tekrar bildirimi"
         />
       </View>
@@ -134,7 +137,7 @@ export function ReviewReminderCard({ userId }: { userId: string | null }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   card: {
     width: '100%',
     marginTop: Spacing.md,
@@ -155,4 +158,4 @@ const styles = StyleSheet.create({
   stepText: { fontSize: 18, fontWeight: '700', color: Colors.primary, lineHeight: 22 },
   timeValue: { fontSize: 17, fontWeight: '700', color: Colors.primary, minWidth: 22, textAlign: 'center' },
   message: { fontSize: 12, color: Colors.error, fontWeight: '600', lineHeight: 17 },
-});
+}));

@@ -30,11 +30,61 @@ export type ReminderSettings = { enabled: boolean; hour: number; minute: number 
 
 export const DEFAULT_REMINDER: ReminderSettings = { enabled: false, hour: 20, minute: 0 };
 export const REVIEW_NOTIFICATION_TYPE = 'daily-review';
+
+// Günlük bildirimin metni ve (varsa) mini quiz kelimesi. Uygun içerik yoksa genel metin kullanılır.
+export type ReminderContent = { body: string; wordId?: string };
+
+const DEFAULT_BODY = 'Bugünkü kelime tekrarın hazır';
+
+// İçerik sağlayıcı dışarıdan verilir; böylece bu dosya store'lara bağımlı olmaz (store/auth bu dosyayı içe aktarır).
+let contentProvider: (() => ReminderContent | null) | null = null;
+export function setReminderContentProvider(provider: (() => ReminderContent | null) | null) {
+  contentProvider = provider;
+}
+
+function resolveContent(): ReminderContent {
+  try {
+    return contentProvider?.() ?? { body: DEFAULT_BODY };
+  } catch {
+    return { body: DEFAULT_BODY };
+  }
+}
 export const isReminderSupported = Notifications != null;
 
-// Hook sırası render'lar arasında değişmesin diye isReminderSupported modül yüklenirken sabitlenir.
-export const useLastNotificationResponse: typeof NotificationsModule.useLastNotificationResponse =
-  isReminderSupported ? Notifications.useLastNotificationResponse : () => null;
+export type NotificationTapResponse = NotificationsModule.NotificationResponse;
+
+// Bildirime dokunma (yanıt) akışı. useLastNotificationResponse hook'u kullanılmaz: hook, kimliği
+// öncekiyle aynı olan yanıtı yok sayar ve günlük bildirimimiz hep aynı kimliği taşır; bu yüzden
+// süreç bir kez yanıt aldıktan sonraki dokunuşlar kaybolur. Burada her yanıt işleyiciye iletilir:
+// uygulamayı açan dokunuş (kapalıyken) getLastNotificationResponseAsync ile, sonrakiler dinleyiciyle gelir.
+export function subscribeToNotificationResponses(
+  handler: (response: NotificationTapResponse) => void,
+): () => void {
+  if (!isReminderSupported) return () => undefined;
+  let active = true;
+  const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+    if (active) handler(response);
+  });
+  void Notifications.getLastNotificationResponseAsync()
+    .then((response) => {
+      if (active && response) handler(response);
+    })
+    .catch(() => undefined);
+  return () => {
+    active = false;
+    subscription.remove();
+  };
+}
+
+/** Yalnızca bildirimin kendisine dokunma sayılır (kapatma/özel eylemler yönlendirmez). */
+export const isNotificationTap = (response: NotificationTapResponse) =>
+  isReminderSupported && response.actionIdentifier === Notifications.DEFAULT_ACTION_IDENTIFIER;
+
+/** İşlenen yanıt, sonraki açılış/yeniden bağlanmada tekrar işlenmesin diye temizlenir. */
+export function clearHandledNotificationResponse(): void {
+  if (!isReminderSupported) return;
+  void Notifications.clearLastNotificationResponseAsync().catch(() => undefined);
+}
 
 const CHANNEL_ID = 'daily-review';
 const NOTIFICATION_ID = 'wortly-daily-review';
@@ -132,12 +182,17 @@ async function cancelOwnNotifications() {
 
 async function scheduleOwnNotification(userId: string, settings: ReminderSettings) {
   await ensureChannel();
+  const content = resolveContent();
   await Notifications.scheduleNotificationAsync({
     identifier: NOTIFICATION_ID,
     content: {
       title: 'Wortly',
-      body: 'Bugünkü kelime tekrarın hazır',
-      data: { type: REVIEW_NOTIFICATION_TYPE, userId },
+      body: content.body,
+      data: {
+        type: REVIEW_NOTIFICATION_TYPE,
+        userId,
+        ...(content.wordId ? { wordId: content.wordId } : {}),
+      },
     },
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.DAILY,

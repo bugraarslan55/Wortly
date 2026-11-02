@@ -1,9 +1,11 @@
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { BorderRadius, Colors, Spacing } from '../constants/theme';
+import { BorderRadius, Spacing } from '../constants/theme';
+import { makeStyles } from '../hooks/use-theme';
 
 const GERMAN_CHARACTERS = ['ä', 'ö', 'ü', 'ß', 'Ä', 'Ö', 'Ü'];
 
 export function GermanCharacterBar({ onSelect }: { onSelect: (character: string) => void }) {
+  const styles = useStyles();
   return (
     <View style={styles.container}>
       <Text style={styles.hint}>Almanca karakter ekle</Text>
@@ -30,7 +32,7 @@ export function GermanCharacterBar({ onSelect }: { onSelect: (character: string)
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   container: { gap: Spacing.xs },
   hint: { fontSize: 11, color: Colors.outline },
   row: { gap: Spacing.sm, paddingRight: Spacing.md },
@@ -44,4 +46,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   buttonText: { fontSize: 17, fontWeight: '600', color: Colors.primary },
-});
+}));

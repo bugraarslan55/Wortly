@@ -1,14 +1,18 @@
 import React, { useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { flushPendingChanges, getPendingChangeCount, useUserStore } from '../store';
 import { useAuthStore } from '../store/auth';
-import { Colors, Spacing, BorderRadius, Shadows } from '../constants/theme';
+import { Spacing, BorderRadius, Shadows } from '../constants/theme';
+import { makeStyles, useColors } from '../hooks/use-theme';
 import { AppIcon } from '../components/app-icon';
+import { AppearanceCard } from '../components/appearance-card';
 import { ReviewReminderCard } from '../components/review-reminder-card';
 
 export default function ProfileScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const { profile } = useUserStore();
   const { session, signOut } = useAuthStore();
@@ -89,14 +93,18 @@ export default function ProfileScreen() {
         <View style={styles.backButton} />
       </View>
 
-      <View style={styles.content}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.avatarBox}>
-          <AppIcon name="person.crop.circle.fill" size={64} color={Colors.secondary} />
+          <AppIcon name="person.crop.circle.fill" size={64} color={colors.secondary} />
         </View>
 
         <View style={styles.card}>
           <View style={styles.row}>
-            <AppIcon name="envelope.fill" size={18} color={Colors.secondary} />
+            <AppIcon name="envelope.fill" size={18} color={colors.secondary} />
             <View style={styles.rowTextBox}>
               <Text style={styles.rowLabel}>E-posta</Text>
               <Text style={styles.rowValue}>{email}</Text>
@@ -106,13 +114,15 @@ export default function ProfileScreen() {
           <View style={styles.divider} />
 
           <View style={styles.row}>
-            <AppIcon name="chart.bar.fill" size={18} color={Colors.secondary} />
+            <AppIcon name="chart.bar.fill" size={18} color={colors.secondary} />
             <View style={styles.rowTextBox}>
               <Text style={styles.rowLabel}>Seviye</Text>
               <Text style={styles.rowValue}>{level}</Text>
             </View>
           </View>
         </View>
+
+        <AppearanceCard />
 
         <ReviewReminderCard userId={session?.user?.id ?? null} />
 
@@ -125,12 +135,12 @@ export default function ProfileScreen() {
         >
           <Text style={styles.signOutBtnText}>Çıkış Yap</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   header: {
     height: 56,
@@ -142,7 +152,8 @@ const styles = StyleSheet.create({
   backButton: { minWidth: 68, paddingVertical: Spacing.sm },
   backText: { fontSize: 15, fontWeight: '600', color: Colors.onSurfaceVariant },
   headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.primary },
-  content: { flex: 1, paddingHorizontal: Spacing.marginMain, paddingTop: Spacing.lg, alignItems: 'center' },
+  scroll: { flex: 1 },
+  content: { paddingHorizontal: Spacing.marginMain, paddingTop: Spacing.lg, paddingBottom: Spacing.xl, alignItems: 'center' },
   avatarBox: {
     width: 96, height: 96, borderRadius: 48,
     backgroundColor: Colors.surfaceContainerLow,
@@ -173,4 +184,4 @@ const styles = StyleSheet.create({
     borderColor: Colors.error,
   },
   signOutBtnText: { fontSize: 15, fontWeight: '700', color: Colors.error },
-});
+}));

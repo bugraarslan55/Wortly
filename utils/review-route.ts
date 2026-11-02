@@ -2,6 +2,13 @@ import { useUserStore, useWordStore } from '../store';
 import { getTopicsForLevel } from '../constants/topics';
 import { getReviewState, isWordDue } from './spaced-repetition';
 
+// Bildirime dokunulunca açılacak rota: kelime kimliği varsa mini quiz, yoksa tekrar akışı.
+export function getNotificationRoute(data: Record<string, unknown> | null | undefined): string {
+  const wordId = data?.wordId;
+  if (typeof wordId === 'string' && wordId) return `/mini-quiz?wordId=${encodeURIComponent(wordId)}`;
+  return getReviewRoute();
+}
+
 // Ana ekrandaki "Tekrar Zamanı" kartıyla aynı yönlendirme mantığı.
 export function getReviewRoute(): string {
   const { profile } = useUserStore.getState();

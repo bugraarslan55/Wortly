@@ -4,7 +4,8 @@ import { usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import PagerView from 'react-native-pager-view';
 import Animated, { cubicBezier, useReducedMotion } from 'react-native-reanimated';
-import { BorderRadius, Colors, Spacing } from '../constants/theme';
+import { BorderRadius, Spacing } from '../constants/theme';
+import { makeStyles, useColors } from '../hooks/use-theme';
 import HomeScreen from '../app/(tabs)/index';
 import KonularScreen from '../app/(tabs)/konular';
 import KelimelerimScreen from '../app/(tabs)/kelimelerim';
@@ -39,6 +40,8 @@ function TabIcon({
   label: string;
   focused: boolean;
 }) {
+  const styles = useStyles();
+  const colors = useColors();
   const reduceMotion = useReducedMotion();
 
   return (
@@ -47,7 +50,7 @@ function TabIcon({
         style={[
           styles.iconContainer,
           {
-            backgroundColor: focused ? Colors.secondaryContainer : 'transparent',
+            backgroundColor: focused ? colors.secondaryContainer : 'transparent',
             transform: [{ scale: focused || reduceMotion ? 1 : 0.92 }],
             transitionProperty: ['backgroundColor', 'transform'],
             transitionDuration: 100,
@@ -58,7 +61,7 @@ function TabIcon({
         <AppIcon
           name={focused ? activeIcon : icon}
           size={23}
-          color={focused ? Colors.primary : Colors.outline}
+          color={focused ? colors.primary : colors.outline}
         />
       </Animated.View>
       <Text
@@ -72,6 +75,7 @@ function TabIcon({
 }
 
 export default function MainTabLayout() {
+  const styles = useStyles();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const reduceMotion = useReducedMotion();
@@ -150,7 +154,7 @@ export default function MainTabLayout() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.warmWhite },
   pager: { flex: 1, backgroundColor: Colors.warmWhite },
   page: { flex: 1, backgroundColor: Colors.warmWhite },
@@ -186,4 +190,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   tabLabelActive: { color: Colors.primary, fontWeight: '700' },
-});
+}));

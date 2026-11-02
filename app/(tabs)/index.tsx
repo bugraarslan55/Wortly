@@ -7,11 +7,14 @@ import { useRouter } from 'expo-router';
 import { useUserStore, useWordStore } from '../../store';
 import { getTopicsForLevel } from '../../constants/topics';
 import { topicSymbol } from '../../constants/symbols';
-import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { makeStyles, useColors } from '../../hooks/use-theme';
 import { AppIcon } from '../../components/app-icon';
 import { DailyPlanCard } from '../../components/daily-plan-card';
 
 export default function HomeScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const { profile } = useUserStore();
   const { words } = useWordStore();
@@ -64,7 +67,7 @@ export default function HomeScreen() {
             accessibilityRole="button"
             accessibilityLabel="Profil"
           >
-            <AppIcon name="person.crop.circle.fill" size={22} color={Colors.primary} />
+            <AppIcon name="person.crop.circle.fill" size={22} color={colors.primary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -86,13 +89,13 @@ export default function HomeScreen() {
               {/* Visual ring via border trick */}
               <View style={[
                 styles.ringOuter,
-                { borderColor: Colors.secondaryFixedDim }
+                { borderColor: colors.secondaryFixedDim }
               ]} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.progressTitle}>Günlük Hedef</Text>
               <View style={styles.streakRow}>
-                <AppIcon name="flame.fill" size={14} color={Colors.secondary} />
+                <AppIcon name="flame.fill" size={14} color={colors.secondary} />
                 <Text style={styles.streakText}>{profile?.streak || 0} günlük seri</Text>
               </View>
               <Text style={styles.progressDesc}>
@@ -125,14 +128,14 @@ export default function HomeScreen() {
           >
             <View style={styles.customLeft}>
               <View style={styles.customIconBox}>
-                <AppIcon name="text.book.closed.fill" size={18} color={Colors.secondary} />
+                <AppIcon name="text.book.closed.fill" size={18} color={colors.secondary} />
               </View>
               <View>
                 <Text style={styles.customTitle}>Kelimelerimle Çalış</Text>
                 <Text style={styles.customDesc}>{customWordCount} kişisel kelimenle alıştırma yap</Text>
               </View>
             </View>
-            <AppIcon name="chevron.right" size={14} color={Colors.outline} />
+            <AppIcon name="chevron.right" size={14} color={colors.outline} />
           </TouchableOpacity>
         )}
 
@@ -147,14 +150,14 @@ export default function HomeScreen() {
         >
           <View style={styles.customLeft}>
             <View style={styles.customIconBox}>
-              <AppIcon name="bubble.left.and.bubble.right.fill" size={18} color={Colors.secondary} />
+              <AppIcon name="bubble.left.and.bubble.right.fill" size={18} color={colors.secondary} />
             </View>
             <View>
               <Text style={styles.customTitle}>Gerçek Hayat Senaryoları</Text>
               <Text style={styles.customDesc}>Almancayı günlük konuşmalarla pratiğe dök.</Text>
             </View>
           </View>
-          <AppIcon name="chevron.right" size={14} color={Colors.outline} />
+          <AppIcon name="chevron.right" size={14} color={colors.outline} />
         </TouchableOpacity>
 
         {/* Bugünün Konuları */}
@@ -169,7 +172,7 @@ export default function HomeScreen() {
                 activeOpacity={0.85}
               >
                 <View style={styles.topicIconBox}>
-                  <AppIcon name={topicSymbol(topic.id)} size={22} color={Colors.secondary} />
+                  <AppIcon name={topicSymbol(topic.id)} size={22} color={colors.secondary} />
                 </View>
                 <Text style={styles.topicTitle}>{topic.title}</Text>
                 <Text style={styles.topicCount}>{topic.wordCount} kelime</Text>
@@ -208,7 +211,7 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   topBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -254,7 +257,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.golden, borderRadius: BorderRadius.lg, height: 50,
     alignItems: 'center', justifyContent: 'center',
   },
-  startBtnText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
+  startBtnText: { fontSize: 14, fontWeight: '700', color: Colors.onGolden },
 
   // Custom Card
   customCard: {
@@ -300,5 +303,5 @@ const styles = StyleSheet.create({
   },
   levelDotActive: { backgroundColor: Colors.golden, borderColor: Colors.golden },
   levelDotText: { fontSize: 12, fontWeight: '600', color: Colors.onPrimaryContainer },
-  levelDotTextActive: { color: Colors.primary },
-});
+  levelDotTextActive: { color: Colors.onGolden },
+}));

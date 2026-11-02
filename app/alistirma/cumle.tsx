@@ -7,7 +7,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ALL_TOPICS, getTopicById } from '../../constants/topics';
 import { useWordStore, useSessionStore } from '../../store';
-import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { makeStyles, useColors } from '../../hooks/use-theme';
 import { Word } from '../../types';
 import { GermanCharacterBar } from '../../components/german-character-bar';
 import { ColoredGermanWord } from '../../components/colored-german-word';
@@ -27,6 +28,8 @@ function normalizeSentence(sentence: string): string {
 }
 
 export default function CumleScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const { wordIds, topicId } = useLocalSearchParams<{ wordIds: string; topicId?: string }>();
   const { words: customWords, updateMastery } = useWordStore();
@@ -183,7 +186,7 @@ export default function CumleScreen() {
               value={input}
               onChangeText={(t) => { setInput(t); setValidationError(null); }}
               placeholder="Kayıtlı Almanca cümleyi yaz..."
-              placeholderTextColor={Colors.outlineVariant}
+              placeholderTextColor={colors.outlineVariant}
               multiline
               editable={phase === 'write'}
             />
@@ -248,7 +251,7 @@ export default function CumleScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.marginMain, paddingVertical: Spacing.md },
   closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.surfaceContainer, alignItems: 'center', justifyContent: 'center' },
@@ -288,10 +291,10 @@ const styles = StyleSheet.create({
   referenceNote: { fontSize: 11, color: Colors.onSurfaceVariant, marginTop: 6, lineHeight: 15 },
   ctaBtn: { marginHorizontal: Spacing.marginMain, marginBottom: 32, height: 54, backgroundColor: Colors.golden, borderRadius: BorderRadius.lg, alignItems: 'center', justifyContent: 'center' },
   ctaBtnDisabled: { opacity: 0.4 },
-  ctaBtnText: { fontSize: 16, fontWeight: '700', color: Colors.primary },
+  ctaBtnText: { fontSize: 16, fontWeight: '700', color: Colors.onGolden },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl, gap: Spacing.md },
   emptyText: { fontSize: 16, fontWeight: '700', color: Colors.primary, textAlign: 'center' },
   emptySubtext: { fontSize: 13, color: Colors.onSurfaceVariant, textAlign: 'center', lineHeight: 18 },
   backBtn: { backgroundColor: Colors.golden, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12 },
-  backBtnText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
-});
+  backBtnText: { fontSize: 14, fontWeight: '700', color: Colors.onGolden },
+}));

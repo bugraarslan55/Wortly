@@ -12,7 +12,8 @@ import {
 import { useAuthStore } from '../store/auth';
 import { Word } from '../types';
 import { AppIcon } from './app-icon';
-import { BorderRadius, Colors, Shadows, Spacing } from '../constants/theme';
+import { BorderRadius, Shadows, Spacing } from '../constants/theme';
+import { makeStyles, useColors } from '../hooks/use-theme';
 import {
   deletePronunciationFile,
   measureRecordingDuration,
@@ -29,6 +30,8 @@ const MIC_DENIED_MESSAGE =
   'Mikrofon izni verilmedi. Telaffuzunu kaydetmek için Ayarlar > Wortly bölümünden mikrofon iznini aç.';
 
 export function PronunciationRecorder({ word }: { word: Word }) {
+  const styles = useStyles();
+  const colors = useColors();
   const wordId = word.id;
   const userId = useAuthStore(state => state.session?.user.id ?? 'guest');
   const [recordingUri, setRecordingUri] = useState<string | null>(null);
@@ -202,7 +205,7 @@ export function PronunciationRecorder({ word }: { word: Word }) {
   return (
     <View style={styles.card}>
       <View style={styles.titleRow}>
-        <AppIcon name="mic.fill" size={16} color={Colors.secondary} />
+        <AppIcon name="mic.fill" size={16} color={colors.secondary} />
         <Text style={styles.title}>Telaffuzum</Text>
       </View>
 
@@ -217,7 +220,7 @@ export function PronunciationRecorder({ word }: { word: Word }) {
             accessibilityRole="button"
             accessibilityLabel="Kaydı durdur"
           >
-            <AppIcon name="stop.fill" size={16} color={Colors.primary} />
+            <AppIcon name="stop.fill" size={16} color={colors.primary} />
             <Text style={styles.primaryBtnText}>Kaydı Durdur</Text>
           </TouchableOpacity>
         </>
@@ -234,7 +237,7 @@ export function PronunciationRecorder({ word }: { word: Word }) {
             accessibilityRole="button"
             accessibilityLabel="Telaffuzumu kaydet"
           >
-            <AppIcon name="mic.fill" size={16} color={Colors.primary} />
+            <AppIcon name="mic.fill" size={16} color={colors.onGolden} />
             <Text style={styles.primaryBtnText}>
               {recordingUri ? 'Yeniden Kaydet' : 'Telaffuzumu Kaydet'}
             </Text>
@@ -249,7 +252,7 @@ export function PronunciationRecorder({ word }: { word: Word }) {
                 accessibilityRole="button"
                 accessibilityLabel={isPlaying ? 'Kaydı duraklat' : 'Kaydımı dinle'}
               >
-                <AppIcon name={isPlaying ? 'pause.fill' : 'play.fill'} size={16} color={Colors.primary} />
+                <AppIcon name={isPlaying ? 'pause.fill' : 'play.fill'} size={16} color={colors.primary} />
                 <Text style={styles.secondaryBtnText}>{isPlaying ? 'Duraklat' : 'Kaydımı Dinle'}</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -259,7 +262,7 @@ export function PronunciationRecorder({ word }: { word: Word }) {
                 accessibilityRole="button"
                 accessibilityLabel="Kaydı sil"
               >
-                <AppIcon name="trash" size={16} color={Colors.error} />
+                <AppIcon name="trash" size={16} color={colors.error} />
                 <Text style={styles.deleteBtnText}>Sil</Text>
               </TouchableOpacity>
             </View>
@@ -275,7 +278,7 @@ export function PronunciationRecorder({ word }: { word: Word }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   card: { backgroundColor: Colors.surfaceContainerLowest, borderRadius: 20, padding: Spacing.md, ...Shadows.level1, gap: Spacing.sm },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   title: { fontSize: 14, fontWeight: '700', color: Colors.primary },
@@ -283,7 +286,7 @@ const styles = StyleSheet.create({
   status: { fontSize: 14, fontWeight: '600', color: Colors.error },
   primaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, backgroundColor: Colors.golden, borderRadius: BorderRadius.lg },
   stopBtn: { backgroundColor: Colors.errorContainer },
-  primaryBtnText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
+  primaryBtnText: { fontSize: 14, fontWeight: '700', color: Colors.onGolden },
   disabled: { opacity: 0.55 },
   row: { flexDirection: 'row', gap: Spacing.sm },
   secondaryBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, height: 44, backgroundColor: Colors.surfaceContainer, borderRadius: BorderRadius.lg, borderWidth: 1.5, borderColor: 'transparent' },
@@ -292,4 +295,4 @@ const styles = StyleSheet.create({
   deleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 44, paddingHorizontal: Spacing.md, borderRadius: BorderRadius.lg, borderWidth: 1.5, borderColor: Colors.errorContainer },
   deleteBtnText: { fontSize: 14, fontWeight: '600', color: Colors.error },
   error: { fontSize: 12, color: Colors.error, fontWeight: '600', lineHeight: 17 },
-});
+}));

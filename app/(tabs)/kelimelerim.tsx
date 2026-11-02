@@ -5,15 +5,17 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useWordStore } from '../../store';
-import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { makeStyles, useColors } from '../../hooks/use-theme';
 import { Word, MasteryLevel } from '../../types';
 import { AppIcon } from '../../components/app-icon';
 import { ColoredGermanPlural, ColoredGermanWord } from '../../components/colored-german-word';
 
 const MASTERY_LABELS = ['Yeni', 'Öğreniliyor', 'Bilinçli', 'Öğrenildi'];
-const MASTERY_COLORS = [Colors.outlineVariant, Colors.secondary, Colors.secondaryFixedDim, Colors.success];
 
 export default function KelimelerimScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const { words, deleteWord } = useWordStore();
   const [search, setSearch] = useState('');
@@ -62,11 +64,11 @@ export default function KelimelerimScreen() {
 
       {/* Search */}
       <View style={styles.searchWrapper}>
-        <AppIcon name="magnifyingglass" size={16} color={Colors.outline} />
+        <AppIcon name="magnifyingglass" size={16} color={colors.outline} />
         <TextInput
           style={styles.searchInput}
           placeholder="Kelime ara..."
-          placeholderTextColor={Colors.outlineVariant}
+          placeholderTextColor={colors.outlineVariant}
           value={search}
           onChangeText={setSearch}
         />
@@ -77,7 +79,7 @@ export default function KelimelerimScreen() {
             accessibilityRole="button"
             accessibilityLabel="Aramayı temizle"
           >
-            <AppIcon name="xmark.circle.fill" size={18} color={Colors.outline} />
+            <AppIcon name="xmark.circle.fill" size={18} color={colors.outline} />
           </TouchableOpacity>
         )}
       </View>
@@ -128,10 +130,10 @@ export default function KelimelerimScreen() {
           activeOpacity={0.85}
         >
           <View style={styles.quizBannerTitle}>
-            <AppIcon name="scope" size={18} color={Colors.golden} />
+            <AppIcon name="scope" size={18} color={colors.golden} />
             <Text style={styles.quizBannerText}>Kelimelerimle Çalış</Text>
           </View>
-          <AppIcon name="chevron.right" size={14} color={Colors.golden} />
+          <AppIcon name="chevron.right" size={14} color={colors.golden} />
         </TouchableOpacity>
       )}
 
@@ -144,7 +146,7 @@ export default function KelimelerimScreen() {
         {customWords.length === 0 ? (
           <View style={styles.emptyState}>
             <View style={styles.emptyIconBox}>
-              <AppIcon name="square.and.pencil" size={30} color={Colors.secondary} />
+              <AppIcon name="square.and.pencil" size={30} color={colors.secondary} />
             </View>
             <Text style={styles.emptyEyebrow}>KENDİ LİSTENİ OLUŞTUR</Text>
             <Text style={styles.emptyTitle}>Henüz kelime eklemedin</Text>
@@ -159,12 +161,12 @@ export default function KelimelerimScreen() {
               accessibilityLabel="İlk kelimeni ekle"
             >
               <Text style={styles.emptyBtnText}>İlk Kelimeni Ekle</Text>
-              <AppIcon name="arrow.right" size={15} color={Colors.primary} />
+              <AppIcon name="arrow.right" size={15} color={colors.onGolden} />
             </TouchableOpacity>
           </View>
         ) : filteredWords.length === 0 ? (
           <View style={styles.emptyState}>
-            <AppIcon name="magnifyingglass" size={34} color={Colors.outlineVariant} />
+            <AppIcon name="magnifyingglass" size={34} color={colors.outlineVariant} />
             <Text style={styles.emptyTitle}>Kelime bulunamadı</Text>
           </View>
         ) : (
@@ -185,7 +187,10 @@ export default function KelimelerimScreen() {
 function WordCard({
   word, onPress, onDelete
 }: { word: Word; onPress: () => void; onDelete: () => void }) {
+  const styles = useStyles();
+  const colors = useColors();
   const mastery = word.masteryLevel;
+  const MASTERY_COLORS = [colors.outlineVariant, colors.secondary, colors.secondaryFixedDim, colors.success];
   return (
     <TouchableOpacity style={styles.wordCard} onPress={onPress} activeOpacity={0.85}>
       <View style={styles.wordLeft}>
@@ -214,14 +219,14 @@ function WordCard({
           accessibilityRole="button"
           accessibilityLabel={`${word.german} kelimesini sil`}
         >
-          <AppIcon name="trash" size={17} color={Colors.error} />
+          <AppIcon name="trash" size={17} color={colors.error} />
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -233,7 +238,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.golden, paddingHorizontal: 16, paddingVertical: 8,
     borderRadius: BorderRadius.md,
   },
-  addBtnText: { fontSize: 13, fontWeight: '700', color: Colors.primary },
+  addBtnText: { fontSize: 13, fontWeight: '700', color: Colors.onGolden },
   searchWrapper: {
     flexDirection: 'row', alignItems: 'center',
     marginHorizontal: Spacing.marginMain, marginBottom: Spacing.md,
@@ -263,7 +268,7 @@ const styles = StyleSheet.create({
   },
   filterCountActive: { backgroundColor: Colors.golden },
   filterCountText: { fontSize: 11, fontWeight: '700', color: Colors.onSurfaceVariant, fontVariant: ['tabular-nums'] },
-  filterCountTextActive: { color: Colors.primary },
+  filterCountTextActive: { color: Colors.onGolden },
   quizBanner: {
     marginHorizontal: Spacing.marginMain, marginBottom: Spacing.sm,
     backgroundColor: Colors.primaryContainer, borderRadius: 16, padding: Spacing.md,
@@ -306,5 +311,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22, alignItems: 'center', justifyContent: 'center', flexDirection: 'row',
     gap: Spacing.sm, marginTop: Spacing.sm,
   },
-  emptyBtnText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
-});
+  emptyBtnText: { fontSize: 14, fontWeight: '700', color: Colors.onGolden },
+}));

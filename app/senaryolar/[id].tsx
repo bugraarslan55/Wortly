@@ -8,7 +8,8 @@ import { useAuthStore } from '../../store/auth';
 import {
   getScenarioById, isScenarioLevelLocked, ReplyStep, Scenario, ScenarioStep,
 } from '../../constants/scenarios';
-import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { makeStyles, useColors } from '../../hooks/use-theme';
 import { Level } from '../../types';
 import { AppIcon } from '../../components/app-icon';
 
@@ -52,10 +53,12 @@ export default function ScenarioScreen() {
 }
 
 function MessageScreen({ text, onBack }: { text: string; onBack: () => void }) {
+  const styles = useStyles();
+  const colors = useColors();
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.center}>
-        <AppIcon name="lock.fill" size={34} color={Colors.outlineVariant} />
+        <AppIcon name="lock.fill" size={34} color={colors.outlineVariant} />
         <Text style={styles.messageText}>{text}</Text>
         <TouchableOpacity style={styles.primaryBtn} onPress={onBack} accessibilityRole="button">
           <Text style={styles.primaryBtnText}>Senaryolara dön</Text>
@@ -66,6 +69,8 @@ function MessageScreen({ text, onBack }: { text: string; onBack: () => void }) {
 }
 
 function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () => void }) {
+  const styles = useStyles();
+  const colors = useColors();
   const [round, setRound] = useState(0);
   const [index, setIndex] = useState(0);
   const [finished, setFinished] = useState(false);
@@ -185,7 +190,7 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
       <SafeAreaView style={styles.safe}>
         <ScrollView contentContainerStyle={styles.resultContent} showsVerticalScrollIndicator={false}>
           <View style={styles.resultIconBox}>
-            <AppIcon name="checkmark.seal.fill" size={44} color={Colors.success} />
+            <AppIcon name="checkmark.seal.fill" size={44} color={colors.success} />
           </View>
           <Text style={styles.resultTitle}>Senaryo tamamlandı</Text>
           <Text style={styles.resultScenario}>{scenario.title}</Text>
@@ -251,7 +256,7 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.placeRow}>
-          <AppIcon name="mappin.and.ellipse" size={12} color={Colors.secondary} />
+          <AppIcon name="mappin.and.ellipse" size={12} color={colors.secondary} />
           <Text style={styles.placeText}>{scenario.place}</Text>
         </View>
 
@@ -277,7 +282,7 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
                 accessibilityRole="button"
                 accessibilityLabel="Cümleyi normal hızda dinle"
               >
-                <AppIcon name="speaker.wave.2.fill" size={16} color={Colors.primary} />
+                <AppIcon name="speaker.wave.2.fill" size={16} color={colors.primary} />
                 <Text style={styles.listenBtnText}>Dinle</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -287,7 +292,7 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
                 accessibilityRole="button"
                 accessibilityLabel="Cümleyi yavaş hızda dinle"
               >
-                <AppIcon name="tortoise.fill" size={16} color={Colors.primary} />
+                <AppIcon name="tortoise.fill" size={16} color={colors.primary} />
                 <Text style={styles.listenBtnText}>Yavaş</Text>
               </TouchableOpacity>
             </View>
@@ -339,7 +344,7 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
 
         {step.type === 'reply' && stepProgress.solved && (
           <View style={styles.feedbackCorrect} accessibilityLiveRegion="polite">
-            <AppIcon name="checkmark.circle.fill" size={18} color={Colors.success} />
+            <AppIcon name="checkmark.circle.fill" size={18} color={colors.success} />
             <Text style={styles.feedbackCorrectText}>Doğru</Text>
           </View>
         )}
@@ -371,7 +376,7 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl, gap: Spacing.md },
   messageText: { fontSize: 15, color: Colors.onSurfaceVariant, textAlign: 'center', lineHeight: 21 },
@@ -448,7 +453,7 @@ const styles = StyleSheet.create({
   navBtnNext: { flex: 2, backgroundColor: Colors.golden },
   navBtnDisabled: { opacity: 0.45 },
   navBtnBackText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
-  navBtnNextText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
+  navBtnNextText: { fontSize: 15, fontWeight: '700', color: Colors.onGolden },
   resultContent: { padding: Spacing.marginMain, paddingTop: Spacing.xl, alignItems: 'center', gap: Spacing.md },
   resultIconBox: {
     width: 88, height: 88, borderRadius: 44, backgroundColor: Colors.successContainer,
@@ -469,10 +474,10 @@ const styles = StyleSheet.create({
     width: '100%', minHeight: 52, borderRadius: BorderRadius.lg, backgroundColor: Colors.golden,
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.lg,
   },
-  primaryBtnText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
+  primaryBtnText: { fontSize: 15, fontWeight: '700', color: Colors.onGolden },
   secondaryBtn: {
     width: '100%', minHeight: 52, borderRadius: BorderRadius.lg, borderWidth: 1.5, borderColor: Colors.outlineVariant,
     alignItems: 'center', justifyContent: 'center',
   },
   secondaryBtnText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
-});
+}));

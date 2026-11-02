@@ -12,11 +12,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../store/auth';
-import { BorderRadius, Colors, Shadows, Spacing, Typography } from '../constants/theme';
+import { BorderRadius, Shadows, Spacing, Typography } from '../constants/theme';
+import { makeStyles, useColors } from '../hooks/use-theme';
 
 type AuthMode = 'signIn' | 'signUp';
 
 export default function AuthScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const { signIn, signUp, resetPasswordForEmail, isBusy } = useAuthStore();
   const [mode, setMode] = useState<AuthMode>('signIn');
@@ -118,7 +121,7 @@ export default function AuthScreen() {
                 value={email}
                 onChangeText={setEmail}
                 placeholder="ornek@mail.com"
-                placeholderTextColor={Colors.outlineVariant}
+                placeholderTextColor={colors.outlineVariant}
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="email-address"
@@ -134,7 +137,7 @@ export default function AuthScreen() {
                 value={password}
                 onChangeText={setPassword}
                 placeholder="En az 6 karakter"
-                placeholderTextColor={Colors.outlineVariant}
+                placeholderTextColor={colors.outlineVariant}
                 secureTextEntry
                 textContentType={isSignUp ? 'newPassword' : 'password'}
                 autoComplete={isSignUp ? 'new-password' : 'password'}
@@ -149,7 +152,7 @@ export default function AuthScreen() {
                   value={passwordAgain}
                   onChangeText={setPasswordAgain}
                   placeholder="Şifreni tekrar yaz"
-                  placeholderTextColor={Colors.outlineVariant}
+                  placeholderTextColor={colors.outlineVariant}
                   secureTextEntry
                   textContentType="newPassword"
                   autoComplete="new-password"
@@ -196,7 +199,7 @@ export default function AuthScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   flex: { flex: 1 },
   container: { flexGrow: 1, justifyContent: 'center', padding: Spacing.marginMain },
@@ -215,7 +218,7 @@ const styles = StyleSheet.create({
   success: { color: Colors.success },
   cta: { backgroundColor: Colors.golden, borderRadius: BorderRadius.lg, height: 50, alignItems: 'center', justifyContent: 'center', marginTop: Spacing.sm },
   disabled: { opacity: 0.55 },
-  ctaText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
+  ctaText: { fontSize: 15, fontWeight: '700', color: Colors.onGolden },
   switchButton: { alignItems: 'center', paddingVertical: Spacing.sm },
   switchText: { fontSize: 14, color: Colors.secondary, fontWeight: '600' },
-});
+}));

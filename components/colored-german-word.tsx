@@ -1,6 +1,7 @@
 import { StyleProp, Text, TextStyle } from 'react-native';
 import { Article } from '../types';
-import { ARTICLE_PALETTES, getArticlePalette } from '../constants/article-colors';
+import { getArticlePalette, getArticlePalettes } from '../constants/article-colors';
+import { useColors } from '../hooks/use-theme';
 
 export function ColoredGermanWord({
   article,
@@ -13,11 +14,12 @@ export function ColoredGermanWord({
   style?: StyleProp<TextStyle>;
   articleStyle?: StyleProp<TextStyle>;
 }) {
+  const colors = useColors();
   const embeddedArticleMatch = german.trim().match(/^(der|die|das)\s+(.+)$/i);
   const embeddedArticle = embeddedArticleMatch?.[1]?.toLocaleLowerCase('de-DE') as Article | undefined;
   const displayedArticle = article || embeddedArticle || '';
   const displayedGerman = embeddedArticleMatch?.[2] || german;
-  const palette = getArticlePalette(displayedArticle);
+  const palette = getArticlePalette(displayedArticle, colors);
 
   return (
     <Text style={style}>
@@ -36,12 +38,13 @@ export function ColoredGermanPlural({
   plural: string;
   style?: StyleProp<TextStyle>;
 }) {
+  const colors = useColors();
   const pluralWithoutArticle = plural.trim().replace(/^die\s+/i, '');
 
   return (
     <Text style={style}>
       Çoğul:{' '}
-      <Text style={{ color: ARTICLE_PALETTES.plural.foreground, fontWeight: '700' }}>die </Text>
+      <Text style={{ color: getArticlePalettes(colors).plural.foreground, fontWeight: '700' }}>die </Text>
       {pluralWithoutArticle}
     </Text>
   );

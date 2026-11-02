@@ -2,7 +2,8 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Colors, Spacing, BorderRadius, Shadows } from '../constants/theme';
+import { Spacing, BorderRadius, Shadows } from '../constants/theme';
+import { makeStyles, useColors } from '../hooks/use-theme';
 import { AppIcon } from '../components/app-icon';
 import { CATEGORY_LABELS, describeReason, useLearningAnalysis } from '../components/daily-plan-card';
 import { AnalysisCategory } from '../utils/learning-analysis';
@@ -15,6 +16,8 @@ const CATEGORY_ICONS: Record<AnalysisCategory, string> = {
 };
 
 export default function AnalysisScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const analysis = useLearningAnalysis();
   const { dailyPlan, dueWords, weakestCategory, categoryStats, totalSessions, overallSuccessRate } = analysis;
@@ -95,7 +98,7 @@ export default function AnalysisScreen() {
                   }
                 >
                   <View style={styles.categoryIconBox}>
-                    <AppIcon name={CATEGORY_ICONS[item.category]} size={16} color={Colors.secondary} />
+                    <AppIcon name={CATEGORY_ICONS[item.category]} size={16} color={colors.secondary} />
                   </View>
                   <View style={styles.categoryBody}>
                     <View style={styles.categoryHeader}>
@@ -165,7 +168,7 @@ export default function AnalysisScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   topBar: { paddingHorizontal: Spacing.marginMain, height: 48, justifyContent: 'center' },
   backButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
@@ -229,5 +232,5 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.golden, borderRadius: BorderRadius.lg, height: 50,
     alignItems: 'center', justifyContent: 'center',
   },
-  startBtnText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
-});
+  startBtnText: { fontSize: 14, fontWeight: '700', color: Colors.onGolden },
+}));

@@ -3,7 +3,8 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSessionStore, useUserStore, useWordStore } from '../store';
 import { getTopicsForLevel } from '../constants/topics';
-import { BorderRadius, Colors, Shadows, Spacing } from '../constants/theme';
+import { BorderRadius, Shadows, Spacing } from '../constants/theme';
+import { makeStyles, useColors } from '../hooks/use-theme';
 import { AnalysisCategory, analyzeLearning, DailyPlan } from '../utils/learning-analysis';
 import { AppIcon } from './app-icon';
 
@@ -48,6 +49,8 @@ export function useLearningAnalysis() {
 }
 
 export function DailyPlanCard() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const analysis = useLearningAnalysis();
 
@@ -72,7 +75,7 @@ export function DailyPlanCard() {
     <View style={styles.card}>
       <View style={styles.titleRow}>
         <View style={styles.iconBox}>
-          <AppIcon name="scope" size={18} color={Colors.secondary} />
+          <AppIcon name="scope" size={18} color={colors.secondary} />
         </View>
         <Text style={styles.title}>Bugünkü Planın</Text>
       </View>
@@ -114,13 +117,13 @@ export function DailyPlanCard() {
         accessibilityHint="Öğrenme analizi ekranını açar"
       >
         <Text style={styles.analysisLinkText}>Analizi Gör</Text>
-        <AppIcon name="chevron.right" size={12} color={Colors.secondary} />
+        <AppIcon name="chevron.right" size={12} color={colors.secondary} />
       </TouchableOpacity>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   card: {
     backgroundColor: Colors.surfaceContainerLowest, borderRadius: 24, padding: Spacing.lg,
     ...Shadows.level1, gap: Spacing.md,
@@ -144,10 +147,10 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.golden, borderRadius: BorderRadius.lg, height: 50,
     alignItems: 'center', justifyContent: 'center',
   },
-  startBtnText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
+  startBtnText: { fontSize: 14, fontWeight: '700', color: Colors.onGolden },
   analysisLink: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
     minHeight: Spacing.touchTargetMin, marginTop: -Spacing.sm,
   },
   analysisLinkText: { fontSize: 13, fontWeight: '700', color: Colors.secondary },
-});
+}));

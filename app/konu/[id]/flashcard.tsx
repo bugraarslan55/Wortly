@@ -5,7 +5,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { getTopicById, ALL_TOPICS } from '../../../constants/topics';
-import { Colors, Spacing, BorderRadius, Shadows } from '../../../constants/theme';
+import { Spacing, BorderRadius, Shadows } from '../../../constants/theme';
+import { makeStyles, useColors } from '../../../hooks/use-theme';
 import { useWordStore, useSessionStore } from '../../../store';
 import { Word } from '../../../types';
 import { AppIcon } from '../../../components/app-icon';
@@ -18,6 +19,8 @@ const SESSION_SIZE = 20;
 const PERSONAL_WORDS_ID = 'kelimelerim';
 
 export default function FlashcardScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { words: customWords, reviewStates, updateMastery } = useWordStore();
@@ -118,7 +121,7 @@ export default function FlashcardScreen() {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
-          <AppIcon name="tray" size={36} color={Colors.outlineVariant} />
+          <AppIcon name="tray" size={36} color={colors.outlineVariant} />
           <Text style={styles.emptyText}>Bu konuda kelime bulunamadı</Text>
           <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
             <Text style={styles.backBtnText}>Geri Dön</Text>
@@ -137,7 +140,7 @@ export default function FlashcardScreen() {
             <AppIcon
               name={knewCount / sessionWords.length > 0.8 ? 'trophy.fill' : 'arrow.clockwise'}
               size={34}
-              color={Colors.secondary}
+              color={colors.secondary}
             />
           </View>
           <Text style={styles.resultTitle}>Flashcard Tamamlandı!</Text>
@@ -233,8 +236,8 @@ export default function FlashcardScreen() {
           onPress={() => handleResult(false)}
           activeOpacity={0.85}
         >
-          <Text style={styles.resultBtnEmoji}>✗</Text>
-          <Text style={styles.resultBtnText}>Bilmiyorum</Text>
+          <Text style={[styles.resultBtnEmoji, styles.wrongBtnText]}>✗</Text>
+          <Text style={[styles.resultBtnText, styles.wrongBtnText]}>Bilmiyorum</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.resultBtn, styles.rightBtn]}
@@ -249,7 +252,7 @@ export default function FlashcardScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -297,10 +300,11 @@ const styles = StyleSheet.create({
     flex: 1, height: 64, borderRadius: BorderRadius.xl,
     alignItems: 'center', justifyContent: 'center', gap: 4,
   },
-  wrongBtn: { backgroundColor: '#FFDAD6' },
+  wrongBtn: { backgroundColor: Colors.errorContainer },
   rightBtn: { backgroundColor: Colors.golden },
-  resultBtnEmoji: { fontSize: 18 },
-  resultBtnText: { fontSize: 13, fontWeight: '700', color: Colors.primary },
+  resultBtnEmoji: { fontSize: 18, color: Colors.onGolden },
+  resultBtnText: { fontSize: 13, fontWeight: '700', color: Colors.onGolden },
+  wrongBtnText: { color: Colors.primary },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl },
   resultIconBox: {
     width: 68, height: 68, borderRadius: BorderRadius.xxl,
@@ -309,11 +313,11 @@ const styles = StyleSheet.create({
   },
   emptyText: { fontSize: 16, color: Colors.onSurfaceVariant, marginBottom: Spacing.xl },
   backBtn: { backgroundColor: Colors.golden, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12 },
-  backBtnText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
+  backBtnText: { fontSize: 14, fontWeight: '700', color: Colors.onGolden },
   resultTitle: { fontSize: 24, fontWeight: '700', color: Colors.primary, marginBottom: Spacing.sm },
   resultScore: { fontSize: 18, color: Colors.onSurfaceVariant },
   ctaBtn: { backgroundColor: Colors.golden, borderRadius: BorderRadius.lg, height: 50, paddingHorizontal: 32, alignItems: 'center', justifyContent: 'center' },
-  ctaBtnText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
+  ctaBtnText: { fontSize: 15, fontWeight: '700', color: Colors.onGolden },
   ghostBtn: { borderRadius: BorderRadius.lg, height: 50, paddingHorizontal: 32, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: Colors.outlineVariant },
   ghostBtnText: { fontSize: 15, color: Colors.onSurfaceVariant, fontWeight: '600' },
-});
+}));

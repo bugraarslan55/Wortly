@@ -6,11 +6,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { getTopicById } from '../../../constants/topics';
 import { useWordStore } from '../../../store';
-import { Colors, Spacing, BorderRadius, Shadows } from '../../../constants/theme';
+import { Spacing, BorderRadius, Shadows } from '../../../constants/theme';
+import { makeStyles, useColors } from '../../../hooks/use-theme';
 import { AppIcon } from '../../../components/app-icon';
 import { EXERCISE_SYMBOLS } from '../../../constants/symbols';
 
 export default function AlistirmaSecimScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { words: customWords } = useWordStore();
@@ -42,7 +45,7 @@ export default function AlistirmaSecimScreen() {
       icon: 'list.bullet',
       title: 'Kelime Listesi',
       desc: 'Kelimeleri ara ve ayrıntılarını incele',
-      color: Colors.surfaceContainerLow,
+      color: colors.surfaceContainerLow,
       path: 'kelimeler',
       disabled: false,
     },
@@ -51,7 +54,7 @@ export default function AlistirmaSecimScreen() {
       icon: EXERCISE_SYMBOLS.flashcard,
       title: 'Flashcard',
       desc: 'Kartları çevirerek kelimeleri öğren',
-      color: '#EFF4FF',
+      color: colors.surfaceContainerLow,
       path: 'flashcard',
       disabled: false,
     },
@@ -60,7 +63,7 @@ export default function AlistirmaSecimScreen() {
       icon: EXERCISE_SYMBOLS['dinle-sec'],
       title: 'Dinle ve Seç',
       desc: 'Kelimeyi dinle, doğru Türkçe anlamı seç',
-      color: '#E8F0FF',
+      color: colors.tintBlue,
       path: 'dinle-sec',
       disabled: false,
     }, {
@@ -68,7 +71,7 @@ export default function AlistirmaSecimScreen() {
       icon: EXERCISE_SYMBOLS['dinle-yaz'],
       title: 'Dinle ve Yaz',
       desc: 'Kelimeyi dinle, Almancasını yaz',
-      color: '#F1ECFF',
+      color: colors.tintPurple,
       path: 'dinle-yaz',
       disabled: false,
     }] : []),
@@ -77,7 +80,7 @@ export default function AlistirmaSecimScreen() {
       icon: EXERCISE_SYMBOLS['dogru-yanlis'],
       title: 'Doğru / Yanlış',
       desc: 'Hızlı bilgi yoklaması',
-      color: '#D8F3DC',
+      color: colors.successContainer,
       path: 'dogru-yanlis',
       disabled: false,
     },
@@ -86,7 +89,7 @@ export default function AlistirmaSecimScreen() {
       icon: EXERCISE_SYMBOLS.yazma,
       title: 'Yazarak Tekrar',
       desc: 'Türkçeye bakarak Almancayı yaz',
-      color: '#FFF8E7',
+      color: colors.tintAmber,
       path: 'yazma',
       disabled: false,
     },
@@ -97,7 +100,7 @@ export default function AlistirmaSecimScreen() {
       desc: exampleCount > 0
         ? `Türkçe cümleyi Almanca olarak yaz · ${exampleCount} uygun kelime`
         : 'Bu konuda iki dilde örnek cümle yok',
-      color: '#FCE8D5',
+      color: colors.tintOrange,
       path: 'cumle',
       disabled: exampleCount === 0,
     },
@@ -144,13 +147,13 @@ export default function AlistirmaSecimScreen() {
             activeOpacity={0.85}
           >
             <View style={styles.exerciseIconBox}>
-              <AppIcon name={ex.icon} size={22} color={Colors.secondary} />
+              <AppIcon name={ex.icon} size={22} color={colors.secondary} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.exerciseTitle}>{ex.title}</Text>
               <Text style={styles.exerciseDesc}>{ex.desc}</Text>
             </View>
-            {!ex.disabled && <AppIcon name="chevron.right" size={15} color={Colors.outline} />}
+            {!ex.disabled && <AppIcon name="chevron.right" size={15} color={colors.outline} />}
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -162,7 +165,7 @@ export default function AlistirmaSecimScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   handleBar: {
     width: 36, height: 4, backgroundColor: Colors.outlineVariant,
@@ -189,4 +192,4 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.lg, borderWidth: 1.5, borderColor: Colors.outlineVariant,
   },
   cancelBtnText: { fontSize: 15, color: Colors.onSurfaceVariant, fontWeight: '600' },
-});
+}));

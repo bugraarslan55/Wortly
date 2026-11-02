@@ -6,7 +6,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useWordStore } from '../../store';
-import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { makeStyles, useColors } from '../../hooks/use-theme';
 import { Article } from '../../types';
 import { GermanCharacterBar } from '../../components/german-character-bar';
 import { ColoredGermanPlural, ColoredGermanWord } from '../../components/colored-german-word';
@@ -19,6 +20,8 @@ const ARTICLE_LABELS: Record<Article, string> = {
 };
 
 export default function KelimeEkleScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const { addWord, words } = useWordStore();
   const germanInputRef = useRef<TextInput>(null);
@@ -137,7 +140,7 @@ export default function KelimeEkleScreen() {
                 }
               }}
               placeholder="örn: Apfel"
-              placeholderTextColor={Colors.outlineVariant}
+              placeholderTextColor={colors.outlineVariant}
               autoCapitalize="words"
               autoFocus
               returnKeyType="next"
@@ -157,7 +160,7 @@ export default function KelimeEkleScreen() {
             <Text style={styles.label}>Artikel (Cinsiyet)</Text>
             <View style={styles.articleRow}>
               {ARTICLES.map(art => {
-                const palette = getArticlePalette(art);
+                const palette = getArticlePalette(art, colors);
                 const isActive = article === art;
                 return (
                   <TouchableOpacity
@@ -195,7 +198,7 @@ export default function KelimeEkleScreen() {
                 }
               }}
               placeholder="örn: elma"
-              placeholderTextColor={Colors.outlineVariant}
+              placeholderTextColor={colors.outlineVariant}
             />
             {errors.turkish && <Text style={styles.errorText} selectable>{errors.turkish}</Text>}
           </View>
@@ -208,7 +211,7 @@ export default function KelimeEkleScreen() {
               value={plural}
               onChangeText={setPlural}
               placeholder="örn: die Äpfel"
-              placeholderTextColor={Colors.outlineVariant}
+              placeholderTextColor={colors.outlineVariant}
             />
             <GermanCharacterBar onSelect={(character) => setPlural(value => value + character)} />
           </View>
@@ -221,7 +224,7 @@ export default function KelimeEkleScreen() {
               value={example}
               onChangeText={setExample}
               placeholder="örn: Ich esse einen Apfel."
-              placeholderTextColor={Colors.outlineVariant}
+              placeholderTextColor={colors.outlineVariant}
               multiline
               numberOfLines={2}
             />
@@ -237,7 +240,7 @@ export default function KelimeEkleScreen() {
                 value={exampleTurkish}
                 onChangeText={setExampleTurkish}
                 placeholder="örn: Bir elma yiyorum."
-                placeholderTextColor={Colors.outlineVariant}
+                placeholderTextColor={colors.outlineVariant}
                 multiline
                 numberOfLines={2}
               />
@@ -266,7 +269,7 @@ export default function KelimeEkleScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -305,4 +308,4 @@ const styles = StyleSheet.create({
   previewArticle: { fontSize: 16, fontWeight: '700' },
   previewTurkish: { fontSize: 15, color: Colors.onSurfaceVariant },
   previewMeta: { fontSize: 12, color: Colors.outlineVariant, marginTop: 4 },
-});
+}));

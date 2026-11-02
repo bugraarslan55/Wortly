@@ -1,13 +1,16 @@
 import { Tabs } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 import { AppIcon } from './app-icon';
-import { BorderRadius, Colors, Spacing } from '../constants/theme';
+import { BorderRadius, Spacing } from '../constants/theme';
+import { makeStyles, useColors } from '../hooks/use-theme';
 
 function TabIcon({ icon, label, focused }: { icon: string; label: string; focused: boolean }) {
+  const styles = useStyles();
+  const colors = useColors();
   return (
     <View style={styles.tabItem}>
       <View style={[styles.iconContainer, focused && styles.iconContainerActive]}>
-        <AppIcon name={icon} size={23} color={focused ? Colors.primary : Colors.outline} />
+        <AppIcon name={icon} size={23} color={focused ? colors.primary : colors.outline} />
       </View>
       <Text numberOfLines={1} style={[styles.tabLabel, focused && styles.tabLabelActive]}>
         {label}
@@ -17,6 +20,7 @@ function TabIcon({ icon, label, focused }: { icon: string; label: string; focuse
 }
 
 export default function MainTabLayout() {
+  const styles = useStyles();
   return (
     <Tabs
       screenOptions={{
@@ -56,7 +60,7 @@ export default function MainTabLayout() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   tabBar: {
     backgroundColor: Colors.surfaceContainerLowest,
     borderTopColor: Colors.outlineVariant,
@@ -89,4 +93,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   tabLabelActive: { color: Colors.primary, fontWeight: '700' },
-});
+}));

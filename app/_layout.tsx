@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Stack, useRootNavigationState, useRouter } from 'expo-router';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRootNavigationState, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { AppState, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -10,14 +10,17 @@ import {
   useUserStore, useWordStore, useSessionStore,
 } from '../store';
 import { useAuthStore } from '../store/auth';
-import { REVIEW_NOTIFICATION_TYPE, syncReminderForUser, useLastNotificationResponse } from '../utils/review-reminder';
-import { getReviewRoute } from '../utils/review-route';
-import { Colors } from '../constants/theme';
+import { useThemeStore } from '../store/theme';
+import { useTheme } from '../hooks/use-theme';
+import {
+  clearHandledNotificationResponse, isNotificationTap, NotificationTapResponse, REVIEW_NOTIFICATION_TYPE,
+  setReminderContentProvider, subscribeToNotificationResponses, syncReminderForUser,
+} from '../utils/review-reminder';
+import { getNotificationRoute } from '../utils/review-route';
+import { getMiniQuizReminderContent } from '../utils/mini-quiz';
 
-// Android'de ekran geçişlerinde pencere arka planı (siyah) görünmesin; iOS davranışı değişmez.
-const androidScreenOptions = Platform.OS === 'android'
-  ? { contentStyle: { backgroundColor: Colors.warmWhite } }
-  : {};
+// Günlük bildirim metni için mini quiz kelimesi (modül yüklenirken, ilk planlamadan önce kaydedilir).
+setReminderContentProvider(getMiniQuizReminderContent);
 
 const devWarn = (...args: unknown[]) => {
   if (__DEV__) console.warn(...args);
@@ -30,8 +33,9 @@ const devLog = (...args: unknown[]) => {
 export default function RootLayout() {
   const router = useRouter();
   const navigationState = useRootNavigationState();
-  const lastNotificationResponse = useLastNotificationResponse();
-  const handledNotificationRef = useRef<string | null>(null);
+  // Dokunulan bildirim yanıtı; uygulama (oturum, veri, navigasyon) hazır olana kadar bekletilir.
+  const [pendingResponse, setPendingResponse] = useState<NotificationTapResponse | null>(null);
+  const handledNotificationRef = useRef<{ key: string; at: number } | null>(null);
   const {
     profile, loadProfile, syncProfile, isLoaded,
     syncedUserId: profileSyncedUserId,
@@ -44,6 +48,30 @@ export default function RootLayout() {
     loadSessions, loadScenarioResults, syncSessions, isLoaded: areSessionsLoaded,
     syncedUserId: sessionsSyncedUserId,
   } = useSessionStore();
+  const { isDark, colors } = useTheme();
+  const { loadTheme, isLoaded: isThemeLoaded } = useThemeStore();
+  // Ekran geçişlerinde ve modallarda navigasyon katmanı da seçilen temanın zeminini kullanır.
+  const navigationTheme = useMemo(() => {
+    const base = isDark ? DarkTheme : DefaultTheme;
+    return {
+      ...base,
+      colors: {
+        ...base.colors,
+        primary: colors.secondary,
+        background: colors.warmWhite,
+        card: colors.surfaceContainerLowest,
+        text: colors.primary,
+        border: colors.outlineVariant,
+      },
+    };
+  }, [isDark, colors]);
+
+  // Web'de sayfa zemini ve yerel kontroller (kaydırma çubuğu vb.) seçilen temayı izlesin.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    document.documentElement.style.backgroundColor = colors.warmWhite;
+    document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
+  }, [isDark, colors]);
   const {
     initialize: initializeAuth,
     handleAuthUrl,
@@ -62,9 +90,10 @@ export default function RootLayout() {
     loadProfile();
     loadWords();
     loadSessions();
+    void loadTheme();
 
     return () => subscription.remove();
-  }, [handleAuthUrl, initializeAuth, loadProfile, loadWords, loadSessions]);
+  }, [handleAuthUrl, initializeAuth, loadProfile, loadWords, loadSessions, loadTheme]);
 
   useEffect(() => {
     if (!isAuthLoaded || !isLoaded || !session?.user.id) return;
@@ -173,33 +202,52 @@ export default function RootLayout() {
   }, [currentUserId, isUserDataSynced]);
 
   // Kayıtlı ayardan günlük hatırlatmayı yeniden planlar; çıkış yapılmışsa iptal eder.
+  // Bildirim metni için kelime seçilebilsin diye kullanıcı verisi hazır olana kadar beklenir;
+  // uygulama her öne geldiğinde de yenilenir (günlük bildirimin içeriği planlama anında sabitlenir).
   useEffect(() => {
     if (!isAuthLoaded) return;
+    if (currentUserId && !isUserDataSynced) return;
     void syncReminderForUser(currentUserId);
-  }, [isAuthLoaded, currentUserId]);
+    if (!currentUserId) return;
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void syncReminderForUser(currentUserId);
+    });
+    return () => subscription.remove();
+  }, [isAuthLoaded, currentUserId, isUserDataSynced]);
 
-  // Bildirime dokunulunca, uygulama hazır olduktan sonra mevcut tekrar akışına gider.
+  // Bildirime dokunma (uygulama kapalıyken, arka plandayken ya da açıkken) yakalanır ve bekletilir.
+  useEffect(() => subscribeToNotificationResponses(setPendingResponse), []);
+
+  // Uygulama hazır olunca bekleyen dokunma işlenir: mini quiz (ya da kelime yoksa tekrar akışı).
   const isAppReady =
     isLoaded && isAuthLoaded && isUserDataSynced && !!currentUserId && !!profile?.onboardingCompleted;
   useEffect(() => {
-    if (!isAppReady || !navigationState?.key || !lastNotificationResponse) return;
-    const request = lastNotificationResponse.notification.request;
-    const data = request.content.data;
+    if (!pendingResponse || !isAppReady || !navigationState?.key) return;
+    setPendingResponse(null);
+    clearHandledNotificationResponse();
+    if (!isNotificationTap(pendingResponse)) return;
+
+    const { notification } = pendingResponse;
+    const data = notification.request.content.data;
     if (data?.type !== REVIEW_NOTIFICATION_TYPE || data.userId !== currentUserId) return;
 
-    const handledKey = `${request.identifier}:${lastNotificationResponse.notification.date}`;
-    if (handledNotificationRef.current === handledKey) return;
-    handledNotificationRef.current = handledKey;
-    router.push(getReviewRoute() as any);
-  }, [isAppReady, navigationState?.key, lastNotificationResponse, currentUserId, router]);
+    // Aynı dokunuş hem başlangıç yanıtından hem dinleyiciden gelebilir; kısa sürede tekrarı yok sayılır.
+    // (Günlük bildirimin kimliği sabit olduğundan kimlik tek başına ayırt edici değildir.)
+    const key = `${notification.request.identifier}:${notification.date}`;
+    const handled = handledNotificationRef.current;
+    if (handled && handled.key === key && Date.now() - handled.at < 5000) return;
+    handledNotificationRef.current = { key, at: Date.now() };
+    router.push(getNotificationRoute(data) as any);
+  }, [pendingResponse, isAppReady, navigationState?.key, currentUserId, router]);
 
-  if (!isLoaded || !isAuthLoaded || !isUserDataSynced) return null;
+  if (!isLoaded || !isAuthLoaded || !isUserDataSynced || !isThemeLoaded) return null;
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.warmWhite }}>
       <SafeAreaProvider>
-        <StatusBar style="dark" />
-        <Stack screenOptions={{ headerShown: false, ...androidScreenOptions }}>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
+        <ThemeProvider value={navigationTheme}>
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.warmWhite } }}>
         <Stack.Screen
           name="auth"
           options={{ animation: 'fade' }}
@@ -211,6 +259,10 @@ export default function RootLayout() {
         <Stack.Screen
           name="profile"
           options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
+          name="mini-quiz"
+          options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
         />
         <Stack.Screen
           name="analiz"
@@ -277,6 +329,7 @@ export default function RootLayout() {
           options={{ animation: 'slide_from_right' }}
         />
         </Stack>
+        </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

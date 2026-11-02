@@ -12,9 +12,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../utils/supabase';
-import { BorderRadius, Colors, Shadows, Spacing, Typography } from '../../constants/theme';
+import { BorderRadius, Shadows, Spacing, Typography } from '../../constants/theme';
+import { makeStyles, useColors } from '../../hooks/use-theme';
 
 export default function ResetPasswordScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const [password, setPassword] = useState('');
   const [passwordAgain, setPasswordAgain] = useState('');
@@ -86,7 +89,7 @@ export default function ResetPasswordScreen() {
                 value={password}
                 onChangeText={setPassword}
                 placeholder="En az 6 karakter"
-                placeholderTextColor={Colors.outlineVariant}
+                placeholderTextColor={colors.outlineVariant}
                 secureTextEntry
                 textContentType="newPassword"
                 autoComplete="new-password"
@@ -100,7 +103,7 @@ export default function ResetPasswordScreen() {
                 value={passwordAgain}
                 onChangeText={setPasswordAgain}
                 placeholder="Şifreni tekrar yaz"
-                placeholderTextColor={Colors.outlineVariant}
+                placeholderTextColor={colors.outlineVariant}
                 secureTextEntry
                 textContentType="newPassword"
                 autoComplete="new-password"
@@ -130,7 +133,7 @@ export default function ResetPasswordScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   flex: { flex: 1 },
   container: { flexGrow: 1, justifyContent: 'center', padding: Spacing.marginMain },
@@ -147,5 +150,5 @@ const styles = StyleSheet.create({
   success: { color: Colors.success },
   cta: { backgroundColor: Colors.golden, borderRadius: BorderRadius.lg, height: 50, alignItems: 'center', justifyContent: 'center', marginTop: Spacing.sm },
   disabled: { opacity: 0.55 },
-  ctaText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
-});
+  ctaText: { fontSize: 15, fontWeight: '700', color: Colors.onGolden },
+}));

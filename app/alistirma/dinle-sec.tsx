@@ -4,7 +4,8 @@ import * as Speech from 'expo-speech';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppIcon } from '../../components/app-icon';
-import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { makeStyles, useColors } from '../../hooks/use-theme';
 import { getTopicById } from '../../constants/topics';
 import { getGermanSpeechText } from '../../utils/german-speech';
 import { Word } from '../../types';
@@ -40,6 +41,8 @@ function createQuestion(word: Word, wordPool: Word[]): ListenQuestion | undefine
 }
 
 export default function DinleSecScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const { topicId, wordIds } = useLocalSearchParams<{ topicId?: string; wordIds?: string }>();
   const topic = topicId ? getTopicById(topicId) : undefined;
@@ -234,7 +237,7 @@ export default function DinleSecScreen() {
               accessibilityRole="button"
               accessibilityLabel="Kelimeyi normal hızda dinle"
             >
-              <AppIcon name="speaker.wave.2.fill" size={22} color={Colors.secondary} />
+              <AppIcon name="speaker.wave.2.fill" size={22} color={colors.secondary} />
               <Text style={styles.speechButtonText}>Normal</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -244,7 +247,7 @@ export default function DinleSecScreen() {
               accessibilityRole="button"
               accessibilityLabel="Kelimeyi yavaş hızda dinle"
             >
-              <AppIcon name="tortoise.fill" size={22} color={Colors.secondary} />
+              <AppIcon name="tortoise.fill" size={22} color={colors.secondary} />
               <Text style={styles.speechButtonText}>Yavaş</Text>
             </TouchableOpacity>
           </View>
@@ -269,7 +272,7 @@ export default function DinleSecScreen() {
             <AppIcon
               name={isHintVisible ? 'eye.slash.fill' : 'lightbulb.fill'}
               size={18}
-              color={Colors.secondary}
+              color={colors.secondary}
             />
             <Text style={styles.hintButtonText}>{isHintVisible ? 'İpucunu Gizle' : 'İpucu'}</Text>
           </TouchableOpacity>
@@ -314,8 +317,8 @@ export default function DinleSecScreen() {
                 ]}>{String.fromCharCode(65 + index)}</Text>
               </View>
               <Text style={styles.optionText}>{option.turkish}</Text>
-              {isCorrect && <AppIcon name="checkmark.circle.fill" size={22} color={Colors.success} />}
-              {isSelectedWrong && <AppIcon name="xmark.circle.fill" size={22} color={Colors.error} />}
+              {isCorrect && <AppIcon name="checkmark.circle.fill" size={22} color={colors.success} />}
+              {isSelectedWrong && <AppIcon name="xmark.circle.fill" size={22} color={colors.error} />}
             </TouchableOpacity>
             );
           })}
@@ -350,7 +353,7 @@ export default function DinleSecScreen() {
             <Text style={styles.nextButtonText}>
               {isCompleting ? 'Kaydediliyor…' : currentIndex < totalQuestions - 1 ? 'Devam Et' : 'Sonuçları Gör'}
             </Text>
-            {!isCompleting && <AppIcon name="arrow.right" size={17} color={Colors.primary} />}
+            {!isCompleting && <AppIcon name="arrow.right" size={17} color={colors.onGolden} />}
           </TouchableOpacity>
         </View>
       )}
@@ -358,7 +361,7 @@ export default function DinleSecScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   header: {
     height: 56,
@@ -419,10 +422,10 @@ const styles = StyleSheet.create({
   feedbackText: { marginTop: 2, fontSize: 13, color: Colors.onSurfaceVariant, textAlign: 'center' },
   nextButton: { width: '100%', height: 50, borderRadius: BorderRadius.lg, backgroundColor: Colors.golden, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm },
   nextButtonDisabled: { opacity: 0.55 },
-  nextButtonText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
+  nextButtonText: { fontSize: 15, fontWeight: '700', color: Colors.onGolden },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl, gap: Spacing.md },
   emptyTitle: { fontSize: 20, fontWeight: '700', color: Colors.primary, textAlign: 'center' },
   emptyText: { fontSize: 14, lineHeight: 20, color: Colors.onSurfaceVariant, textAlign: 'center' },
   emptyBackButton: { minHeight: 48, paddingHorizontal: Spacing.xl, borderRadius: BorderRadius.lg, backgroundColor: Colors.golden, alignItems: 'center', justifyContent: 'center' },
-  emptyBackButtonText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
-});
+  emptyBackButtonText: { fontSize: 15, fontWeight: '700', color: Colors.onGolden },
+}));

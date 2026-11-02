@@ -3,7 +3,8 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useUserStore } from '../../store';
-import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { makeStyles, useColors } from '../../hooks/use-theme';
 import { AppIcon } from '../../components/app-icon';
 
 const TYPE_LABELS: Record<string, string> = {
@@ -17,6 +18,8 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 export default function SonucScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const { score, total, type, topicId, wrongIds } = useLocalSearchParams<{
     score: string;
@@ -67,7 +70,7 @@ export default function SonucScreen() {
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
         <View style={styles.resultIconBox}>
-          <AppIcon name={resultIcon} size={38} color={Colors.secondary} />
+          <AppIcon name={resultIcon} size={38} color={colors.secondary} />
         </View>
 
         {/* Alıştırma tipi */}
@@ -88,17 +91,17 @@ export default function SonucScreen() {
         {/* Stats row */}
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
-            <AppIcon name="checkmark.circle.fill" size={20} color={Colors.success} />
+            <AppIcon name="checkmark.circle.fill" size={20} color={colors.success} />
             <Text style={styles.statNumber}>{scoreNum}</Text>
             <Text style={styles.statLabel}>Doğru</Text>
           </View>
           <View style={styles.statBox}>
-            <AppIcon name="xmark.circle.fill" size={20} color={Colors.error} />
+            <AppIcon name="xmark.circle.fill" size={20} color={colors.error} />
             <Text style={styles.statNumber}>{totalNum - scoreNum}</Text>
             <Text style={styles.statLabel}>Yanlış</Text>
           </View>
           <View style={styles.statBox}>
-            <AppIcon name="flame.fill" size={20} color={Colors.secondary} />
+            <AppIcon name="flame.fill" size={20} color={colors.secondary} />
             <Text style={styles.statNumber}>{profile?.streak || 0}</Text>
             <Text style={styles.statLabel}>Seri</Text>
           </View>
@@ -146,7 +149,7 @@ export default function SonucScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   container: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.marginMain, gap: Spacing.lg },
   resultIconBox: {
@@ -160,8 +163,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: Spacing.lg, width: '100%', ...Shadows.level2,
   },
   scoreCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: Colors.golden, alignItems: 'center', justifyContent: 'center' },
-  scoreNumber: { fontSize: 28, fontWeight: '700', color: Colors.primary },
-  scoreDivider: { fontSize: 12, color: Colors.primary, fontWeight: '600' },
+  scoreNumber: { fontSize: 28, fontWeight: '700', color: Colors.onGolden },
+  scoreDivider: { fontSize: 12, color: Colors.onGolden, fontWeight: '600' },
   scoreRight: { flex: 1 },
   scorePercent: { fontSize: 32, fontWeight: '700', color: Colors.primary, marginBottom: 4 },
   scoreMessage: { fontSize: 13, color: Colors.onSurfaceVariant, lineHeight: 18 },
@@ -178,7 +181,7 @@ const styles = StyleSheet.create({
   retryBtn: { backgroundColor: Colors.secondary, borderRadius: BorderRadius.lg, height: 54, alignItems: 'center', justifyContent: 'center' },
   retryBtnText: { fontSize: 16, fontWeight: '700', color: Colors.surfaceContainerLowest },
   homeBtn: { backgroundColor: Colors.golden, borderRadius: BorderRadius.lg, height: 54, alignItems: 'center', justifyContent: 'center' },
-  homeBtnText: { fontSize: 16, fontWeight: '700', color: Colors.primary },
+  homeBtnText: { fontSize: 16, fontWeight: '700', color: Colors.onGolden },
   topicsBtn: { borderRadius: BorderRadius.lg, height: 50, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: Colors.outlineVariant },
   topicsBtnText: { fontSize: 15, color: Colors.onSurfaceVariant, fontWeight: '600' },
-});
+}));
