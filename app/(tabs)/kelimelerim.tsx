@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -95,13 +95,20 @@ export default function KelimelerimScreen() {
         })}
       </ScrollView>
 
-      <ScrollView
+      {/* Büyük listelerde yalnızca ekrandaki kartlar çizilir (ScrollView + map tüm kelimeleri çizerdi). */}
+      <FlatList
         style={styles.scroll}
         contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        {customWords.length >= 1 && (
+        data={filteredWords}
+        keyExtractor={(word) => word.id}
+        renderItem={({ item: word }) => (
+          <WordCard
+            word={word}
+            onPress={() => router.push(`/kelime/${word.id}` as any)}
+            onDelete={() => handleDelete(word)}
+          />
+        )}
+        ListHeaderComponent={customWords.length >= 1 ? (
           <TouchableOpacity
             style={styles.quizBanner}
             onPress={() => router.push('/kelime/calis' as any)}
@@ -113,9 +120,8 @@ export default function KelimelerimScreen() {
             <Text style={styles.quizBannerText}>Kelimelerimle Çalış</Text>
             <AppIcon name="chevron.right" size={14} color={Colors.golden} />
           </TouchableOpacity>
-        )}
-
-        {customWords.length === 0 ? (
+        ) : null}
+        ListEmptyComponent={customWords.length === 0 ? (
           <EmptyState
             icon="square.and.pencil"
             eyebrow="KENDİ LİSTENİ OLUŞTUR"
@@ -124,23 +130,20 @@ export default function KelimelerimScreen() {
             actionLabel="İlk Kelimeni Ekle"
             onAction={() => router.push('/kelime/ekle' as any)}
           />
-        ) : filteredWords.length === 0 ? (
+        ) : (
           <EmptyState
             icon="magnifyingglass"
             title="Kelime bulunamadı"
             description="Arama veya filtreyi değiştirmeyi dene."
           />
-        ) : (
-          filteredWords.map((word) => (
-            <WordCard
-              key={word.id}
-              word={word}
-              onPress={() => router.push(`/kelime/${word.id}` as any)}
-              onDelete={() => handleDelete(word)}
-            />
-          ))
         )}
-      </ScrollView>
+        initialNumToRender={12}
+        maxToRenderPerBatch={16}
+        windowSize={7}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      />
     </SafeAreaView>
   );
 }

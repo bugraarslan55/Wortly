@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Stack, useRootNavigationState, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
-import { AppState, Platform } from 'react-native';
+import { ActivityIndicator, AppState, Platform, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -12,6 +12,7 @@ import {
 import { useAuthStore } from '../store/auth';
 import { useAchievementStore } from '../store/achievements';
 import { AchievementTracker } from '../components/use-achievements';
+import { BrandMark } from '../components/ui';
 import { REVIEW_NOTIFICATION_TYPE, syncReminderForUser, useLastNotificationResponse } from '../utils/review-reminder';
 import { getReviewRoute } from '../utils/review-route';
 import { Colors } from '../constants/theme';
@@ -202,7 +203,19 @@ export default function RootLayout() {
     router.push(getReviewRoute() as any);
   }, [isAppReady, navigationState?.key, lastNotificationResponse, currentUserId, router]);
 
-  if (!isLoaded || !isAuthLoaded || !isUserDataSynced) return null;
+  // Veriler yüklenirken (ağ yavaşsa birkaç saniye sürebilir) boş ekran yerine marka ve yükleme göstergesi.
+  if (!isLoaded || !isAuthLoaded || !isUserDataSynced) {
+    return (
+      <View
+        style={{ flex: 1, backgroundColor: Colors.warmWhite, alignItems: 'center', justifyContent: 'center', gap: 20 }}
+        accessibilityRole="progressbar"
+        accessibilityLabel="Wortly yükleniyor"
+      >
+        <BrandMark />
+        <ActivityIndicator color={Colors.secondary} />
+      </View>
+    );
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: Colors.warmWhite }}>

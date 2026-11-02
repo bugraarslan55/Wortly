@@ -2,8 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import * as Speech from 'expo-speech';
 import { useSessionStore, useUserStore } from '../../store';
+import { useGermanSpeech } from '../../utils/use-german-speech';
 import { useAuthStore } from '../../store/auth';
 import {
   getScenarioById, isScenarioLevelLocked, ReplyStep, Scenario, ScenarioStep,
@@ -71,8 +71,9 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
   const [finished, setFinished] = useState(false);
   const [progress, setProgress] = useState<Record<number, StepProgress>>({});
   const [shownTranslations, setShownTranslations] = useState<Record<number, boolean>>({});
-  const [speakingMode, setSpeakingMode] = useState<'normal' | 'slow' | null>(null);
-  const speechRunRef = useRef(0);
+  // Ortak ses kontrolcüsü: eski istekler iptal edilir; ekran kapanınca ve arka plana geçince ses durur.
+  const { speak: speakText, stop: stopSpeech, speakingRate: speakingMode } = useGermanSpeech();
+  const savedRoundRef = useRef<number | null>(null);
   const { session } = useAuthStore();
   const { saveScenarioResult } = useSessionStore();
 
@@ -89,39 +90,12 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
     return map;
   }, [steps, round]);
 
-  const stopSpeech = useCallback(() => {
-    speechRunRef.current += 1;
-    setSpeakingMode(null);
-    void Speech.stop();
-  }, []);
-
-  useEffect(() => () => {
-    speechRunRef.current += 1;
-    void Speech.stop();
-  }, []);
-
   useEffect(() => {
     stopSpeech();
   }, [index, finished, stopSpeech]);
 
-  const speak = async (text: string, mode: 'normal' | 'slow') => {
-    const runId = speechRunRef.current + 1;
-    speechRunRef.current = runId;
-    setSpeakingMode(mode);
-    await Speech.stop();
-    if (speechRunRef.current !== runId) return;
-
-    const finish = () => {
-      if (speechRunRef.current === runId) setSpeakingMode(null);
-    };
-    Speech.speak(text, {
-      language: 'de-DE',
-      rate: mode === 'slow' ? 0.30 : 0.92,
-      pitch: 1,
-      onDone: finish,
-      onError: finish,
-      onStopped: finish,
-    });
+  const speak = (text: string, mode: 'normal' | 'slow') => {
+    void speakText(text, mode);
   };
 
   const stepProgress = progress[index] ?? EMPTY_PROGRESS;
@@ -135,12 +109,17 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
 
   useEffect(() => {
     if (!finished || !session?.user.id) return;
+    // Her tur (round) için sonuç yalnızca BİR kez kaydedilir; efekt yeniden çalışsa da ikinci kayıt oluşmaz.
+    if (savedRoundRef.current === round) return;
+    savedRoundRef.current = round;
     void saveScenarioResult(session.user.id, {
       scenarioId: scenario.id,
       score: correctCount,
       total: totalQuestions,
     });
-  }, [finished, session?.user.id, scenario.id, correctCount, totalQuestions, saveScenarioResult]);
+    // Senaryo da bir çalışma günüdür: günlük seri güncellenir (diğer alıştırmalarla tutarlı).
+    void useUserStore.getState().updateStreak();
+  }, [finished, round, session?.user.id, scenario.id, correctCount, totalQuestions, saveScenarioResult]);
 
   const handleOptionPress = (option: Option) => {
     if (stepProgress.solved) return;
