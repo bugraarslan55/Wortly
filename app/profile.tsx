@@ -9,6 +9,7 @@ import { useAuthStore } from '../store/auth';
 import { Colors, Spacing, BorderRadius, Cards } from '../constants/theme';
 import { AppIcon } from '../components/app-icon';
 import { Card, IconTile, SecondaryButton, SectionTitle, SegmentedControl } from '../components/ui';
+import { useAchievementViews } from '../components/use-achievements';
 import { ReviewReminderCard } from '../components/review-reminder-card';
 import { isReminderSupported } from '../utils/review-reminder';
 import { Level } from '../types';
@@ -39,6 +40,7 @@ export default function ProfileScreen() {
   const scenarioResults = useSessionStore(state => state.scenarioResults);
   const sessionTotal = useSessionStore(state => state.sessionTotal);
 
+  const { badges, earnedCount } = useAchievementViews();
   const email = session?.user?.email ?? '';
   const level: Level = profile?.level ?? 'A1';
   const displayName = profile?.name?.trim() || email.split('@')[0] || 'Öğrenci';
@@ -180,6 +182,23 @@ export default function ProfileScreen() {
           <StatBox icon="chart.bar.fill" value={exercises.exact ? exercises.count : `${exercises.count}+`} label="Tamamlanan alıştırma" />
         </View>
 
+        {/* Başarılarım */}
+        <TouchableOpacity
+          style={[Cards.surface, styles.achievementsRow]}
+          onPress={() => router.push('/basarilarim' as any)}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel={`Başarılarım, ${badges.length} rozetten ${earnedCount} tanesi kazanıldı`}
+          accessibilityHint="Rozetlerini ve ilerlemeni gösterir"
+        >
+          <IconTile name="medal" size={40} tone="gold" />
+          <View style={styles.achievementsText}>
+            <Text style={styles.prefLabel}>Başarılarım</Text>
+            <Text style={styles.prefHint}>{earnedCount} / {badges.length} rozet kazanıldı</Text>
+          </View>
+          <AppIcon name="chevron.right" size={14} color={Colors.outline} />
+        </TouchableOpacity>
+
         {/* Öğrenme tercihleri */}
         <SectionTitle>Öğrenme tercihleri</SectionTitle>
         <Card style={styles.card}>
@@ -292,6 +311,8 @@ const styles = StyleSheet.create({
   prefLabel: { fontSize: 15, fontWeight: '700', color: Colors.primary },
   prefHint: { fontSize: 12, color: Colors.onSurfaceVariant, lineHeight: 17, marginBottom: 4 },
   divider: { height: 1, backgroundColor: Cards.borderColor, marginVertical: Spacing.sm },
+  achievementsRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, padding: Spacing.md, minHeight: 64 },
+  achievementsText: { flex: 1 },
   infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.md },
   infoText: { flex: 1, gap: 2 },
   signedInAs: { fontSize: 12, color: Colors.onSurfaceVariant, textAlign: 'center' },
