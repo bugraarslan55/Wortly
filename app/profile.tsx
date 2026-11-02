@@ -9,7 +9,7 @@ import { useAuthStore } from '../store/auth';
 import { Colors, Spacing, BorderRadius, Cards } from '../constants/theme';
 import { AppIcon } from '../components/app-icon';
 import { Card, IconTile, SecondaryButton, SectionTitle, SegmentedControl } from '../components/ui';
-import { useAchievementViews, useOwnScenarioResults } from '../components/use-achievements';
+import { useAchievementViews, useOwnScenarioResults, useOwnSessions } from '../components/use-achievements';
 import { makeIsKnownWordId } from '../utils/known-words';
 import { isStaticWordId } from '../utils/static-word-ids';
 import { buildSignOutPlan, countUnverifiedProgress } from '../utils/signout-plan';
@@ -17,11 +17,13 @@ import { replanReminders } from '../utils/reminder-sync';
 import { readPronunciationRecordings } from '../utils/pronunciation-storage';
 import { ReviewReminderCard } from '../components/review-reminder-card';
 import { RecordingStorageCard } from '../components/recording-storage-card';
+import { LegacyRecordsCard } from '../components/legacy-records-card';
 import { isReminderSupported } from '../utils/review-reminder';
 import { Level } from '../types';
 import {
   countLearnedWords, DAILY_GOAL_OPTIONS, getActiveStreak, normalizeDailyGoal, summarizeCompletedExercises,
 } from '../utils/progress-stats';
+import { goBack } from '../utils/safe-back';
 
 const LEVELS: Level[] = ['A1', 'A2', 'B1'];
 const LEVEL_DESCRIPTIONS: Record<Level, string> = {
@@ -42,7 +44,7 @@ export default function ProfileScreen() {
   const { session, signOut } = useAuthStore();
   const words = useWordStore(state => state.words);
   const reviewStates = useWordStore(state => state.reviewStates);
-  const sessions = useSessionStore(state => state.sessions);
+  const sessions = useOwnSessions();
   const scenarioResults = useOwnScenarioResults();
   const sessionTotal = useSessionStore(state => state.sessionTotal);
 
@@ -197,7 +199,7 @@ export default function ProfileScreen() {
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => goBack(router)}
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel="Geri"
@@ -305,6 +307,9 @@ export default function ProfileScreen() {
 
         {/* Kullanılmayan telaffuz kayıtları varsa görünür; silme yalnızca onayla */}
         <RecordingStorageCard userId={session?.user?.id ?? null} />
+
+        {/* Sahibi doğrulanamayan eski kayıtlar: yalnızca onayınla hesabına eklenir */}
+        <LegacyRecordsCard userId={session?.user?.id ?? null} email={session?.user?.email ?? null} />
 
         {/* Hesap */}
         <SectionTitle>Hesap</SectionTitle>
