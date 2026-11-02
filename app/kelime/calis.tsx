@@ -8,6 +8,7 @@ import { useWordStore } from '../../store';
 import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
 import { AppIcon } from '../../components/app-icon';
 import { EXERCISE_SYMBOLS } from '../../constants/symbols';
+import { goBack } from '../../utils/safe-back';
 
 // Kelimelerim ekranındaki tüm kişisel kelimeler tek bir çalışma seti olarak
 // kullanılır — konu (topicId) filtresine bakılmaz.
@@ -100,7 +101,7 @@ export default function KelimelerimleCalisScreen() {
           <Text style={styles.emptySubtext}>
             Önce "Kelimelerim" sekmesinden birkaç kelime ekle, sonra buraya dön.
           </Text>
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.85}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => goBack(router)} activeOpacity={0.85}>
             <Text style={styles.backBtnText}>Geri</Text>
           </TouchableOpacity>
         </View>
@@ -142,7 +143,7 @@ export default function KelimelerimleCalisScreen() {
         ))}
       </ScrollView>
 
-      <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()} activeOpacity={0.7}>
+      <TouchableOpacity style={styles.cancelBtn} onPress={() => goBack(router)} activeOpacity={0.7}>
         <Text style={styles.cancelBtnText}>İptal</Text>
       </TouchableOpacity>
     </SafeAreaView>

@@ -11,6 +11,7 @@ import { Word } from '../../types';
 import { ColoredGermanWord } from '../../components/colored-german-word';
 import { selectWordsForReview } from '../../utils/spaced-repetition';
 import { ExerciseHeader, ExerciseProgress, confirmLeaveExercise, useActionLock } from '../../components/exercise-ui';
+import { goBack } from '../../utils/safe-back';
 
 type Phase = 'show' | 'reveal';
 
@@ -149,7 +150,7 @@ export default function DogruYanlisScreen() {
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
           <Text style={styles.emptyText}>Kelime bulunamadı</Text>
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => goBack(router)}>
             <Text style={styles.backBtnText}>Geri</Text>
           </TouchableOpacity>
         </View>
@@ -163,7 +164,7 @@ export default function DogruYanlisScreen() {
         title="Doğru / Yanlış"
         current={currentIndex + 1}
         total={quizItems.length}
-        onClose={() => confirmLeaveExercise(currentIndex > 0 || phase === 'reveal', () => router.back())}
+        onClose={() => confirmLeaveExercise(currentIndex > 0 || phase === 'reveal', () => goBack(router))}
       />
       <ExerciseProgress current={currentIndex + 1} total={quizItems.length} />
 

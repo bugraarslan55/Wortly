@@ -16,6 +16,7 @@ import {
 } from '../../components/ui';
 import { findDuplicateCustomWord, MAX_EXAMPLE_LENGTH } from '../../utils/word-validation';
 import { getArticlePalette } from '../../constants/article-colors';
+import { goBack } from '../../utils/safe-back';
 
 const ARTICLES: Article[] = ['der', 'die', 'das', ''];
 const ARTICLE_LABELS: Record<Article, string> = {
@@ -96,7 +97,7 @@ export default function KelimeEkleScreen() {
       return;
     }
 
-    router.back();
+    goBack(router);
   };
 
   const germanError = errors.german
@@ -111,7 +112,7 @@ export default function KelimeEkleScreen() {
         <View style={styles.handleBar} />
         <View style={styles.header}>
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={() => goBack(router)}
             style={styles.cancelBtn}
             accessibilityRole="button"
             accessibilityLabel="İptal"

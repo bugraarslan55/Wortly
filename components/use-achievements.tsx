@@ -4,6 +4,8 @@ import { useSessionStore, useUserStore, useWordStore } from '../store';
 import { useAuthStore } from '../store/auth';
 import { useAchievementStore } from '../store/achievements';
 import type { ScenarioResult } from '../utils/learning-analysis';
+import { isOwnedByUser } from '../utils/ownership';
+import type { QuizSession } from '../types';
 import { makeIsKnownWordId } from '../utils/known-words';
 import { isStaticWordId } from '../utils/static-word-ids';
 import {
@@ -74,7 +76,20 @@ export function useOwnScenarioResults(): ScenarioResult[] {
   const userId = useAuthStore(state => state.session?.user.id);
   const raw = useSessionStore(state => state.scenarioResults);
   const owner = useSessionStore(state => state.scenarioResultsOwner);
-  return useMemo(() => (userId && owner === userId ? raw : EMPTY_RESULTS), [raw, owner, userId]);
+  return useMemo(() => (isOwnedByUser(owner, userId) ? raw : EMPTY_RESULTS), [raw, owner, userId]);
+}
+
+const EMPTY_SESSIONS: QuizSession[] = [];
+
+/**
+ * Yalnızca oturumdaki kullanıcıya ait çalışma oturumları. Sahibi başka bir kullanıcı olarak kayıtlıysa
+ * kullanılmaz; sahibi bilinmeyen eski yerel veri (henüz eşitlenmemiş) çevrimdışı kullanıcıdan gizlenmez.
+ */
+export function useOwnSessions(): QuizSession[] {
+  const userId = useAuthStore(state => state.session?.user.id);
+  const raw = useSessionStore(state => state.sessions);
+  const owner = useSessionStore(state => state.sessionsOwner);
+  return useMemo(() => (isOwnedByUser(owner, userId, true) ? raw : EMPTY_SESSIONS), [raw, owner, userId]);
 }
 
 /** Mevcut yerel öğrenme verisinin anlık görüntüsü (yeni kayıt veya ağ isteği yok). */
@@ -83,7 +98,7 @@ export function useLearningSnapshot(now: number): LearningSnapshot {
   const profile = useUserStore(state => state.profile);
   const words = useWordStore(state => state.words);
   const reviewStates = useWordStore(state => state.reviewStates);
-  const sessions = useSessionStore(state => state.sessions);
+  const sessions = useOwnSessions();
   const scenarioResults = useOwnScenarioResults();
   const sessionTotal = useSessionStore(state => state.sessionTotal);
 

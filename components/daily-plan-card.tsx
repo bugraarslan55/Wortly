@@ -8,7 +8,7 @@ import { AnalysisCategory, analyzeLearning, DailyPlan } from '../utils/learning-
 import { reviewRouteForDue } from '../utils/study-recommendations';
 import { AppIcon } from './app-icon';
 import { Card, IconTile, PrimaryButton } from './ui';
-import { useOwnScenarioResults } from './use-achievements';
+import { useOwnScenarioResults, useOwnSessions } from './use-achievements';
 
 export const CATEGORY_LABELS: Record<AnalysisCategory, string> = {
   dinleme: 'Dinleme',
@@ -32,7 +32,7 @@ export function useLearningAnalysis() {
   const profile = useUserStore(state => state.profile);
   const words = useWordStore(state => state.words);
   const reviewStates = useWordStore(state => state.reviewStates);
-  const sessions = useSessionStore(state => state.sessions);
+  const sessions = useOwnSessions();
   const scenarioResults = useOwnScenarioResults();
 
   const level = profile?.level || 'A1';

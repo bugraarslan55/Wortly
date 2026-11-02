@@ -167,7 +167,10 @@ function lastDays(today: string, count: number): string[] {
   return keys; // en yeniden en eskiye
 }
 
-export type ReportAvailability = 'signed-out' | 'loading' | 'ready';
+export type ReportAvailability = 'signed-out' | 'loading' | 'stalled' | 'ready';
+
+/** Eşitleme bu süreden uzun sürerse ekran sonsuza kadar "yükleniyor" göstermez; güvenli hata ve yeniden deneme sunar. */
+export const REPORT_STALL_MS = 15000;
 
 /**
  * Rapor ne zaman gösterilebilir? Oturum yoksa kişisel veri gösterilmez ('signed-out'). Yerel veriler
@@ -180,13 +183,15 @@ export function reportAvailability(input: {
   profileSyncedUserId: string | null | undefined;
   wordsSyncedUserId: string | null | undefined;
   sessionsSyncedUserId: string | null | undefined;
+  /** Yükleme REPORT_STALL_MS'den uzun sürdü mü? */
+  stalled?: boolean;
 }): ReportAvailability {
   if (!input.userId) return 'signed-out';
-  if (!input.localLoaded) return 'loading';
   const { userId } = input;
-  return input.profileSyncedUserId === userId && input.wordsSyncedUserId === userId && input.sessionsSyncedUserId === userId
-    ? 'ready'
-    : 'loading';
+  const synced = input.localLoaded
+    && input.profileSyncedUserId === userId && input.wordsSyncedUserId === userId && input.sessionsSyncedUserId === userId;
+  if (synced) return 'ready';
+  return input.stalled ? 'stalled' : 'loading';
 }
 
 export function buildLearningReport(input: ReportInput): LearningReport {

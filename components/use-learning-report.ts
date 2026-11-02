@@ -1,15 +1,15 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useIsFocused } from 'expo-router';
 import { SCENARIOS } from '../constants/scenarios';
 import { getTopicsForLevel } from '../constants/topics';
 import { useSessionStore, useUserStore, useWordStore } from '../store';
 import { useAuthStore } from '../store/auth';
 import { computeDailyTasks, deviceDayKey } from '../utils/achievements';
-import { buildLearningReport, LearningReport, reportAvailability } from '../utils/learning-report';
+import { buildLearningReport, LearningReport, reportAvailability, REPORT_STALL_MS } from '../utils/learning-report';
 import { buildRecommendations, Recommendation } from '../utils/study-recommendations';
 import { useDayTick, useLearningSnapshot } from './use-achievements';
 
-export type ReportStatus = 'signed-out' | 'loading' | 'ready' | 'error';
+export type ReportStatus = 'signed-out' | 'loading' | 'stalled' | 'ready' | 'error';
 
 export interface LearningReportState {
   status: ReportStatus;
@@ -42,7 +42,17 @@ export function useLearningReport(): LearningReportState {
   const wordsSynced = useWordStore(state => state.syncedUserId);
   const sessionsSynced = useSessionStore(state => state.syncedUserId);
   const [attempt, setAttempt] = useState(0);
-  const retry = useCallback(() => setAttempt(value => value + 1), []);
+  const [stalled, setStalled] = useState(false);
+  // Yeniden dene: hesaplamayı yenile ve bu kullanıcı için eşitlemeyi tekrar başlat (ağ yoksa zaman aşımıyla biter).
+  const retry = useCallback(() => {
+    setStalled(false);
+    setAttempt(value => value + 1);
+    if (userId) {
+      void useUserStore.getState().syncProfile(userId);
+      void useWordStore.getState().syncWords(userId);
+      void useSessionStore.getState().syncSessions(userId);
+    }
+  }, [userId]);
   const last = useRef<{ key: string; state: LearningReportState } | null>(null);
 
   const availability = reportAvailability({
@@ -51,7 +61,16 @@ export function useLearningReport(): LearningReportState {
     profileSyncedUserId: profileSynced,
     wordsSyncedUserId: wordsSynced,
     sessionsSyncedUserId: sessionsSynced,
+    stalled,
   });
+
+  // Eşitleme çok uzun sürerse ekran sonsuza kadar yüklenmede kalmaz.
+  const waiting = !!userId && availability === 'loading';
+  useEffect(() => {
+    if (!waiting) { setStalled(false); return; }
+    const timer = setTimeout(() => setStalled(true), REPORT_STALL_MS);
+    return () => clearTimeout(timer);
+  }, [waiting, attempt, userId]);
 
   return useMemo<LearningReportState>(() => {
     if (availability !== 'ready') {

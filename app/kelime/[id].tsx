@@ -22,6 +22,7 @@ import { ColoredGermanPlural, ColoredGermanWord } from '../../components/colored
 import { findDuplicateCustomWord, MAX_EXAMPLE_LENGTH } from '../../utils/word-validation';
 import { getArticlePalette } from '../../constants/article-colors';
 import { getGermanSpeechText } from '../../utils/german-speech';
+import { goBack } from '../../utils/safe-back';
 
 const MASTERY_LABELS = ['Yeni', 'Öğreniliyor', 'Bilinçli', 'Öğrenildi'];
 const ARTICLES: Article[] = ['der', 'die', 'das', ''];
@@ -69,7 +70,7 @@ export default function KelimeDetayScreen() {
         <View style={styles.center}>
           <AppIcon name="questionmark.circle" size={36} color={Colors.outlineVariant} />
           <Text style={styles.emptyText}>Kelime bulunamadı</Text>
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => goBack(router)}>
             <Text style={styles.backBtnText}>← Geri</Text>
           </TouchableOpacity>
         </View>
@@ -148,7 +149,7 @@ export default function KelimeDetayScreen() {
     <SafeAreaView style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtnHeader}>
+        <TouchableOpacity onPress={() => goBack(router)} style={styles.backBtnHeader}>
           <Text style={styles.backBtnHeaderText}>← Geri</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Kelime Detayı</Text>

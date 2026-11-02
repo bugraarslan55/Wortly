@@ -2,7 +2,8 @@ import React, { useEffect, useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useUserStore, useSessionStore, useWordStore } from '../../store';
+import { useUserStore, useWordStore } from '../../store';
+import { useOwnSessions } from '../../components/use-achievements';
 import { Colors, Spacing, BorderRadius } from '../../constants/theme';
 import { AppIcon } from '../../components/app-icon';
 import { Card, IconTile, PrimaryButton, SecondaryButton } from '../../components/ui';
@@ -50,7 +51,7 @@ export default function SonucScreen() {
   }>();
   const { profile, updateStreak } = useUserStore();
   const { reviewStates, words } = useWordStore();
-  const sessions = useSessionStore(state => state.sessions);
+  const sessions = useOwnSessions();
 
   const totalNum = Math.max(0, parseInt(total || '0', 10) || 0);
   const scoreNum = Math.min(totalNum, Math.max(0, parseInt(score || '0', 10) || 0));
@@ -61,8 +62,9 @@ export default function SonucScreen() {
   const restartRoute = RESTART_ROUTES[typeKey];
   const hasTopic = Boolean(topicId);
 
+  // Seri yalnızca gerçek bir sonuç varken (en az 1 soru) güncellenir; boş/bozuk bir bağlantıyla açılan sonuç ekranı seriyi artırmaz.
   useEffect(() => {
-    void updateStreak();
+    if (totalNum > 0) void updateStreak();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

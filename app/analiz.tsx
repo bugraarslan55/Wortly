@@ -52,6 +52,16 @@ export default function AnalysisScreen() {
           </Card>
         )}
 
+        {status === 'stalled' && (
+          <Card style={styles.stateCard}>
+            <AppIcon name="questionmark.circle" size={28} color={Colors.error} />
+            <Text style={styles.stateText} accessibilityLiveRegion="polite">
+              Verilerin eşitlenmesi beklenenden uzun sürüyor. İnternet bağlantını kontrol edip tekrar deneyebilirsin; cihazdaki verilerin silinmedi.
+            </Text>
+            <PrimaryButton label="Tekrar dene" onPress={retry} style={styles.retryBtn} />
+          </Card>
+        )}
+
         {status === 'loading' && (
           <Card style={styles.stateCard}>
             <ActivityIndicator color={Colors.secondary} />

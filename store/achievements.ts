@@ -1,3 +1,4 @@
+import { createLatestGuard } from '../utils/latest-guard';
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -29,6 +30,9 @@ interface AchievementStore {
   reset: () => void;
 }
 
+// Hesap değişiminde ESKİ hesabın geç biten okuması yeni hesabın kaydını ezmesin (son istek kazanır).
+const loads = createLatestGuard();
+
 export const useAchievementStore = create<AchievementStore>((set, get) => ({
   userId: null,
   isLoaded: false,
@@ -36,11 +40,13 @@ export const useAchievementStore = create<AchievementStore>((set, get) => ({
   recentlyEarned: [],
 
   load: async (userId) => {
+    const token = loads.begin();
     try {
       const raw = await AsyncStorage.getItem(storageKey(userId));
+      if (!loads.isLatest(token)) return;
       set({ userId, record: parseEarnedRecord(raw), recentlyEarned: [], isLoaded: true });
     } catch {
-      set({ userId, record: EMPTY_EARNED_RECORD, recentlyEarned: [], isLoaded: true });
+      if (loads.isLatest(token)) set({ userId, record: EMPTY_EARNED_RECORD, recentlyEarned: [], isLoaded: true });
     }
   },
 
@@ -61,5 +67,8 @@ export const useAchievementStore = create<AchievementStore>((set, get) => ({
   clearRecent: () => set({ recentlyEarned: [] }),
 
   // Çıkışta yalnızca bellek temizlenir; kullanıcıya özel kayıt cihazda kalır (senaryo sonuçlarıyla aynı).
-  reset: () => set({ userId: null, isLoaded: false, record: EMPTY_EARNED_RECORD, recentlyEarned: [] }),
+  reset: () => {
+    loads.invalidate(); // çıkıştan sonra süren okuma veri yazamaz
+    set({ userId: null, isLoaded: false, record: EMPTY_EARNED_RECORD, recentlyEarned: [] });
+  },
 }));

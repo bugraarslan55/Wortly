@@ -15,6 +15,7 @@ import { Colors, BorderRadius, Shadows, Spacing } from '../../../constants/theme
 import { Word } from '../../../types';
 import { AppIcon } from '../../../components/app-icon';
 import { ColoredGermanPlural, ColoredGermanWord } from '../../../components/colored-german-word';
+import { goBack } from '../../../utils/safe-back';
 
 function normalizeSearch(value: string): string {
   return value.trim().toLocaleLowerCase('de-DE');
@@ -79,7 +80,7 @@ export default function KonuKelimeleriScreen() {
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
           <Text style={styles.emptyTitle}>Konu bulunamadı</Text>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.backButton} onPress={() => goBack(router)}>
             <Text style={styles.backButtonText}>Geri Dön</Text>
           </TouchableOpacity>
         </View>
@@ -91,7 +92,7 @@ export default function KonuKelimeleriScreen() {
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => goBack(router)}
           style={styles.headerBack}
           accessibilityRole="button"
           accessibilityLabel="Geri"
