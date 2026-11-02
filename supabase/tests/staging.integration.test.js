@@ -1,7 +1,8 @@
 // Gerçek Supabase TEST ortamında (PostgREST + GoTrue + RLS) tombstone davranışını doğrular.
 //
 // ÜRETİMDE ÇALIŞTIRMA. Script şu koşullarda hiçbir istek atmadan çıkar:
-//   * STAGING_URL, proje kökündeki .env dosyasındaki (üretim) EXPO_PUBLIC_SUPABASE_URL ile aynıysa,
+//   * üretim adresi/referansı belirlenemezse (kaynaklar: PRODUCTION_SUPABASE_URL, depo ve ANA worktree .env dosyaları;
+//     çalışma klasöründen bağımsız) ya da STAGING_URL/referansı üretimle aynıysa,
 //   * STAGING_CONFIRM=EVET-BU-URETIM-DEGIL ayarlanmadıysa.
 // Yalnızca sentetik kullanıcı ve sentetik kelime kullanır; test sonunda kullanıcıları siler.
 //
@@ -29,14 +30,15 @@ function refuse(msg) {
 }
 if (!['before', 'after'].includes(PHASE)) refuse('PHASE before veya after olmalı.');
 // Ortak güvenlik denetimi: açık proje referansı, üretim adresi reddi, anahtar türü, onay değeri.
+let target;
 try {
-  guard.assertSafeStagingEnv(process.env, { productionUrls: guard.readProductionUrls(path.resolve(__dirname, '..', '..')) });
+  target = guard.assertSafeStagingEnv(process.env); // ilk iş: ağ/kullanıcı öncesi, çalışma klasöründen bağımsız
 } catch (error) {
   refuse(error.message);
 }
 
 const { createClient } = require('@supabase/supabase-js');
-const admin = createClient(STAGING_URL, STAGING_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+const admin = createClient(target.url, STAGING_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 const run = crypto.randomBytes(4).toString('hex');
 const created = [];
 
@@ -46,7 +48,7 @@ async function makeUser(label) {
   const { data, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
   if (error) throw new Error('kullanıcı oluşturulamadı: ' + error.message);
   created.push(data.user.id);
-  const client = createClient(STAGING_URL, STAGING_ANON_KEY, { auth: { persistSession: false } });
+  const client = createClient(target.url, STAGING_ANON_KEY, { auth: { persistSession: false } });
   const { error: signInError } = await client.auth.signInWithPassword({ email, password });
   if (signInError) throw new Error('giriş başarısız: ' + signInError.message);
   return { id: data.user.id, client };

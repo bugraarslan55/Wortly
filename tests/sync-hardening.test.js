@@ -27,11 +27,13 @@ const GOOD_ENV = {
   STAGING_CONFIRM: 'EVET-BU-URETIM-DEGIL',
 };
 const PROD = ['https://prodprojectref12345.supabase.co'];
+// Üretim adresi açıkça verilir (hermetik): varsayılan keşif makinedeki .env dosyalarına bağlıdır, burada test edilmez.
+const assertSafe = (env, options = { productionUrls: PROD }) => guard.assertSafeStagingEnv(env, options);
 
 // ─── Staging güvenlik kontrolü ──────────────────────────────────────────────
 
 test('güvenli ortam kabul edilir', () => {
-  const result = guard.assertSafeStagingEnv(GOOD_ENV, { productionUrls: PROD });
+  const result = assertSafe(GOOD_ENV, { productionUrls: PROD });
   assert.equal(result.ref, 'abcdefghijklmnop');
 });
 
@@ -39,27 +41,27 @@ test('eksik değişken (açıkça tanımlı test projesi şart) reddedilir', () 
   for (const name of Object.keys(GOOD_ENV)) {
     const env = { ...GOOD_ENV };
     delete env[name];
-    assert.throws(() => guard.assertSafeStagingEnv(env, { productionUrls: PROD }), new RegExp(name));
+    assert.throws(() => assertSafe(env, { productionUrls: PROD }), new RegExp(name));
   }
 });
 
 test('onay değeri yanlışsa reddedilir', () => {
-  assert.throws(() => guard.assertSafeStagingEnv({ ...GOOD_ENV, STAGING_CONFIRM: 'evet' }), /STAGING_CONFIRM/);
+  assert.throws(() => assertSafe({ ...GOOD_ENV, STAGING_CONFIRM: 'evet' }), /STAGING_CONFIRM/);
 });
 
 test('üretim adresi (büyük/küçük harf, sondaki eğik çizgi fark etmez) reddedilir', () => {
   const env = { ...GOOD_ENV, STAGING_URL: 'https://PRODPROJECTREF12345.supabase.co/', STAGING_PROJECT_REF: 'prodprojectref12345' };
-  assert.throws(() => guard.assertSafeStagingEnv(env, { productionUrls: PROD }), /üretim projesiyle aynı/);
+  assert.throws(() => assertSafe(env, { productionUrls: PROD }), /üretim projesiyle aynı/);
 });
 
 test('proje referansı URL ile uyuşmazsa reddedilir', () => {
-  assert.throws(() => guard.assertSafeStagingEnv({ ...GOOD_ENV, STAGING_PROJECT_REF: 'baska' }), /eşleşmiyor/);
+  assert.throws(() => assertSafe({ ...GOOD_ENV, STAGING_PROJECT_REF: 'baska' }), /eşleşmiyor/);
 });
 
 test('geçersiz/yanlış adresler reddedilir (http, başka alan adı, ref yok)', () => {
   for (const url of ['http://abcdefghijklmnop.supabase.co', 'https://example.com', 'abcdefghijklmnop', 'https://supabase.co']) {
     assert.throws(
-      () => guard.assertSafeStagingEnv({ ...GOOD_ENV, STAGING_URL: url }),
+      () => assertSafe({ ...GOOD_ENV, STAGING_URL: url }),
       /geçerli bir Supabase proje adresi/,
       url,
     );
@@ -68,26 +70,27 @@ test('geçersiz/yanlış adresler reddedilir (http, başka alan adı, ref yok)',
 
 test('yerel Supabase yığını (localhost) test projesi olarak kabul edilir', () => {
   const env = { ...GOOD_ENV, STAGING_URL: 'http://127.0.0.1:54321', STAGING_PROJECT_REF: 'local' };
-  assert.equal(guard.assertSafeStagingEnv(env, { productionUrls: PROD }).ref, 'local');
+  assert.equal(assertSafe(env, { productionUrls: PROD }).ref, 'local');
 });
 
 test('anahtar türleri karışırsa reddedilir (secret anon yerine, publishable service yerine, aynı anahtar)', () => {
-  assert.throws(() => guard.assertSafeStagingEnv({ ...GOOD_ENV, STAGING_ANON_KEY: 'sb_secret_x' }), /gizli/);
-  assert.throws(() => guard.assertSafeStagingEnv({ ...GOOD_ENV, STAGING_SERVICE_ROLE_KEY: 'sb_publishable_x' }), /publishable/);
-  assert.throws(() => guard.assertSafeStagingEnv({ ...GOOD_ENV, STAGING_ANON_KEY: 'unknown-key-1', STAGING_SERVICE_ROLE_KEY: 'unknown-key-1' }), /aynı olamaz/);
+  assert.throws(() => assertSafe({ ...GOOD_ENV, STAGING_ANON_KEY: 'sb_secret_x' }), /gizli/);
+  assert.throws(() => assertSafe({ ...GOOD_ENV, STAGING_SERVICE_ROLE_KEY: 'sb_publishable_x' }), /publishable/);
+  // Tanınmayan anahtar biçimi artık reddedilir (doğrulanamayan anahtar kabul edilmez).
+  assert.throws(() => assertSafe({ ...GOOD_ENV, STAGING_ANON_KEY: 'unknown-key-1', STAGING_SERVICE_ROLE_KEY: 'unknown-key-1' }), /doğrulanamadı/);
 });
 
 test('JWT biçimli anahtarların rolü ayırt edilir', () => {
   const jwt = (role) => `h.${Buffer.from(JSON.stringify({ role })).toString('base64url')}.s`;
   assert.equal(guard.keyKind(jwt('anon')), 'public');
   assert.equal(guard.keyKind(jwt('service_role')), 'secret');
-  assert.throws(() => guard.assertSafeStagingEnv({ ...GOOD_ENV, STAGING_ANON_KEY: jwt('service_role') }), /gizli/);
+  assert.throws(() => assertSafe({ ...GOOD_ENV, STAGING_ANON_KEY: jwt('service_role') }), /gizli/);
 });
 
 test('hata mesajları ve redact anahtar değerlerini sızdırmaz', () => {
   const env = { ...GOOD_ENV, STAGING_URL: 'https://prodprojectref12345.supabase.co', STAGING_PROJECT_REF: 'prodprojectref12345' };
   try {
-    guard.assertSafeStagingEnv(env, { productionUrls: PROD });
+    assertSafe(env, { productionUrls: PROD });
     assert.fail('reddedilmeliydi');
   } catch (error) {
     assert.doesNotMatch(error.message, /sb_publishable|sb_secret|prodprojectref/);

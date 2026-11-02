@@ -27,7 +27,7 @@ const root = path.resolve(__dirname, '..', '..');
 
 let target;
 try {
-  target = guard.assertSafeStagingEnv(process.env, { productionUrls: guard.readProductionUrls(root) });
+  target = guard.assertSafeStagingEnv(process.env); // ilk iş: ağ/kullanıcı/derleme öncesi, çalışma klasöründen bağımsız
 } catch (error) {
   console.error('DURDURULDU: ' + guard.redact(error.message));
   process.exit(2);

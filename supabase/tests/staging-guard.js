@@ -4,6 +4,7 @@
 // yazmasını engellemek. Ağ isteği atmaz; yalnızca ortam değişkenlerini ve dosya içeriğini inceler.
 // Anahtarları ASLA loglamaz (hata mesajlarında değerler yer almaz).
 
+const childProcess = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
@@ -46,28 +47,104 @@ function keyKind(key) {
   return 'unknown';
 }
 
-/** Uygulamanın bağlandığı üretim adresleri: kök .env dosyası ve isteğe bağlı PRODUCTION_SUPABASE_URL. */
-function readProductionUrls(rootDir, env = process.env) {
-  const urls = [];
+// ─── Üretim adresinin bulunması (ÇALIŞMA KLASÖRÜNDEN BAĞIMSIZ, fail-closed) ───────────────────────────
+//
+// Üretim adresi şu kaynaklardan toplanır; HEPSİ staging adresiyle karşılaştırılır:
+//  1. PRODUCTION_SUPABASE_URL / PRODUCTION_PROJECT_REF ortam değişkenleri,
+//  2. bu dosyanın bulunduğu deponun kökündeki .env, .env.local, .env.production,
+//  3. git'in ORTAK dizininden bulunan ana çalışma klasörünün aynı dosyaları (ek worktree'lerde .env yoktur).
+// Hiçbir kaynaktan üretim adresi belirlenemiyorsa karşılaştırma yapılamaz → test BAŞLAMAZ.
+// process.cwd() hiçbir yerde kullanılmaz.
+
+const ENV_FILES = ['.env', '.env.local', '.env.production'];
+
+function parseEnvFile(text) {
+  const match = String(text).match(/^\s*(?:export\s+)?EXPO_PUBLIC_SUPABASE_URL\s*=\s*(.*)$/m);
+  if (!match) return { found: false, value: null };
+  const value = match[1].trim().replace(/^['"]|['"]$/g, '').trim();
+  return { found: true, value: value || null };
+}
+
+/** Ana çalışma klasörü: git ortak dizininin (.git) üst klasörü. Bulunamazsa null (başka kaynaklara bakılır). */
+function mainWorktreeRoot(fromDir, run = childProcess.execFileSync) {
   try {
-    const file = fs.readFileSync(path.join(rootDir, '.env'), 'utf8');
-    const match = file.match(/^EXPO_PUBLIC_SUPABASE_URL=(.+)$/m);
-    if (match) urls.push(stripSlash(match[1]));
-  } catch { /* .env yok */ }
-  if (env.PRODUCTION_SUPABASE_URL) urls.push(stripSlash(env.PRODUCTION_SUPABASE_URL));
-  return urls.filter(Boolean);
+    const out = String(run('git', ['rev-parse', '--git-common-dir'], { cwd: fromDir, encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] })).trim();
+    if (!out) return null;
+    const common = path.resolve(fromDir, out);
+    return path.basename(common) === '.git' ? path.dirname(common) : null;
+  } catch { return null; }
 }
 
 /**
- * Ortamı doğrular; güvenliyse { url, ref } döner, değilse GuardError fırlatır.
- * Hata mesajları değer içermez.
+ * Üretim adreslerini bulur. Dönen { urls, refs, problems }: problems boş değilse (okunamayan/bozuk .env) çağıran DURMALIDIR.
+ * Test için fs, env, aranacak klasörler ve git çağrısı enjekte edilebilir.
  */
-function assertSafeStagingEnv(env, { productionUrls = [] } = {}) {
+function discoverProduction({
+  env = process.env,
+  guardDir = __dirname,
+  searchDirs = null,
+  readFile = (file) => fs.readFileSync(file, 'utf8'),
+  exists = (file) => fs.existsSync(file),
+  runGit = childProcess.execFileSync,
+} = {}) {
+  const urls = [];
+  const refs = [];
+  const problems = [];
+  if (env.PRODUCTION_SUPABASE_URL && stripSlash(env.PRODUCTION_SUPABASE_URL)) urls.push(stripSlash(env.PRODUCTION_SUPABASE_URL));
+  if (env.PRODUCTION_PROJECT_REF && String(env.PRODUCTION_PROJECT_REF).trim()) refs.push(String(env.PRODUCTION_PROJECT_REF).trim().toLowerCase());
+
+  const dirs = searchDirs ?? [path.resolve(guardDir, '..', '..'), mainWorktreeRoot(guardDir, runGit)].filter(Boolean);
+  for (const dir of new Set(dirs.map((d) => path.resolve(d)))) {
+    for (const name of ENV_FILES) {
+      const file = path.join(dir, name);
+      let text;
+      try {
+        if (!exists(file)) continue;
+        text = readFile(file);
+      } catch {
+        problems.push(name + ' okunamadı.');
+        continue;
+      }
+      const parsed = parseEnvFile(text);
+      if (!parsed.found) continue;
+      if (!parsed.value) { problems.push(name + ' içindeki EXPO_PUBLIC_SUPABASE_URL boş.'); continue; }
+      urls.push(stripSlash(parsed.value));
+    }
+  }
+  return { urls: Array.from(new Set(urls.filter(Boolean))), refs: Array.from(new Set(refs)), problems };
+}
+
+/** Geriye dönük uyumluluk: yalnızca adres listesi. */
+function readProductionUrls(rootDir, env = process.env) {
+  return discoverProduction({ env, searchDirs: [rootDir] }).urls;
+}
+
+/**
+ * Ortamı doğrular; güvenliyse { url, ref } döner, değilse GuardError fırlatır (hata mesajları değer İÇERMEZ).
+ * Üretim adresi/referansı varsayılan olarak ÇALIŞMA KLASÖRÜNDEN BAĞIMSIZ bulunur. FAIL-CLOSED: üretim adresi belirlenemezse,
+ * .env bozuksa, referans/URL eksik veya uyumsuzsa, anahtar türü doğrulanamazsa test başlamaz.
+ * Bu işlev ağ bağlantısı kurmaz ve kullanıcı oluşturmaz; tüm staging betiklerinde İLK iş olarak çağrılmalıdır.
+ */
+function assertSafeStagingEnv(env, { production = null, productionUrls = null } = {}) {
+  const prod = production ?? (productionUrls
+    ? { urls: productionUrls.map(stripSlash).filter(Boolean), refs: [], problems: [] }
+    : discoverProduction({ env }));
+
+  if (prod.problems.length) throw new GuardError('Üretim yapılandırması okunamadı (' + prod.problems.join(' ') + '). Güvenli tarafta durduruldu.');
+  const prodRefs = new Set(prod.refs);
+  for (const prodUrl of prod.urls) {
+    const ref = parseProjectRef(prodUrl);
+    if (ref) prodRefs.add(ref);
+  }
+  if (prod.urls.length === 0 && prodRefs.size === 0) {
+    throw new GuardError('Üretim proje adresi/referansı belirlenemedi; staging adresiyle karşılaştırılamadığı için durduruldu. PRODUCTION_SUPABASE_URL (veya PRODUCTION_PROJECT_REF) verin.');
+  }
+
   const need = ['STAGING_URL', 'STAGING_PROJECT_REF', 'STAGING_ANON_KEY', 'STAGING_SERVICE_ROLE_KEY', 'STAGING_CONFIRM'];
   const missing = need.filter((name) => !env[name] || !String(env[name]).trim());
-  if (missing.length) throw new GuardError(`Eksik ortam değişkenleri: ${missing.join(', ')}. Test projesi açıkça tanımlanmalı.`);
+  if (missing.length) throw new GuardError('Eksik ortam değişkenleri: ' + missing.join(', ') + '. Test projesi açıkça tanımlanmalı.');
 
-  if (env.STAGING_CONFIRM !== CONFIRM_VALUE) throw new GuardError(`STAGING_CONFIRM=${CONFIRM_VALUE} ayarlanmalı.`);
+  if (env.STAGING_CONFIRM !== CONFIRM_VALUE) throw new GuardError('STAGING_CONFIRM=' + CONFIRM_VALUE + ' ayarlanmalı.');
 
   const url = stripSlash(env.STAGING_URL);
   const ref = parseProjectRef(url);
@@ -78,18 +155,17 @@ function assertSafeStagingEnv(env, { productionUrls = [] } = {}) {
     throw new GuardError('STAGING_PROJECT_REF, STAGING_URL içindeki proje referansıyla eşleşmiyor.');
   }
 
-  for (const prod of productionUrls) {
-    const prodRef = parseProjectRef(prod);
-    if (stripSlash(prod).toLowerCase() === url.toLowerCase() || (prodRef && prodRef === ref && ref !== 'local')) {
-      throw new GuardError('STAGING_URL üretim projesiyle aynı. Hiçbir istek gönderilmedi.');
-    }
+  for (const prodUrl of prod.urls) {
+    if (prodUrl.toLowerCase() === url.toLowerCase()) throw new GuardError('STAGING_URL üretim projesiyle aynı. Hiçbir istek gönderilmedi.');
   }
+  if (ref !== 'local' && prodRefs.has(ref)) throw new GuardError('STAGING proje referansı üretim projesiyle aynı. Hiçbir istek gönderilmedi.');
 
-  if (keyKind(env.STAGING_ANON_KEY) === 'secret') {
-    throw new GuardError('STAGING_ANON_KEY bir gizli (service_role/secret) anahtar gibi görünüyor; publishable anahtar gerekli.');
+  // Anahtar türleri DOĞRULANAMIYORSA (tanınmayan biçim) da reddedilir.
+  if (keyKind(env.STAGING_ANON_KEY) !== 'public') {
+    throw new GuardError('STAGING_ANON_KEY publishable/anon anahtar olarak doğrulanamadı (gizli ya da tanınmayan biçim).');
   }
-  if (keyKind(env.STAGING_SERVICE_ROLE_KEY) === 'public') {
-    throw new GuardError('STAGING_SERVICE_ROLE_KEY bir publishable anahtar gibi görünüyor; test kullanıcıları için service_role/secret gerekli.');
+  if (keyKind(env.STAGING_SERVICE_ROLE_KEY) !== 'secret') {
+    throw new GuardError('STAGING_SERVICE_ROLE_KEY service_role/secret anahtar olarak doğrulanamadı (publishable ya da tanınmayan biçim).');
   }
   if (String(env.STAGING_ANON_KEY).trim() === String(env.STAGING_SERVICE_ROLE_KEY).trim()) {
     throw new GuardError('Publishable ve service_role anahtarları aynı olamaz.');
@@ -125,5 +201,5 @@ function redact(text, env = process.env) {
 
 module.exports = {
   GuardError, CONFIRM_VALUE, TEST_EMAIL_DOMAIN,
-  assertSafeStagingEnv, assertNoRealUsers, readProductionUrls, parseProjectRef, keyKind, redact,
+  assertSafeStagingEnv, assertNoRealUsers, discoverProduction, mainWorktreeRoot, parseEnvFile, readProductionUrls, parseProjectRef, keyKind, redact,
 };
