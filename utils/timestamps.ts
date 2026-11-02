@@ -13,3 +13,14 @@ export function normalizeTimestamp(value: unknown, now: number = Date.now()): nu
   if (!Number.isFinite(number) || number < MIN_VALID_TIMESTAMP) return undefined;
   return number > now + MAX_FUTURE_SKEW_MS ? now : number;
 }
+
+/**
+ * Görev/rozet hesapları için katı zaman damgası: geçersiz VEYA gelecekteki (şimdi + 5 dk üstü) damgalar
+ * yok sayılır (undefined). Senkron birleştirmesindeki `normalizeTimestamp` ileri damgayı "şimdi"ye çeker;
+ * ama bozuk/ileri tarihli bir kayıt bugünün ilerlemesi gibi sayılmamalıdır.
+ */
+export function strictTimestamp(value: unknown, now: number = Date.now()): number | undefined {
+  const timestamp = normalizeTimestamp(value, Number.MAX_SAFE_INTEGER);
+  if (timestamp === undefined || timestamp > now + MAX_FUTURE_SKEW_MS) return undefined;
+  return timestamp;
+}

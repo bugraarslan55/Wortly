@@ -1,4 +1,5 @@
 import { QuizSession, Word } from '../types';
+import { strictTimestamp } from './timestamps';
 import { getReviewState, ReviewStateMap } from './spaced-repetition';
 import { ScenarioResult } from './learning-analysis';
 
@@ -34,22 +35,33 @@ export function getActiveStreak(
     : 0;
 }
 
-/** Bugün en az bir kez tekrar edilen benzersiz kelime sayısı (konu ve kişisel kelimeler). */
+/** Bir zaman damgasının hangi takvim gününe düştüğünü söyleyen işlev (varsayılan: cihaz yerel günü). */
+export type DayKeyOf = (ms: number) => string;
+
+/**
+ * Bugün en az bir kez tekrar edilen benzersiz kelime sayısı (konu ve kişisel kelimeler).
+ * Ana Sayfa günlük hedef halkası ve Günlük Görevler AYNI işlevi ve AYNI gün tanımını kullanır
+ * (`dayKeyOf`: varsayılan cihaz yerel günü; Türkiye'de yerel gün Türkiye günüdür). Geçersiz veya
+ * ileri tarihli damgalar yok sayılır (`strictTimestamp`); bozuk kayıt bugünün ilerlemesi sayılmaz.
+ */
 export function countReviewedToday(
   reviewStates: ReviewStateMap | null | undefined,
   words: Word[] | null | undefined,
   now: Date = new Date(),
+  dayKeyOf: DayKeyOf = toLocalDateKey,
 ): number {
-  const today = toLocalDateKey(now);
+  const nowMs = now.getTime();
+  const today = dayKeyOf(nowMs);
   const seen = new Set<string>();
   for (const [id, state] of Object.entries(reviewStates ?? {})) {
-    if (state?.lastReviewed && toLocalDateKey(state.lastReviewed) === today) seen.add(id);
+    const ts = strictTimestamp(state?.lastReviewed, nowMs);
+    if (ts !== undefined && dayKeyOf(ts) === today) seen.add(id);
   }
   // Başka cihazda çalışılan kişisel kelimeler buluttan lastReviewed ile gelir.
   for (const word of words ?? []) {
-    if (word.isCustom && word.lastReviewed && toLocalDateKey(word.lastReviewed) === today) {
-      seen.add(word.id);
-    }
+    if (!word?.isCustom) continue;
+    const ts = strictTimestamp(word.lastReviewed, nowMs);
+    if (ts !== undefined && dayKeyOf(ts) === today) seen.add(word.id);
   }
   return seen.size;
 }
