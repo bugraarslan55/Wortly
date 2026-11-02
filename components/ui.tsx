@@ -105,7 +105,7 @@ export function PrimaryButton({ label, onPress, disabled, loading, icon, accessi
       accessibilityState={{ disabled: !!inactive, busy: !!loading }}
     >
       <Text style={styles.primaryButtonText} numberOfLines={1}>{label}</Text>
-      {icon && <AppIcon name={icon} size={15} color={colors.primary} />}
+      {icon && <AppIcon name={icon} size={15} color={colors.onGolden} />}
     </TouchableOpacity>
   );
 }

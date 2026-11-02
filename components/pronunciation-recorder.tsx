@@ -258,8 +258,8 @@ export function PronunciationRecorder({ word }: { word: Word }) {
             accessibilityRole="button"
             accessibilityLabel="Kaydı durdur"
           >
-            <AppIcon name="stop.fill" size={16} color={colors.primary} />
-            <Text style={styles.primaryBtnText}>Kaydı Durdur</Text>
+            <AppIcon name="stop.fill" size={16} color={colors.onErrorContainer} />
+            <Text style={[styles.primaryBtnText, { color: colors.onErrorContainer }]}>Kaydı Durdur</Text>
           </TouchableOpacity>
         </>
       ) : (
@@ -278,7 +278,7 @@ export function PronunciationRecorder({ word }: { word: Word }) {
             accessibilityState={{ disabled: controlsBusy }}
             accessibilityLabel={state.uri ? 'Telaffuzumu yeniden kaydet' : 'Telaffuzumu kaydet'}
           >
-            <AppIcon name="mic.fill" size={18} color={colors.primary} />
+            <AppIcon name="mic.fill" size={18} color={colors.onGolden} />
             <Text style={styles.primaryBtnText}>{state.uri ? 'Yeniden Kaydet' : 'Telaffuzumu Kaydet'}</Text>
           </TouchableOpacity>
 

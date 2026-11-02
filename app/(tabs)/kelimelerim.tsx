@@ -66,7 +66,7 @@ export default function KelimelerimScreen() {
             accessibilityRole="button"
             accessibilityLabel="Yeni kelime ekle"
           >
-            <AppIcon name="plus" size={16} color={colors.primary} />
+            <AppIcon name="plus" size={16} color={colors.onGolden} />
             <Text style={styles.addBtnText}>Ekle</Text>
           </TouchableOpacity>
         }

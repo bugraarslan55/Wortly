@@ -2,7 +2,7 @@ import React from 'react';
 import { ActivityIndicator, View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Spacing, BorderRadius, ThemeColors } from '../constants/theme';
+import { Spacing, BorderRadius, DarkColors, ThemeColors } from '../constants/theme';
 import { makeStyles, useColors } from '../hooks/use-theme';
 import { AppIcon } from '../components/app-icon';
 import { Card, IconTile, PrimaryButton, ProgressBar, SectionTitle } from '../components/ui';
@@ -12,7 +12,8 @@ import type { Recommendation } from '../utils/study-recommendations';
 
 const WEEKDAYS = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
 const MASTERY_LABELS = ['Yeni', 'Öğreniliyor', 'Bilinçli', 'Öğrenildi'];
-const masteryColors = (colors: ThemeColors) => [colors.outlineVariant, colors.secondaryFixedDim, colors.golden, colors.success];
+// "Yeni" düzeyi: koyu temada outlineVariant parça zemininde görünmez (1.5:1); orada daha açık outline kullanılır.
+const masteryColors = (colors: ThemeColors) => [colors === DarkColors ? colors.outline : colors.outlineVariant, colors.secondaryFixedDim, colors.golden, colors.success];
 const MAX_BAR_HEIGHT = 84;
 
 export default function AnalysisScreen() {
@@ -477,7 +478,7 @@ const useStyles = makeStyles(Colors => StyleSheet.create({
   chartValue: { fontSize: 12, fontWeight: '700', color: Colors.primary },
   chartTrack: { height: MAX_BAR_HEIGHT, justifyContent: 'flex-end', alignSelf: 'stretch', alignItems: 'center' },
   chartBar: { width: '70%', maxWidth: 28, borderRadius: 6, backgroundColor: Colors.secondaryFixedDim },
-  chartBarToday: { backgroundColor: Colors.navy },
+  chartBarToday: { backgroundColor: Colors.primary },
   chartLabel: { fontSize: 11, color: Colors.onSurfaceVariant },
   chartLabelToday: { fontWeight: '700', color: Colors.primary },
 

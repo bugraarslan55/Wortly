@@ -31,7 +31,7 @@ export function BadgeCard({ badge }: { badge: BadgeView }) {
         <IconTile name={badge.icon} size={52} tone={badge.earned ? 'gold' : 'soft'} />
         {!badge.earned && (
           <View style={styles.lock}>
-            <AppIcon name="lock.fill" size={11} color={colors.onPrimary} />
+            <AppIcon name="lock.fill" size={11} color={colors.onNavy} />
           </View>
         )}
       </View>

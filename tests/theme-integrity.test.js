@@ -62,6 +62,15 @@ test('kritik metin/zemin çiftleri iki temada da en az 4.5:1 kontrast verir', ()
   }
 });
 
+test('grafik/ilerleme renkleri koyu temada kart ve parça zemininde en az 3:1 (metin olmayan öğeler)', () => {
+  for (const token of ['secondaryFixedDim', 'golden', 'success', 'primary', 'outline']) {
+    for (const bg of ['surfaceContainerLowest', 'surfaceContainer']) {
+      const ratio = contrast(DarkColors[token], DarkColors[bg]);
+      assert.ok(ratio >= 3, `koyu tema: ${token} / ${bg} = ${ratio.toFixed(2)}:1`);
+    }
+  }
+});
+
 test('getCards: kart yüzeyi temaya uyar (koyu temada beyaz zemin yok)', () => {
   const light = getCards(LightColors);
   const dark = getCards(DarkColors);
