@@ -145,7 +145,7 @@ test('öğrenilen kelime sayısı mastery 3 olanları bir kez sayar', () => {
 });
 
 test('tamamlanan alıştırma = oturumlar + senaryo sonuçları; günlük hedef sınırları', () => {
-  assert.equal(stats.countCompletedExercises([1, 2], [3]), 3);
+  assert.equal(stats.countCompletedExercises(fakeSessions(2), fakeSessions(1)), 3);
   assert.equal(stats.countCompletedExercises(null, undefined), 0);
   assert.equal(stats.normalizeDailyGoal(undefined), 10);
   assert.equal(stats.normalizeDailyGoal(15), 15);
@@ -190,8 +190,8 @@ test('analiz: veri yokken uydurma istatistik üretmez', () => {
 
 test('analiz: flashcard başarıya girmez, yetersiz cevapta en zayıf alan yok', () => {
   const sessions = [
-    { id: '1', type: 'flashcard', wordIds: [], score: 0, total: 10, date: 1 },
-    { id: '2', type: 'yazma', wordIds: [], score: 1, total: 3, date: 2 },
+    { id: '1', type: 'flashcard', wordIds: [], score: 0, total: 10, date: Date.now() - 2000 },
+    { id: '2', type: 'yazma', wordIds: [], score: 1, total: 3, date: Date.now() - 1000 },
   ];
   const analysis = analyzeLearning({ sessions });
   assert.equal(analysis.weakestCategory, null); // yazma yalnızca 3 cevap (< 5)
@@ -202,7 +202,8 @@ test('analiz: flashcard başarıya girmez, yetersiz cevapta en zayıf alan yok',
 
 // ─── Oturum sayacı (100 sınırı) ─────────────────────────────────────────────
 
-const fakeSessions = (n) => Array.from({ length: n }, (_, i) => ({ id: String(i) }));
+// Tek 'tamamlanmış kayıt' tanımı artık tüm ekranlarda geçerli: puan/toplam ve geçerli tarih gerekir.
+const fakeSessions = (n) => Array.from({ length: n }, (_, i) => ({ id: String(i), score: 1, total: 1, date: Date.now() }));
 
 test('bulut toplamı biliniyorsa yerel 100 sınırı sayacı kısıtlamaz', () => {
   const summary = stats.summarizeCompletedExercises(250, fakeSessions(100), fakeSessions(5));

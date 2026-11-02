@@ -1,5 +1,6 @@
 import { ExerciseType, QuizSession, Word } from '../types';
 import { getNextReviewAt, getReviewState, ReviewStateMap } from './spaced-repetition';
+import { completedRecords } from './progress-stats';
 
 // Saf analiz fonksiyonları: ekran, depolama veya ağ bağımlılığı yoktur.
 // Eksik/bozuk veri hata fırlatmaz; boş ve güvenli sonuç döndürülür.
@@ -77,7 +78,7 @@ const isCount = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0;
 
 /** Geçerli bir sonuçsa [doğru, toplam] döndürür; bozuk veride null. */
-function readScore(score: unknown, total: unknown): { correct: number; total: number } | null {
+export function readScore(score: unknown, total: unknown): { correct: number; total: number } | null {
   if (!isCount(score) || !isCount(total) || total <= 0) return null;
   return { correct: Math.min(score, total), total };
 }
@@ -85,13 +86,14 @@ function readScore(score: unknown, total: unknown): { correct: number; total: nu
 const toPercent = (correct: number, total: number): number | null =>
   total > 0 ? Math.round((correct / total) * 100) : null;
 
-export function countStudySessions(sessions?: QuizSession[] | null): number {
-  return Array.isArray(sessions) ? sessions.length : 0;
+export function countStudySessions(sessions?: QuizSession[] | null, now: number = Date.now()): number {
+  return completedRecords(sessions, now).length;
 }
 
 export function calculateCategoryStats(
   sessions?: QuizSession[] | null,
   scenarioResults?: ScenarioResult[] | null,
+  now: number = Date.now(),
 ): CategoryStats[] {
   const acc = new Map<AnalysisCategory, { sessions: number; correct: number; total: number }>(
     ANALYSIS_CATEGORIES.map(category => [category, { sessions: 0, correct: 0, total: 0 }]),
@@ -106,12 +108,13 @@ export function calculateCategoryStats(
     entry.total += result.total;
   };
 
-  for (const session of Array.isArray(sessions) ? sessions : []) {
+  // Yalnızca geçerli, tamamlanmış ve tekilleştirilmiş kayıtlar hesaplanır (tüm ekranlarla aynı tanım).
+  for (const session of completedRecords(sessions, now)) {
     const category = session ? CATEGORY_BY_EXERCISE[session.type] : undefined;
     if (category) add(category, session.score, session.total);
   }
-  for (const result of Array.isArray(scenarioResults) ? scenarioResults : []) {
-    if (result) add('senaryo', result.score, result.total);
+  for (const result of completedRecords(scenarioResults, now)) {
+    add('senaryo', result.score, result.total);
   }
 
   return ANALYSIS_CATEGORIES.map(category => {
@@ -124,8 +127,9 @@ export function calculateCategoryStats(
 export function calculateOverallSuccessRate(
   sessions?: QuizSession[] | null,
   scenarioResults?: ScenarioResult[] | null,
+  now: number = Date.now(),
 ): number | null {
-  const stats = calculateCategoryStats(sessions, scenarioResults);
+  const stats = calculateCategoryStats(sessions, scenarioResults, now);
   const correct = stats.reduce((sum, item) => sum + item.correct, 0);
   const total = stats.reduce((sum, item) => sum + item.total, 0);
   return toPercent(correct, total);
@@ -206,13 +210,14 @@ export function recommendDailyPlan(
 export function analyzeLearning(input: LearningAnalysisInput = {}): LearningAnalysis {
   const { sessions, words, reviewStates, scenarioResults, dailyGoal, now } = input;
 
-  const categoryStats = calculateCategoryStats(sessions, scenarioResults);
+  const clock = typeof now === 'number' ? now : Date.now();
+  const categoryStats = calculateCategoryStats(sessions, scenarioResults, clock);
   const dueWords = findDueWords(words, reviewStates, now);
   const weakestCategory = findWeakestCategory(categoryStats);
 
   return {
-    totalSessions: countStudySessions(sessions) + (Array.isArray(scenarioResults) ? scenarioResults.length : 0),
-    overallSuccessRate: calculateOverallSuccessRate(sessions, scenarioResults),
+    totalSessions: countStudySessions(sessions, clock) + completedRecords(scenarioResults, clock).length,
+    overallSuccessRate: calculateOverallSuccessRate(sessions, scenarioResults, clock),
     categoryStats,
     dueWords,
     weakestCategory,

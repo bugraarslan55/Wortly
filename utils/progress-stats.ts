@@ -1,7 +1,8 @@
 import { QuizSession, Word } from '../types';
 import { strictTimestamp } from './timestamps';
 import { getReviewState, ReviewStateMap } from './spaced-repetition';
-import { ScenarioResult } from './learning-analysis';
+import type { ScenarioResult } from './learning-analysis';
+import { uniqueById } from './unique';
 
 // Ana Sayfa ve Profil aynı gerçek veriyi buradan okur. Saf fonksiyonlardır:
 // depolama veya ağ bağımlılığı yoktur, eksik veri sıfır/boş sonuç verir.
@@ -100,6 +101,56 @@ export function countLearnedWords(
   return learned.size;
 }
 
+/**
+ * Öğrenme seviyesi dağılımı: çalışılmış (inceleme kaydı olan) ve kişisel kelimeler. `counts[3]` TAM OLARAK
+ * `countLearnedWords` ile aynı kümeyi sayar (aynı kurallar), bu yüzden "Öğrenilen kelime" her ekranda aynıdır.
+ * Hiç çalışılmamış konu kelimeleri dağılıma girmez (binlerce "yeni" kelime anlamsız olurdu).
+ * Geçersiz seviye değerleri (ör. bozuk eski veri) yok sayılır.
+ */
+export function masteryDistribution(
+  reviewStates: ReviewStateMap | null | undefined,
+  words: Word[] | null | undefined,
+  isKnownId?: (id: string) => boolean,
+): { counts: [number, number, number, number]; total: number } {
+  const states = reviewStates ?? {};
+  const counts: [number, number, number, number] = [0, 0, 0, 0];
+  const seen = new Set<string>();
+  const add = (id: string, level: unknown) => {
+    if (seen.has(id) || !Number.isInteger(level) || (level as number) < 0 || (level as number) > 3) return;
+    seen.add(id);
+    counts[level as 0 | 1 | 2 | 3] += 1;
+  };
+  for (const [id, state] of Object.entries(states)) {
+    if (!isKnownId || isKnownId(id)) add(id, state?.masteryLevel);
+  }
+  for (const word of words ?? []) {
+    if (word?.isCustom && !(word.id in states)) add(word.id, getReviewState(word, states).masteryLevel);
+  }
+  return { counts, total: counts[0] + counts[1] + counts[2] + counts[3] };
+}
+
+/**
+ * TEK "tamamlanmış kayıt" tanımı (Ana Sayfa, Profil, Analiz, Başarılarım ve Günlük Görevler aynısını kullanır):
+ * tamsayı puan ve toplam, toplam >= 1, 0 <= puan <= toplam ve geçerli (gelecekte olmayan) bir tarih.
+ * Eksik/bozuk kayıtlar (puansız, toplamı 0, puanı toplamdan büyük, tarihsiz, çok eski ya da ileri tarihli)
+ * tamamlanmış sayılmaz. Kayıtlar silinmez veya dönüştürülmez; yalnızca sayımda yok sayılır.
+ */
+export function isCompletedRecord(record: unknown, now: number = Date.now()): boolean {
+  if (!record || typeof record !== 'object') return false;
+  const { score, total, date } = record as { score?: unknown; total?: unknown; date?: unknown };
+  if (!Number.isInteger(score) || !Number.isInteger(total)) return false;
+  const s = score as number;
+  const t = total as number;
+  if (t < 1 || s < 0 || s > t) return false;
+  return strictTimestamp(date, now) !== undefined;
+}
+
+/** Geçerli tamamlanmış kayıtlar, kimliğe göre tekilleştirilmiş (aynı kayıt iki kez sayılmaz). */
+export function completedRecords<T extends { id?: string }>(items: readonly T[] | null | undefined, now: number = Date.now()): T[] {
+  if (!Array.isArray(items)) return [];
+  return uniqueById(items.filter(item => isCompletedRecord(item, now)));
+}
+
 /** Cihazda tutulan en fazla oturum / senaryo sonucu sayısı (yerel liste sınırı). */
 export const LOCAL_SESSION_LIMIT = 100;
 export const LOCAL_SCENARIO_LIMIT = 100;
@@ -121,13 +172,18 @@ export function summarizeCompletedExercises(
   knownSessionTotal: number | null | undefined,
   sessions: QuizSession[] | null | undefined,
   scenarioResults: ScenarioResult[] | null | undefined,
+  now: number = Date.now(),
 ): ExerciseCountSummary {
-  const localSessions = Array.isArray(sessions) ? sessions.length : 0;
-  const localScenarios = Array.isArray(scenarioResults) ? scenarioResults.length : 0;
+  // Yalnızca geçerli, tamamlanmış ve tekilleştirilmiş kayıtlar sayılır. "Sınırda mı" kararı ham listenin
+  // uzunluğuna bakar (yerel 100 kayıt sınırı ham listeye uygulanır).
+  const localSessions = completedRecords(sessions, now).length;
+  const localScenarios = completedRecords(scenarioResults, now).length;
+  const rawSessions = uniqueById(sessions).length;
+  const rawScenarios = uniqueById(scenarioResults).length;
   const sessionsKnown = typeof knownSessionTotal === 'number' && knownSessionTotal >= 0;
   const sessionCount = sessionsKnown ? Math.max(knownSessionTotal as number, localSessions) : localSessions;
-  const sessionsExact = sessionsKnown || localSessions < LOCAL_SESSION_LIMIT;
-  const scenariosExact = localScenarios < LOCAL_SCENARIO_LIMIT;
+  const sessionsExact = sessionsKnown || rawSessions < LOCAL_SESSION_LIMIT;
+  const scenariosExact = rawScenarios < LOCAL_SCENARIO_LIMIT;
   return { count: sessionCount + localScenarios, exact: sessionsExact && scenariosExact };
 }
 
@@ -135,9 +191,9 @@ export function summarizeCompletedExercises(
 export function countCompletedExercises(
   sessions: QuizSession[] | null | undefined,
   scenarioResults: ScenarioResult[] | null | undefined,
+  now: number = Date.now(),
 ): number {
-  return (Array.isArray(sessions) ? sessions.length : 0)
-    + (Array.isArray(scenarioResults) ? scenarioResults.length : 0);
+  return completedRecords(sessions, now).length + completedRecords(scenarioResults, now).length;
 }
 
 /** Profil/ana sayfada kullanılan sınırlandırılmış günlük hedef. */
