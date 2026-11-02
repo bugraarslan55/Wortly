@@ -165,13 +165,15 @@ export interface ExerciseCountSummary {
  * Tamamlanan alıştırma toplamı.
  * - Oturumlar: buluttan okunan gerçek toplam (`knownSessionTotal`) biliniyorsa o; bilinmiyorsa
  *   yerel liste, ve liste sınıra ulaştıysa "en az" (exact=false).
- * - Senaryo sonuçları yalnızca cihazda ve en fazla 100 tutulur; sınıra ulaştıysa exact=false.
+ * - Senaryo sonuçları: özellik bayrağı açıkken bulut toplamı (`knownScenarioTotal`) bilinir; aksi halde
+ *   yalnızca cihazda ve en fazla 100 tutulur, sınıra ulaştıysa exact=false.
  * Bilinmeyen kısım için sayı uydurulmaz.
  */
 export function summarizeCompletedExercises(
   knownSessionTotal: number | null | undefined,
   sessions: QuizSession[] | null | undefined,
   scenarioResults: ScenarioResult[] | null | undefined,
+  knownScenarioTotal?: number | null,
   now: number = Date.now(),
 ): ExerciseCountSummary {
   // Yalnızca geçerli, tamamlanmış ve tekilleştirilmiş kayıtlar sayılır. "Sınırda mı" kararı ham listenin
@@ -183,8 +185,10 @@ export function summarizeCompletedExercises(
   const sessionsKnown = typeof knownSessionTotal === 'number' && knownSessionTotal >= 0;
   const sessionCount = sessionsKnown ? Math.max(knownSessionTotal as number, localSessions) : localSessions;
   const sessionsExact = sessionsKnown || rawSessions < LOCAL_SESSION_LIMIT;
-  const scenariosExact = rawScenarios < LOCAL_SCENARIO_LIMIT;
-  return { count: sessionCount + localScenarios, exact: sessionsExact && scenariosExact };
+  const scenariosKnown = typeof knownScenarioTotal === 'number' && knownScenarioTotal >= 0;
+  const scenarioCount = scenariosKnown ? Math.max(knownScenarioTotal as number, localScenarios) : localScenarios;
+  const scenariosExact = scenariosKnown || rawScenarios < LOCAL_SCENARIO_LIMIT;
+  return { count: sessionCount + scenarioCount, exact: sessionsExact && scenariosExact };
 }
 
 /** Tamamlanan alıştırma/çalışma oturumu: kayıtlı oturumlar + senaryo sonuçları. */

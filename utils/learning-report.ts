@@ -46,6 +46,8 @@ export interface ReportInput {
   isKnownWordId?: (id: string) => boolean;
   /** Buluttan bilinen gerçek oturum toplamı (varsa). */
   knownSessionTotal?: number | null;
+  /** Buluttan bilinen gerçek senaryo sonucu toplamı (yalnızca öğrenme senkronu açık ve doğrulanmışsa). */
+  knownScenarioTotal?: number | null;
   scenarios: readonly Scenario[];
 }
 
@@ -224,7 +226,7 @@ export function buildLearningReport(input: ReportInput): LearningReport {
   const streak = getActiveStreak(input.profile?.streak, input.profile?.lastStudyDate, new Date(now));
   const goalTarget = normalizeDailyGoal(input.profile?.dailyGoal);
   const goalDone = countReviewedToday(reviewStates, words, new Date(now), dayOf);
-  const completed = summarizeCompletedExercises(input.knownSessionTotal, input.sessions, input.scenarioResults, now);
+  const completed = summarizeCompletedExercises(input.knownSessionTotal, input.sessions, input.scenarioResults, input.knownScenarioTotal ?? null, now);
 
   // ── Haftalık etkinlik
   const completedExercises = collectCompletedExercises(snapshot);

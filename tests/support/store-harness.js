@@ -15,6 +15,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const ts = require(path.join(ROOT, 'node_modules', 'typescript'));
 
 // ─── .ts yükleyici ───────────────────────────────────────────────────────────
+const transpileCache = new Map();
 let installed = false;
 let current = null; // etkin dünya (disk + bulut)
 
@@ -24,12 +25,19 @@ function install() {
   globalThis.__DEV__ = false;
 
   Module._extensions['.ts'] = (module, filename) => {
+    // Dönüştürme sonucu kaynak metne göre önbelleğe alınır (her "boot" modülleri YENİDEN yükler ama yeniden derlemez):
+    // davranış aynıdır, yalnızca yüzlerce yeniden başlatma yapan testler hızlanır.
     const source = fs.readFileSync(filename, 'utf8');
-    const output = ts.transpileModule(source, {
-      fileName: filename,
-      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true },
-    }).outputText;
-    module._compile(output, filename);
+    let cached = transpileCache.get(filename);
+    if (!cached || cached.source !== source) {
+      const output = ts.transpileModule(source, {
+        fileName: filename,
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true },
+      }).outputText;
+      cached = { source, output };
+      transpileCache.set(filename, cached);
+    }
+    module._compile(cached.output, filename);
   };
 
   const originalLoad = Module._load;
@@ -85,8 +93,13 @@ function createCloud() {
   return {
     session: null,           // oturumdaki kullanıcı kimliği
     online: true,
-    tables: { user_words: new Map(), study_sessions: new Map(), profiles: new Map() },
+    tables: {
+      user_words: new Map(), study_sessions: new Map(), profiles: new Map(),
+      user_word_progress: new Map(), scenario_results: new Map(), // öğrenme senkronu tabloları (yalnızca bayrak açıkken sorgulanmalı)
+    },
     calls: [],               // { table, op, userId, ids } — ağa giden her yazma kaydedilir
+    requests: [],            // { table, op, userId } — ağa giden HER istek (okuma dahil); bayrak kapalıyken yeni tablolara istek olmadığını doğrular
+    failTables: null,        // Set<string>: bu tablolara istekler hata verir
     failWrites: false,
     gate: null,              // Promise ise her bulut isteği çözülene kadar bekler (zamanlayıcısız, belirlenimci yarış testleri için)
     delayMs: 0,              // her bulut isteğine eklenen gecikme (yarış testleri için)
@@ -95,22 +108,25 @@ function createCloud() {
 
 function createSupabase(cloud) {
   const owner = (table, row) => (table === 'profiles' ? row.id : row.user_id);
+  const keyOf = (table, row) => (table === 'user_word_progress' ? row.word_id : row.id);
 
   function builder(table) {
-    const q = { table, op: 'select', filters: [], opts: null, payload: null, single: false, order: null };
+    const q = { table, op: 'select', filters: [], opts: null, payload: null, single: false, order: [], range: null, upsertOpts: null };
     const exec = async () => {
       await tick();
       if (cloud.gate) await cloud.gate;
       if (cloud.delayMs) await new Promise(resolve => setTimeout(resolve, cloud.delayMs));
+      cloud.requests.push({ table, op: q.op, userId: cloud.session });
       if (!cloud.online) return { data: null, count: null, error: { message: 'çevrimdışı' } };
+      if (cloud.failTables && cloud.failTables.has(table)) return { data: null, count: null, error: { message: 'tablo hatası ' + table } };
       const store = cloud.tables[table];
       if (q.op === 'select') {
         let rows = [...store.values()].filter(row => q.filters.every(([col, value]) => row[col] === value));
-        if (q.order) {
-          const [col, asc] = q.order;
-          rows = rows.sort((a, b) => (a[col] > b[col] ? 1 : -1) * (asc ? 1 : -1));
+        for (const [col, asc] of [...q.order].reverse()) {
+          rows = rows.sort((a, b) => (a[col] === b[col] ? 0 : (a[col] > b[col] ? 1 : -1) * (asc ? 1 : -1)));
         }
         if (q.opts && q.opts.count === 'exact') return { data: null, count: rows.length, error: null };
+        if (q.range) rows = rows.slice(q.range[0], q.range[1] + 1);
         if (q.single) return { data: rows[0] ?? null, error: null };
         return { data: rows.map(row => ({ ...row })), error: null };
       }
@@ -118,11 +134,22 @@ function createSupabase(cloud) {
         if (cloud.failWrites) return { data: null, error: { message: 'yazma hatası' } };
         const rows = Array.isArray(q.payload) ? q.payload : [q.payload];
         if (rows.some(row => owner(table, row) !== cloud.session)) {
-          cloud.calls.push({ table, op: 'upsert-reddedildi', userId: cloud.session, ids: rows.map(r => r.id) });
+          cloud.calls.push({ table, op: 'upsert-reddedildi', userId: cloud.session, ids: rows.map(r => keyOf(table, r)) });
           return { data: null, error: { message: 'RLS: başka kullanıcı adına yazılamaz' } };
         }
-        for (const row of rows) store.set(row.id, { created_at: new Date().toISOString(), ...store.get(row.id), ...row });
-        cloud.calls.push({ table, op: 'upsert', userId: cloud.session, ids: rows.map(r => r.id) });
+        for (const row of rows) {
+          const id = keyOf(table, row);
+          const existing = store.get(id);
+          if (table === 'scenario_results' && existing) continue; // ON CONFLICT DO NOTHING (güncelleme yetkisi yok)
+          if (table === 'user_word_progress' && existing) {
+            // Sunucu tetikleyicisi: eski kayıt yeniyi ezmez.
+            const newer = Date.parse(row.last_reviewed) > Date.parse(existing.last_reviewed);
+            const same = Date.parse(row.last_reviewed) === Date.parse(existing.last_reviewed) && row.mastery_level > existing.mastery_level;
+            if (!newer && !same) continue;
+          }
+          store.set(id, { created_at: new Date().toISOString(), ...existing, ...row });
+        }
+        cloud.calls.push({ table, op: 'upsert', userId: cloud.session, ids: rows.map(r => keyOf(table, r)) });
         return { data: null, error: null };
       }
       if (q.op === 'delete') {
@@ -136,10 +163,11 @@ function createSupabase(cloud) {
     };
     const api = {
       select(_columns, opts) { if (q.op === 'select') q.opts = opts ?? null; return api; },
-      upsert(payload) { q.op = 'upsert'; q.payload = payload; return api; },
+      upsert(payload, opts) { q.op = 'upsert'; q.payload = payload; q.upsertOpts = opts ?? null; return api; },
+      range(from, to) { q.range = [from, to]; return api; },
       delete() { q.op = 'delete'; return api; },
       eq(col, value) { q.filters.push([col, value]); return api; },
-      order(col, options) { q.order = [col, options?.ascending !== false]; return api; },
+      order(col, options) { q.order.push([col, options?.ascending !== false]); return api; },
       maybeSingle() { q.single = true; return exec(); },
       then(resolve, reject) { return exec().then(resolve, reject); },
     };
@@ -163,7 +191,7 @@ function createWorld() {
     asyncStorage: null,
     supabase: createSupabase(cloud),
     /** Uygulamayı (yeniden) başlatır: modül önbelleği temizlenir, gerçek mağaza aynı disk ve bulutla yeniden yüklenir. */
-    boot() {
+    boot({ learningSync = null } = {}) {
       install();
       current = world;
       world.asyncStorage = createAsyncStorage(disk);
@@ -171,6 +199,9 @@ function createWorld() {
         if (key.startsWith(ROOT) && !key.includes(path.sep + 'node_modules' + path.sep)) delete require.cache[key];
       }
       const store = require(path.join(ROOT, 'store', 'index.ts'));
+      // Öğrenme senkronu bayrağı: null = gerçek varsayılan (env yok → KAPALI); true/false = test için zorla.
+      const flags = require(path.join(ROOT, 'utils', 'feature-flags.ts'));
+      flags.setLearningSyncOverride(learningSync);
       const ownership = require(path.join(ROOT, 'utils', 'data-ownership.ts'));
       const gate = require(path.join(ROOT, 'utils', 'access-gate.ts'));
       const isolation = require(path.join(ROOT, 'utils', 'data-isolation.ts'));
@@ -187,6 +218,16 @@ function createWorld() {
         async sync(userId) {
           await Promise.all([U.getState().syncProfile(userId), W.getState().syncWords(userId), S.getState().syncSessions(userId)]);
         },
+        /** Layout'taki gibi: yerel senaryo listesi bu kullanıcı için yüklenir. */
+        async loadScenarios(userId) {
+          await S.getState().loadScenarioResults(userId);
+        },
+        /** Layout'taki gibi öğrenme senkronu (bayrak kapalıysa iki çağrı da hiçbir şey yapmaz). */
+        async syncLearning(userId) {
+          await W.getState().syncProgress(userId, { full: true });
+          await S.getState().syncScenarioResults(userId, { full: true });
+        },
+        staticIds: () => [...require(path.join(ROOT, 'utils', 'static-word-ids.ts')).getStaticWordIds()],
         /** Başarılı çıkış sonrası yerel temizlik (store/auth.ts -> wipeLocal ile aynı çağrılar). */
         async wipe() {
           await Promise.all([W.getState().resetLocal(), U.getState().resetLocal(), S.getState().resetLocal()]);

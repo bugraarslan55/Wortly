@@ -95,6 +95,7 @@ export function useLearningReport(): LearningReportState {
         candidates,
         isKnownWordId: snapshot.isKnownWordId,
         knownSessionTotal: snapshot.knownSessionTotal,
+        knownScenarioTotal: snapshot.knownScenarioTotal,
         scenarios: SCENARIOS,
       });
       const recommendations = buildRecommendations({
