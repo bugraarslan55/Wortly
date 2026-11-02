@@ -93,3 +93,22 @@ Remove-Item Env:STAGING_SERVICE_ROLE_KEY, Env:STAGING_ANON_KEY, Env:STAGING_URL,
    taşıyıcı kodunu (utils/learning-transports.ts, utils/learning-sync.ts) derleyip çalıştırır.
 4. Uygulamayı test projesine bağlayıp cihaz testi: .env.local içinde test URL/anahtarı ve
    EXPO_PUBLIC_LEARNING_SYNC=true; test bitince .env.local dosyasını sil ve --clear ile yeniden başlat.
+
+
+### Entegrasyon sonrası ek staging/cihaz senaryoları (veri izolasyonu + öğrenme senkronu)
+
+Yalnızca TEST projesi ve sentetik hesaplar (`wortly.test.a@example.invalid`, `wortly.test.b@example.invalid` veya
+`@wortly-test.invalid`). Otomatik testler (`tests/learning-sync-integration.test.js`) gerçek mağaza kodunu SAHTE bulutla çalıştırır;
+gerçek Supabase/RLS/tetikleyici, gerçek AsyncStorage ve ekranlar aşağıdaki adımlarla ayrıca doğrulanmalıdır.
+
+1. **Bayrak kapalı (varsayılan) regresyonu:** `.env.local` olmadan/`EXPO_PUBLIC_LEARNING_SYNC=false` ile uygulamayı aç; kelime
+   çalış, senaryo oyna, çıkış yap. Supabase günlüklerinde `user_word_progress` / `scenario_results` isteği OLMAMALI.
+2. **Bayrak açık, tek cihaz:** A ile konu kelimesi çalış + senaryo tamamla → tablolarda yalnızca A'nın satırları; ikinci eşitlemede
+   yeni yazma yok (kayıt tekrarı yok).
+3. **A→B→A:** A çalışır, çıkış; B girer → A'nın ilerleme/senaryosu görünmez, B adına satır oluşmaz; A tekrar girer → verisi bulutan gelir.
+4. **Çevrimdışı:** uçak modunda ilerleme/senaryo üret; uygulamayı kapat/aç; bağlantı gelince tek sefer gönderilir.
+5. **Sahibi bilinmeyen eski ilerleme (eski sürümden güncelleme):** bayrak açıkken bile bulut tablosunda satır OLUŞMAMALI; yalnızca
+   Profil'deki "Bana ait, ekle" onayından sonra (ve cihazda tek hesap kullanıldıysa) kuyruğa alınıp gönderilir.
+6. **Çıkış sırasında eşitleme:** eşitleme sürerken çıkış yap → çıkıştan sonra eski hesabın verisi cihazda yeniden belirmemeli.
+7. **Oturum arşivi:** 100'den fazla eski oturum olan hesapta arşivdeki kayıtlar `study_sessions` tablosuna GİTMEMELİ.
+8. **Bayrak geri alma:** bayrağı kapatınca kuyruktaki ilerleme/senaryo girdileri çıkış uyarısını tetiklememeli ve silinmemeli.
