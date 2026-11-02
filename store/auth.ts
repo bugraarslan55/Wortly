@@ -7,6 +7,7 @@ import { supabase } from '../utils/supabase';
 import { clearPronunciationRecordings } from '../utils/pronunciation-storage';
 import { cancelReviewReminders } from '../utils/review-reminder';
 import { useWordStore, useUserStore, useSessionStore } from './index';
+import { useAchievementStore } from './achievements';
 
 type AuthResult =
   | { ok: true; session: Session | null }
@@ -156,6 +157,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       useWordStore.getState().resetLocal(),
       useUserStore.getState().resetLocal(),
       useSessionStore.getState().resetLocal(),
+      Promise.resolve(useAchievementStore.getState().reset()),
       clearPronunciationRecordings(previousUserId),
       cancelReviewReminders(),
     ]);

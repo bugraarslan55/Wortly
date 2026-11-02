@@ -10,6 +10,8 @@ import {
   useUserStore, useWordStore, useSessionStore,
 } from '../store';
 import { useAuthStore } from '../store/auth';
+import { useAchievementStore } from '../store/achievements';
+import { AchievementTracker } from '../components/use-achievements';
 import { REVIEW_NOTIFICATION_TYPE, syncReminderForUser, useLastNotificationResponse } from '../utils/review-reminder';
 import { getReviewRoute } from '../utils/review-route';
 import { Colors } from '../constants/theme';
@@ -85,6 +87,13 @@ export default function RootLayout() {
     if (!isAuthLoaded || !session?.user.id) return;
     void loadScenarioResults(session.user.id);
   }, [isAuthLoaded, session?.user.id, loadScenarioResults]);
+
+  // Kazanılan rozetlerin yerel kaydı (kullanıcıya özel; buluta gönderilmez).
+  const loadAchievements = useAchievementStore(state => state.load);
+  useEffect(() => {
+    if (!isAuthLoaded || !session?.user.id) return;
+    void loadAchievements(session.user.id);
+  }, [isAuthLoaded, session?.user.id, loadAchievements]);
 
   // Oturum açık bir kullanıcı varsa, o kullanıcı için profil/kelime/geçmiş
   // senkronizasyonu en az bir kez tamamlanana kadar uygulamayı render etme.
@@ -199,6 +208,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: Colors.warmWhite }}>
       <SafeAreaProvider style={{ backgroundColor: Colors.warmWhite }}>
         <StatusBar style="dark" />
+        <AchievementTracker />
         <Stack screenOptions={{ headerShown: false, ...androidScreenOptions }}>
         <Stack.Screen
           name="auth"
