@@ -6,12 +6,13 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
-  flushPendingChanges, getPendingChangeCount,
+  flushPendingChanges, getPendingChangeCount, refreshLearningData,
   useUserStore, useWordStore, useSessionStore,
 } from '../store';
 import { useAuthStore } from '../store/auth';
 import { REVIEW_NOTIFICATION_TYPE, syncReminderForUser, useLastNotificationResponse } from '../utils/review-reminder';
 import { getReviewRoute } from '../utils/review-route';
+import { isLearningSyncEnabled } from '../utils/feature-flags';
 import { Colors } from '../constants/theme';
 
 // Android'de ekran geçişlerinde pencere arka planı (siyah) görünmesin; iOS davranışı değişmez.
@@ -37,11 +38,11 @@ export default function RootLayout() {
     syncedUserId: profileSyncedUserId,
   } = useUserStore();
   const {
-    loadWords, syncWords, isLoaded: areWordsLoaded,
+    loadWords, syncWords, syncProgress, isLoaded: areWordsLoaded,
     syncedUserId: wordsSyncedUserId,
   } = useWordStore();
   const {
-    loadSessions, loadScenarioResults, syncSessions, isLoaded: areSessionsLoaded,
+    loadSessions, loadScenarioResults, syncScenarioResults, scenarioUserId, syncSessions, isLoaded: areSessionsLoaded,
     syncedUserId: sessionsSyncedUserId,
   } = useSessionStore();
   const {
@@ -163,7 +164,10 @@ export default function RootLayout() {
       }).catch((error) => devWarn('[Wortly] Bekleyen değişiklikler gönderilemedi:', error));
     };
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') flush();
+      if (state === 'active') {
+        flush();
+        void refreshLearningData(currentUserId);
+      }
     });
     const timer = setInterval(flush, FLUSH_INTERVAL_MS);
     return () => {
@@ -171,6 +175,21 @@ export default function RootLayout() {
       clearInterval(timer);
     };
   }, [currentUserId, isUserDataSynced]);
+
+  // Cihazlar arası öğrenme senkronizasyonu (varsayılan KAPALI; EXPO_PUBLIC_LEARNING_SYNC=true gerekir).
+  // Kapıyı beklemez. Kelime senkronu bitince (reviewStates sahipliği netleşince) konu ilerlemesi,
+  // yerel senaryo listesi bu kullanıcı için yüklenince senaryo sonuçları eşitlenir.
+  useEffect(() => {
+    if (!isLearningSyncEnabled() || !session?.user.id) return;
+    if (wordsSyncedUserId !== session.user.id) return;
+    void syncProgress(session.user.id, { full: true });
+  }, [wordsSyncedUserId, session?.user.id, syncProgress]);
+
+  useEffect(() => {
+    if (!isLearningSyncEnabled() || !session?.user.id) return;
+    if (scenarioUserId !== session.user.id) return;
+    void syncScenarioResults(session.user.id, { full: true });
+  }, [scenarioUserId, session?.user.id, syncScenarioResults]);
 
   // Kayıtlı ayardan günlük hatırlatmayı yeniden planlar; çıkış yapılmışsa iptal eder.
   useEffect(() => {

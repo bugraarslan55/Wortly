@@ -84,3 +84,24 @@ export function buildSignOutPlan(pendingChanges: number, localOnlyProgress: numb
     offerSync: true,
   };
 }
+
+export interface UnverifiedProgressInput {
+  /** Özellik bayrağı (isLearningSyncEnabled). */
+  syncEnabled: boolean;
+  /** Bu oturumda, bu kullanıcı için bulutla tam senkron başarıyla tamamlandı mı? */
+  syncedForUser: boolean;
+  reviewStates: ReviewStateMap | null | undefined;
+  words: Word[] | null | undefined;
+}
+
+/**
+ * Buluttan DOĞRULANMAMIŞ konu ilerlemesi sayısı (çıkış uyarısı için).
+ * - Bayrak kapalıysa veya bu kullanıcı için bulutla senkron henüz başarıyla bitmediyse (tablolar yok,
+ *   ağ hatası, ilk açılış), ilerleme "senkronize edildi" sayılmaz: tüm yerel konu ilerlemesi sayılır.
+ * - Bulutla senkron doğrulandıysa kalanlar bekleyen kuyrukta izlenir ve ayrıca "bekleyen değişiklik"
+ *   olarak uyarılır; burada tekrar sayılmaz.
+ */
+export function countUnverifiedProgress(input: UnverifiedProgressInput): number {
+  if (input.syncEnabled && input.syncedForUser) return 0;
+  return countLocalOnlyProgress(input.reviewStates, input.words);
+}

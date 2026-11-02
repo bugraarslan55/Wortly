@@ -10,6 +10,14 @@ import {
 } from '../utils/progress-stats';
 import { nextMasteryLevel } from '../utils/mastery';
 import { mergeCustomWordProgress } from '../utils/progress-merge';
+import { isLearningSyncEnabled } from '../utils/feature-flags';
+import { isStaticWordId } from '../utils/static-word-ids';
+import {
+  decideProgressOwnership, ensureScenarioIds, flushProgressIds, flushScenarioIds, mergeLateScenarioResults,
+  syncProgressWithCloud, syncScenariosWithCloud,
+} from '../utils/learning-sync';
+import { createProgressTransport, createScenarioTransport } from '../utils/learning-transports';
+import { createSyncSerializer } from '../utils/sync-serializer';
 
 // ─── STORAGE KEYS ───────────────────────────────────────────────────────────
 const KEYS = {
@@ -37,7 +45,7 @@ const devLog = (...args: unknown[]) => {
 };
 
 type PendingChange = {
-  entity: 'word' | 'profile' | 'session';
+  entity: 'word' | 'profile' | 'session' | 'progress' | 'scenario';
   id: string;
   operation: 'upsert' | 'delete';
   userId: string | null;
@@ -158,6 +166,8 @@ const OWNER_KEY_BY_ENTITY: Record<PendingChange['entity'], string> = {
   word: KEYS.WORDS_OWNER,
   profile: KEYS.PROFILE_OWNER,
   session: KEYS.SESSIONS_OWNER,
+  progress: KEYS.REVIEW_OWNER,
+  scenario: KEYS.REVIEW_OWNER,
 };
 
 // Bu kullanıcıya ait, henüz buluta ulaşmamış değişiklik sayısı. Sahibi bilinmeyen
@@ -209,8 +219,12 @@ interface WordStore {
   reviewStates: ReviewStateMap;
   isLoaded: boolean;
   syncedUserId: string | null;
+  /** Konu ilerlemesi bu oturumda bu kullanıcı için buluttan DOĞRULANDI (tam senkron başarılı). */
+  progressSyncedUserId: string | null;
   loadWords: () => Promise<void>;
   syncWords: (userId: string) => Promise<void>;
+  /** Özellik bayrağı kapalıyken hiçbir şey yapmaz. */
+  syncProgress: (userId: string, options?: { full?: boolean }) => Promise<void>;
   resetLocal: () => Promise<void>;
   addWord: (word: Omit<Word, 'id' | 'addedAt' | 'masteryLevel'>) => Promise<WordSaveResult>;
   updateWord: (id: string, updates: Partial<Word>) => Promise<WordSaveResult>;
@@ -355,11 +369,46 @@ const saveCloudSession = async (userId: string, session: QuizSession) => {
   return true;
 };
 
+// Eşzamanlı yeni girdileri silmemek için yalnızca senkron BAŞLAMADAN önce kuyruğa alınanlar temizlenir.
+const clearPendingIdsQueuedBefore = async (
+  entity: PendingChange['entity'],
+  ids: Set<string>,
+  before: number,
+): Promise<void> => {
+  if (ids.size === 0) return;
+  await updatePendingChanges((changes) => changes.filter(
+    (item) => !(item.entity === entity && ids.has(item.id) && item.queuedAt <= before),
+  ));
+};
+
+const clearPendingEntityQueuedBefore = async (
+  entity: PendingChange['entity'],
+  userId: string,
+  before: number,
+): Promise<void> => {
+  await updatePendingChanges((changes) => changes.filter(
+    (item) => !(item.entity === entity && (item.userId === userId || item.userId === null) && item.queuedAt <= before),
+  ));
+};
+
+// ── Cihazlar arası öğrenme senkronizasyonu taşıyıcıları (özellik bayrağı açıkken kullanılır) ──
+const transportOptions = {
+  withTimeout: <T,>(promise: PromiseLike<T>, fallback: T) => withTimeout(promise, fallback),
+  timeoutError: TIMEOUT_ERROR,
+  onError: (message: string) => devWarn('[Wortly]', message),
+};
+const makeProgressTransport = (userId: string) => createProgressTransport(supabase, userId, transportOptions);
+const makeScenarioTransport = (userId: string) => createScenarioTransport(supabase, userId, transportOptions);
+
+// Tam ve hafif senkronlar birbirini atlamaz/ezmez (bkz. utils/sync-serializer.ts).
+const runLearningSync = createSyncSerializer();
+
 export const useWordStore = create<WordStore>((set, get) => ({
   words: [],
   reviewStates: {},
   isLoaded: false,
   syncedUserId: null,
+  progressSyncedUserId: null,
 
   loadWords: async () => {
     devLog('[Wortly][load] loadWords başladı');
@@ -510,8 +559,68 @@ export const useWordStore = create<WordStore>((set, get) => ({
     }
   }),
 
+  syncProgress: (userId, options) => {
+    // Üretimde tablolar yokken bu tablolara hiç istek gönderilmez.
+    if (!isLearningSyncEnabled()) return Promise.resolve();
+    const full = options?.full ?? get().progressSyncedUserId !== userId;
+    return runLearningSync(`progress:${userId}`, full ? 'full' : 'light', async () => {
+    if (!isLearningSyncEnabled()) return;
+    const startedAt = Date.now();
+    try {
+      const reviewOwner = await safeGetItem(KEYS.REVIEW_OWNER);
+      // Başka kullanıcıya ait yerel ilerleme (hesap değişimi) asla bu hesaba yüklenmez;
+      // syncWords bu durumda yerel kaydı zaten temizler.
+      const decision = decideProgressOwnership(reviewOwner, userId);
+      if (decision === 'skip') return;
+      if (decision === 'adopt') await safeSetItem(KEYS.REVIEW_OWNER, userId);
+
+      const snapshot = get().reviewStates;
+      const transport = makeProgressTransport(userId);
+
+      if (!full) {
+        // Hafif akış: yalnızca bekleyen kayıtları gönder, bulutu okuma.
+        const pending = await getPendingChangesForUser('progress', userId, reviewOwner ?? userId);
+        if (pending.length === 0) return;
+        const flushed = await flushProgressIds(pending.map(item => item.id), snapshot, isStaticWordId, transport);
+        await clearPendingIdsQueuedBefore(
+          'progress',
+          new Set([...flushed.uploadedIds, ...flushed.droppedIds]),
+          startedAt,
+        );
+        return;
+      }
+
+      const result = await syncProgressWithCloud({ localStates: snapshot, isStaticId: isStaticWordId, transport });
+      // Hata: bekleyen kayıtlar kuyrukta kalır ve "doğrulandı" işaretlenmez.
+      if (!result.ok) return;
+
+      // İstek sürerken çıkış/hesap değişimi olduysa (resetLocal sahibi sildi) bu sonucu uygulama:
+      // başka kullanıcının yerel verisine karışmasın ve yanlışlıkla "doğrulandı" işaretlenmesin.
+      if ((await safeGetItem(KEYS.REVIEW_OWNER)) !== userId) return;
+
+      // Araya yeni cevap girdiyse o kelimenin yerel kaydını ezme; bir sonraki senkronda birleşir.
+      const latest = get().reviewStates;
+      const next = { ...latest };
+      let changed = false;
+      for (const [id, state] of Object.entries(result.pulled)) {
+        if (latest[id] !== snapshot[id]) continue;
+        next[id] = state;
+        changed = true;
+      }
+      if (changed) {
+        set({ reviewStates: next });
+        await safeSetItem(KEYS.REVIEW_STATES, JSON.stringify(next));
+      }
+      await clearPendingEntityQueuedBefore('progress', userId, startedAt);
+      set({ progressSyncedUserId: userId });
+    } catch (err) {
+      devWarn('[Wortly] Konu ilerlemesi senkronizasyonunda beklenmeyen hata:', err);
+    }
+    });
+  },
+
   resetLocal: async () => {
-    set({ words: [], reviewStates: {}, syncedUserId: null });
+    set({ words: [], reviewStates: {}, syncedUserId: null, progressSyncedUserId: null });
     await safeMultiRemove([
       KEYS.WORDS,
       KEYS.WORDS_OWNER,
@@ -600,6 +709,11 @@ export const useWordStore = create<WordStore>((set, get) => ({
     // kelimeleri yalnızca bu yerel review haritasında tutulur.
     if (word) {
       await get().updateWord(id, { masteryLevel: newLevel, lastReviewed });
+    } else if (isLearningSyncEnabled()) {
+      // Konu kelimesi: aynı kelime için tek kuyruk girdisi tutulur (id ile tekilleşir); değer gönderim
+      // anında güncel reviewStates'ten okunur.
+      const userId = await getMutationUserId(KEYS.REVIEW_OWNER);
+      await queuePendingChange({ entity: 'progress', id, operation: 'upsert', userId });
     }
   },
 
@@ -849,6 +963,10 @@ export const useUserStore = create<UserStore>((set, get) => ({
 interface SessionStore {
   sessions: QuizSession[];
   scenarioResults: ScenarioResult[];
+  /** Yerel senaryo listesinin ait olduğu kullanıcı (yüklenmeden senkron yapılmaz). */
+  scenarioUserId: string | null;
+  /** Bulutta kayıtlı toplam senaryo sonucu sayısı (yalnızca senkron açıkken ve doğrulanınca bilinir). */
+  scenarioTotal: { userId: string; count: number } | null;
   /**
    * Kullanıcının bulutta kayıtlı gerçek toplam oturum sayısı (yerel liste yalnızca son 100'ü tutar).
    * Bilinmiyorsa null; sahibi (userId) uyuşmayan değer kullanılmaz.
@@ -859,6 +977,8 @@ interface SessionStore {
   syncedUserId: string | null;
   loadSessions: () => Promise<void>;
   loadScenarioResults: (userId: string) => Promise<void>;
+  /** Özellik bayrağı kapalıyken hiçbir şey yapmaz. */
+  syncScenarioResults: (userId: string, options?: { full?: boolean }) => Promise<void>;
   syncSessions: (userId: string) => Promise<void>;
   resetLocal: () => Promise<void>;
   startSession: (session: Omit<QuizSession, 'id' | 'date'>) => void;
@@ -870,6 +990,8 @@ interface SessionStore {
 export const useSessionStore = create<SessionStore>((set, get) => ({
   sessions: [],
   scenarioResults: [],
+  scenarioUserId: null,
+  scenarioTotal: null,
   sessionTotal: null,
   currentSession: null,
   isLoaded: false,
@@ -901,10 +1023,61 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     try {
       const raw = await safeGetItem(scenarioResultsKey(userId));
       const parsed = raw ? JSON.parse(raw) : [];
-      set({ scenarioResults: Array.isArray(parsed) ? parsed : [] });
+      set({ scenarioResults: Array.isArray(parsed) ? parsed : [], scenarioUserId: userId });
     } catch {
-      set({ scenarioResults: [] });
+      set({ scenarioResults: [], scenarioUserId: userId });
     }
+  },
+
+  syncScenarioResults: (userId, options) => {
+    if (!isLearningSyncEnabled()) return Promise.resolve();
+    return runLearningSync(`scenario:${userId}`, (options?.full ?? true) ? 'full' : 'light', async () => {
+    if (!isLearningSyncEnabled()) return;
+    // Yerel liste henüz bu kullanıcı için yüklenmediyse başka hesabın verisi karışmasın.
+    if (get().scenarioUserId !== userId) return;
+    const startedAt = Date.now();
+    try {
+      const transport = makeScenarioTransport(userId);
+
+      // Kimliği olmayan eski kayıtlara kararlı kimlik ver (sessizce silinmez, yinelenmez).
+      const original = get().scenarioResults;
+      const ensured = ensureScenarioIds(original);
+      if (ensured.changed && get().scenarioResults === original) {
+        set({ scenarioResults: ensured.results });
+        await safeSetItem(scenarioResultsKey(userId), JSON.stringify(ensured.results));
+      }
+      const snapshot = ensured.results;
+
+      if (!(options?.full ?? true)) {
+        const pending = await getPendingChangesForUser('scenario', userId, userId);
+        if (pending.length === 0) return;
+        const flushed = await flushScenarioIds(pending.map(item => item.id), snapshot, transport);
+        await clearPendingIdsQueuedBefore(
+          'scenario',
+          new Set([...flushed.uploadedIds, ...flushed.droppedIds]),
+          startedAt,
+        );
+        return;
+      }
+
+      const result = await syncScenariosWithCloud({ local: snapshot, transport, cap: LOCAL_SCENARIO_LIMIT });
+      if (!result.ok) return; // kayıtlar yerelde ve kuyrukta kalır
+      // İstek sürerken çıkış/hesap değişimi olduysa sonucu başka kullanıcının listesine uygulama.
+      if (get().scenarioUserId !== userId) return;
+
+      // Senkron sırasında kaydedilen yeni sonuçları kaybetme.
+      const merged = mergeLateScenarioResults(result.merged, get().scenarioResults);
+      set({ scenarioResults: merged });
+      await safeSetItem(scenarioResultsKey(userId), JSON.stringify(merged));
+      await clearPendingEntityQueuedBefore('scenario', userId, startedAt);
+
+      // Bulutta kayıtlı gerçek toplam (yerel liste 100 ile sınırlı olsa da geçmiş kaybolmaz).
+      const total = transport.count ? await transport.count() : null;
+      if (total !== null) set({ scenarioTotal: { userId, count: total } });
+    } catch (err) {
+      devWarn('[Wortly] Senaryo sonuçları senkronizasyonunda beklenmeyen hata:', err);
+    }
+    });
   },
 
   syncSessions: (userId) => dedupeSync('sessions', userId, async () => {
@@ -993,7 +1166,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   }),
 
   resetLocal: async () => {
-    set({ sessions: [], scenarioResults: [], sessionTotal: null, currentSession: null, syncedUserId: null });
+    set({
+      sessions: [], scenarioResults: [], scenarioUserId: null, scenarioTotal: null, sessionTotal: null,
+      currentSession: null, syncedUserId: null,
+    });
     await safeMultiRemove([KEYS.SESSIONS, KEYS.SESSIONS_OWNER, KEYS.SESSION_TOTAL]);
   },
 
@@ -1036,9 +1212,15 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
       date: Date.now(),
     };
-    const updated = [nextResult, ...get().scenarioResults].slice(0, LOCAL_SCENARIO_LIMIT);
+    // Senkron açıkken doğrulanmamış eski sonuçları sınırla kırpma; kırpma bulutla doğrulanınca yapılır.
+    const combined = [nextResult, ...get().scenarioResults];
+    const updated = isLearningSyncEnabled() ? combined : combined.slice(0, LOCAL_SCENARIO_LIMIT);
     set({ scenarioResults: updated });
     await safeSetItem(scenarioResultsKey(userId), JSON.stringify(updated));
+    if (isLearningSyncEnabled()) {
+      await queuePendingChange({ entity: 'scenario', id: nextResult.id as string, operation: 'upsert', userId });
+      void get().syncScenarioResults(userId, { full: false });
+    }
   },
 
   clearCurrentSession: () => set({ currentSession: null }),
@@ -1052,5 +1234,27 @@ export async function flushPendingChanges(userId: string): Promise<number> {
     useWordStore.getState().syncWords(userId),
     useSessionStore.getState().syncSessions(userId),
   ]);
+  if (isLearningSyncEnabled()) {
+    // Önce kelime senkronu (reviewStates sahipliğini düzeltir), sonra öğrenme verileri.
+    const wordStore = useWordStore.getState();
+    await Promise.all([
+      wordStore.syncProgress(userId, { full: wordStore.progressSyncedUserId !== userId }),
+      useSessionStore.getState().syncScenarioResults(userId, { full: false }),
+    ]);
+  }
   return getPendingChangeCount(userId);
+}
+
+// Uygulama öne gelince diğer cihazdan gelen öğrenme verilerini çek (en çok 5 dakikada bir).
+let lastLearningRefresh = 0;
+const LEARNING_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+export async function refreshLearningData(userId: string): Promise<void> {
+  if (!isLearningSyncEnabled()) return;
+  const now = Date.now();
+  if (now - lastLearningRefresh < LEARNING_REFRESH_INTERVAL_MS) return;
+  lastLearningRefresh = now;
+  await Promise.all([
+    useWordStore.getState().syncProgress(userId, { full: true }),
+    useSessionStore.getState().syncScenarioResults(userId, { full: true }),
+  ]);
 }

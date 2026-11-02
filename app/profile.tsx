@@ -11,7 +11,8 @@ import { AppIcon } from '../components/app-icon';
 import { Card, IconTile, SecondaryButton, SectionTitle, SegmentedControl } from '../components/ui';
 import { ReviewReminderCard } from '../components/review-reminder-card';
 import { isReminderSupported } from '../utils/review-reminder';
-import { buildSignOutPlan, countLocalOnlyProgress } from '../utils/signout-plan';
+import { buildSignOutPlan, countUnverifiedProgress } from '../utils/signout-plan';
+import { isLearningSyncEnabled } from '../utils/feature-flags';
 import { Level } from '../types';
 import {
   countLearnedWords, DAILY_GOAL_OPTIONS, getActiveStreak, normalizeDailyGoal, summarizeCompletedExercises,
@@ -39,6 +40,7 @@ export default function ProfileScreen() {
   const sessions = useSessionStore(state => state.sessions);
   const scenarioResults = useSessionStore(state => state.scenarioResults);
   const sessionTotal = useSessionStore(state => state.sessionTotal);
+  const scenarioTotal = useSessionStore(state => state.scenarioTotal);
 
   const email = session?.user?.email ?? '';
   const level: Level = profile?.level ?? 'A1';
@@ -57,8 +59,9 @@ export default function ProfileScreen() {
       sessionTotal && sessionTotal.userId === currentUserId ? sessionTotal.count : null,
       sessions,
       scenarioResults,
+      scenarioTotal && scenarioTotal.userId === currentUserId ? scenarioTotal.count : null,
     ),
-    [sessionTotal, currentUserId, sessions, scenarioResults],
+    [sessionTotal, scenarioTotal, currentUserId, sessions, scenarioResults],
   );
   const streak = getActiveStreak(profile?.streak, profile?.lastStudyDate);
 
@@ -88,9 +91,17 @@ export default function ProfileScreen() {
 
   // Konu kelimelerinin çalışma geçmişi şu an buluta kaydedilmiyor; çıkışta cihazdan silinir.
   // Bu veri varken kullanıcı açıkça onay vermeden çıkış yapılmaz ve "senkronize" gibi gösterilmez.
-  const getLocalOnlyProgress = (_userId?: string) => {
-    const { reviewStates: states, words: allWords } = useWordStore.getState();
-    return countLocalOnlyProgress(states, allWords);
+  // Özellik bayrağı açık ve bu kullanıcı için bulutla senkron DOĞRULANMIŞSA yalnızca bekleyen
+  // kayıtlar uyarılır. Aksi halde (bayrak kapalı, tablolar yok, ağ hatası) tüm yerel konu ilerlemesi
+  // "bulutta yok" sayılır; eski güvenli uyarı korunur.
+  const getLocalOnlyProgress = (userId?: string) => {
+    const { reviewStates: states, words: allWords, progressSyncedUserId } = useWordStore.getState();
+    return countUnverifiedProgress({
+      syncEnabled: isLearningSyncEnabled(),
+      syncedForUser: !!userId && progressSyncedUserId === userId,
+      reviewStates: states,
+      words: allWords,
+    });
   };
 
   const confirmDeleteProgressAndSignOut = (userId?: string) => {
