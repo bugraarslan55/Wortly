@@ -1,4 +1,5 @@
 // Öğrenme mantığı birim testleri (saf fonksiyonlar). `npm test` ile çalıştırılır;
+// @utils: answer-check, mastery, progress-stats, learning-analysis, spaced-repetition, word-validation
 // scripts/run-unit-tests.js utils/*.ts dosyalarını geçici klasöre derler ve UTILS_OUT ile bildirir.
 const test = require('node:test');
 const assert = require('node:assert/strict');
