@@ -2,7 +2,8 @@ import React from 'react';
 import { ActivityIndicator, View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Colors, Spacing, BorderRadius } from '../constants/theme';
+import { Spacing, BorderRadius, ThemeColors } from '../constants/theme';
+import { makeStyles, useColors } from '../hooks/use-theme';
 import { AppIcon } from '../components/app-icon';
 import { Card, IconTile, PrimaryButton, ProgressBar, SectionTitle } from '../components/ui';
 import { useLearningReport } from '../components/use-learning-report';
@@ -11,10 +12,12 @@ import type { Recommendation } from '../utils/study-recommendations';
 
 const WEEKDAYS = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
 const MASTERY_LABELS = ['Yeni', 'Öğreniliyor', 'Bilinçli', 'Öğrenildi'];
-const MASTERY_COLORS = [Colors.outlineVariant, Colors.secondaryFixedDim, Colors.golden, Colors.success];
+const masteryColors = (colors: ThemeColors) => [colors.outlineVariant, colors.secondaryFixedDim, colors.golden, colors.success];
 const MAX_BAR_HEIGHT = 84;
 
 export default function AnalysisScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const { status, report, recommendations, retry } = useLearningReport();
 
@@ -54,7 +57,7 @@ export default function AnalysisScreen() {
 
         {status === 'stalled' && (
           <Card style={styles.stateCard}>
-            <AppIcon name="questionmark.circle" size={28} color={Colors.error} />
+            <AppIcon name="questionmark.circle" size={28} color={colors.error} />
             <Text style={styles.stateText} accessibilityLiveRegion="polite">
               Verilerin eşitlenmesi beklenenden uzun sürüyor. İnternet bağlantını kontrol edip tekrar deneyebilirsin; cihazdaki verilerin silinmedi.
             </Text>
@@ -64,14 +67,14 @@ export default function AnalysisScreen() {
 
         {status === 'loading' && (
           <Card style={styles.stateCard}>
-            <ActivityIndicator color={Colors.secondary} />
+            <ActivityIndicator color={colors.secondary} />
             <Text style={styles.stateText} accessibilityLiveRegion="polite">Verilerin yükleniyor…</Text>
           </Card>
         )}
 
         {status === 'error' && (
           <Card style={styles.stateCard}>
-            <AppIcon name="questionmark.circle" size={28} color={Colors.error} />
+            <AppIcon name="questionmark.circle" size={28} color={colors.error} />
             <Text style={styles.stateText} accessibilityLiveRegion="polite">
               Analiz hesaplanamadı. Verilerin silinmedi; tekrar deneyebilirsin.
             </Text>
@@ -98,6 +101,7 @@ export default function AnalysisScreen() {
 // ─── Öneriler ────────────────────────────────────────────────────────────────
 
 function Recommendations({ items, onOpen }: { items: Recommendation[]; onOpen: (route: string) => void }) {
+  const styles = useStyles();
   if (items.length === 0) {
     return (
       <View style={styles.section}>
@@ -136,6 +140,7 @@ function Recommendations({ items, onOpen }: { items: Recommendation[]; onOpen: (
 // ─── Genel durum ─────────────────────────────────────────────────────────────
 
 function Stat({ icon, value, label, accessibilityLabel }: { icon: string; value: string; label: string; accessibilityLabel: string }) {
+  const styles = useStyles();
   return (
     <View style={styles.statTile} accessible accessibilityLabel={accessibilityLabel}>
       <IconTile name={icon} size={32} />
@@ -146,6 +151,7 @@ function Stat({ icon, value, label, accessibilityLabel }: { icon: string; value:
 }
 
 function Overview({ report }: { report: LearningReport }) {
+  const styles = useStyles();
   const { overview } = report;
   const completedText = overview.completed.exact ? String(overview.completed.count) : `${overview.completed.count}+`;
   return (
@@ -184,6 +190,7 @@ function Overview({ report }: { report: LearningReport }) {
 // ─── Haftalık etkinlik ───────────────────────────────────────────────────────
 
 function WeeklyActivity({ report }: { report: LearningReport }) {
+  const styles = useStyles();
   const { activity } = report;
   const max = Math.max(1, ...activity.days.map(day => day.exercises));
   const comparison = activity.comparison;
@@ -240,6 +247,8 @@ function WeeklyActivity({ report }: { report: LearningReport }) {
 // ─── Kelime seviyeleri ───────────────────────────────────────────────────────
 
 function MasterySection({ report }: { report: LearningReport }) {
+  const styles = useStyles();
+  const colors = useColors();
   const { counts, total } = report.mastery;
   return (
     <View style={styles.section}>
@@ -255,12 +264,12 @@ function MasterySection({ report }: { report: LearningReport }) {
               accessibilityLabel={`Kelime seviyeleri: ${counts.map((count, i) => `${MASTERY_LABELS[i]} ${count}`).join(', ')}`}
             >
               {counts.map((count, index) => count > 0 ? (
-                <View key={index} style={{ flex: count, backgroundColor: MASTERY_COLORS[index], height: 14 }} />
+                <View key={index} style={{ flex: count, backgroundColor: masteryColors(colors)[index], height: 14 }} />
               ) : null)}
             </View>
             {counts.map((count, index) => (
               <View key={index} style={styles.legendRow}>
-                <View style={[styles.legendDot, { backgroundColor: MASTERY_COLORS[index] }]} />
+                <View style={[styles.legendDot, { backgroundColor: masteryColors(colors)[index] }]} />
                 <Text style={styles.legendLabel}>{MASTERY_LABELS[index]}</Text>
                 <Text style={styles.legendValue}>{count} · %{Math.round((count / total) * 100)}</Text>
               </View>
@@ -278,6 +287,7 @@ function MasterySection({ report }: { report: LearningReport }) {
 function DueSection({
   report, onStart, recommendations,
 }: { report: LearningReport; onStart: (route: string) => void; recommendations: Recommendation[] }) {
+  const styles = useStyles();
   const due = report.dueWords;
   const reviewRec = recommendations.find(item => item.kind === 'due-review');
   return (
@@ -313,6 +323,7 @@ function DueSection({
 // ─── Alıştırma performansı ───────────────────────────────────────────────────
 
 function ExerciseSection({ report }: { report: LearningReport }) {
+  const styles = useStyles();
   const ex = report.exercises;
   const hasAny = ex.total > 0 || ex.flashcardSessions > 0;
   return (
@@ -369,6 +380,7 @@ const CATEGORY_NAMES = { dinleme: 'Dinleme', yazma: 'Yazma', 'dogru-yanlis': 'Do
 // ─── Senaryo performansı ─────────────────────────────────────────────────────
 
 function ScenarioSection({ report, onOpen }: { report: LearningReport; onOpen: (id: string) => void }) {
+  const styles = useStyles();
   const s = report.scenarios;
   return (
     <View style={styles.section}>
@@ -420,7 +432,7 @@ function ScenarioSection({ report, onOpen }: { report: LearningReport; onOpen: (
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   topBar: { paddingHorizontal: Spacing.marginMain, height: 48, justifyContent: 'center' },
   backButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
@@ -445,10 +457,10 @@ const styles = StyleSheet.create({
   recNumber: {
     width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.golden, alignItems: 'center', justifyContent: 'center',
   },
-  recNumberText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
+  recNumberText: { fontSize: 14, fontWeight: '700', color: Colors.onGolden },
   recBody: { flex: 1, gap: 4 },
-  recTitle: { fontSize: 16, fontWeight: '700', color: Colors.onPrimary },
-  recReason: { fontSize: 13, color: Colors.surfaceContainerHighest, lineHeight: 19 },
+  recTitle: { fontSize: 16, fontWeight: '700', color: Colors.onNavy },
+  recReason: { fontSize: 13, color: '#B8BCC8', lineHeight: 19 },
   recAction: { fontSize: 13, fontWeight: '700', color: Colors.golden, marginTop: 2 },
 
   statGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
@@ -495,4 +507,4 @@ const styles = StyleSheet.create({
   scenarioMeta: { fontSize: 12, fontWeight: '700', color: Colors.success },
   scenarioMetaWeak: { color: Colors.secondary },
   levelRow: { gap: 6 },
-});
+}));

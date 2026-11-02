@@ -12,7 +12,8 @@ import {
   answerOption, buildOptions, canContinue as canContinueStep, createNavigationLock, createOnceGuard, EMPTY_PROGRESS, isPlayableScenario,
   isReply, learnedPhrases, needsExitConfirm, Option, ProgressMap, scoreScenario,
 } from '../../utils/scenario-engine';
-import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { makeStyles, useColors } from '../../hooks/use-theme';
 import { Level } from '../../types';
 import { AppIcon } from '../../components/app-icon';
 import { PrimaryButton, ProgressBar, SecondaryButton } from '../../components/ui';
@@ -48,10 +49,12 @@ export default function ScenarioScreen() {
 }
 
 function MessageScreen({ text, onBack, icon = 'lock.fill' }: { text: string; onBack: () => void; icon?: string }) {
+  const styles = useStyles();
+  const colors = useColors();
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.center}>
-        <AppIcon name={icon} size={34} color={Colors.outlineVariant} />
+        <AppIcon name={icon} size={34} color={colors.outlineVariant} />
         <Text style={styles.messageText}>{text}</Text>
         <PrimaryButton label="Senaryolara dön" onPress={onBack} />
       </View>
@@ -62,6 +65,8 @@ function MessageScreen({ text, onBack, icon = 'lock.fill' }: { text: string; onB
 function ListenButtons({
   text, speakingMode, onSpeak,
 }: { text: string; speakingMode: 'normal' | 'slow' | null; onSpeak: (text: string, mode: 'normal' | 'slow') => void }) {
+  const styles = useStyles();
+  const colors = useColors();
   return (
     <View style={styles.listenRow}>
       <TouchableOpacity
@@ -71,7 +76,7 @@ function ListenButtons({
         accessibilityRole="button"
         accessibilityLabel="Cümleyi normal hızda dinle"
       >
-        <AppIcon name="speaker.wave.2.fill" size={16} color={Colors.primary} />
+        <AppIcon name="speaker.wave.2.fill" size={16} color={colors.primary} />
         <Text style={styles.listenBtnText} maxFontSizeMultiplier={1.4}>Dinle</Text>
       </TouchableOpacity>
       <TouchableOpacity
@@ -81,7 +86,7 @@ function ListenButtons({
         accessibilityRole="button"
         accessibilityLabel="Cümleyi yavaş hızda dinle"
       >
-        <AppIcon name="tortoise.fill" size={16} color={Colors.primary} />
+        <AppIcon name="tortoise.fill" size={16} color={colors.primary} />
         <Text style={styles.listenBtnText} maxFontSizeMultiplier={1.4}>Yavaş</Text>
       </TouchableOpacity>
     </View>
@@ -89,6 +94,8 @@ function ListenButtons({
 }
 
 function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () => void }) {
+  const styles = useStyles();
+  const colors = useColors();
   const navigation = useNavigation();
   const [round, setRound] = useState(0);
   const [index, setIndex] = useState(0);
@@ -206,7 +213,7 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
       <SafeAreaView style={styles.safe}>
         <ScrollView contentContainerStyle={styles.resultContent} showsVerticalScrollIndicator={false}>
           <View style={styles.resultIconBox}>
-            <AppIcon name="checkmark.seal.fill" size={44} color={Colors.success} />
+            <AppIcon name="checkmark.seal.fill" size={44} color={colors.success} />
           </View>
           <Text style={styles.resultTitle}>Senaryo tamamlandı</Text>
           <Text style={styles.resultScenario}>{scenario.title}</Text>
@@ -249,7 +256,7 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
                   accessibilityRole="button"
                   accessibilityLabel={`İfadeyi dinle: ${phrase.german}`}
                 >
-                  <AppIcon name="speaker.wave.2.fill" size={16} color={Colors.primary} />
+                  <AppIcon name="speaker.wave.2.fill" size={16} color={colors.primary} />
                 </TouchableOpacity>
               </View>
             ))}
@@ -297,7 +304,7 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.placeRow}>
-          <AppIcon name="mappin.and.ellipse" size={12} color={Colors.secondary} />
+          <AppIcon name="mappin.and.ellipse" size={12} color={colors.secondary} />
           <Text style={styles.placeText}>
             {scenario.place}{meta ? ` · ${meta.germanTitle}` : ''}
           </Text>
@@ -325,7 +332,7 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
         {current.type === 'say' && (
           <View style={styles.bubbleRow}>
             <View style={styles.avatar} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-              <AppIcon name="person.crop.circle.fill" size={26} color={Colors.primary} />
+              <AppIcon name="person.crop.circle.fill" size={26} color={colors.primary} />
             </View>
             <View style={styles.bubble}>
               <Text style={styles.speakerText}>{current.speaker}</Text>
@@ -363,7 +370,7 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
                 >
                   <View style={[styles.optionLetter, wrong && styles.optionLetterWrong]}>
                     {wrong
-                      ? <AppIcon name="xmark" size={13} color={Colors.error} />
+                      ? <AppIcon name="xmark" size={13} color={colors.error} />
                       : <Text style={styles.optionLetterText}>{OPTION_LETTERS[optionIndex]}</Text>}
                   </View>
                   <Text style={[styles.optionText, wrong && styles.optionTextWrong]}>{option.german}</Text>
@@ -376,7 +383,7 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
         {reply && !stepProgress.solved && lastWrong && (
           <View style={styles.feedbackWrong} accessibilityLiveRegion="polite">
             <View style={styles.feedbackHeader}>
-              <AppIcon name="xmark.circle.fill" size={18} color={Colors.error} />
+              <AppIcon name="xmark.circle.fill" size={18} color={colors.error} />
               <Text style={styles.feedbackWrongTitle}>Bu cevap burada uymuyor</Text>
             </View>
             {!!lastWrong.turkish && (
@@ -401,7 +408,7 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
             </View>
             <View style={styles.feedbackCorrect} accessibilityLiveRegion="polite">
               <View style={styles.feedbackHeader}>
-                <AppIcon name="checkmark.circle.fill" size={18} color={Colors.success} />
+                <AppIcon name="checkmark.circle.fill" size={18} color={colors.success} />
                 <Text style={styles.feedbackCorrectText}>
                   {stepProgress.firstTry ? 'Doğru!' : 'Doğru cevap'}
                 </Text>
@@ -410,7 +417,7 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
               <Text style={styles.feedbackTurkish}>{reply.turkish}</Text>
               {!!reply.note && (
                 <View style={styles.noteRow}>
-                  <AppIcon name="lightbulb.fill" size={14} color={Colors.secondary} />
+                  <AppIcon name="lightbulb.fill" size={14} color={colors.secondary} />
                   <Text style={styles.noteText}>{reply.note}</Text>
                 </View>
               )}
@@ -445,7 +452,7 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl, gap: Spacing.md },
   messageText: { fontSize: 15, color: Colors.onSurfaceVariant, textAlign: 'center', lineHeight: 21 },
@@ -541,7 +548,7 @@ const styles = StyleSheet.create({
   navBtnNext: { flex: 2, backgroundColor: Colors.golden },
   navBtnDisabled: { opacity: 0.45 },
   navBtnBackText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
-  navBtnNextText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
+  navBtnNextText: { fontSize: 15, fontWeight: '700', color: Colors.onGolden },
   resultContent: { padding: Spacing.marginMain, paddingTop: Spacing.xl, paddingBottom: Spacing.xl, alignItems: 'center', gap: Spacing.md },
   resultIconBox: {
     width: 88, height: 88, borderRadius: 44, backgroundColor: Colors.successContainer,
@@ -572,4 +579,4 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainerLowest, alignItems: 'center', justifyContent: 'center',
   },
   fullWidth: { width: '100%' },
-});
+}));

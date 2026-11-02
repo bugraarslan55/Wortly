@@ -3,7 +3,8 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSessionStore, useUserStore, useWordStore } from '../store';
 import { getTopicsForLevel } from '../constants/topics';
-import { BorderRadius, Colors, Spacing } from '../constants/theme';
+import { BorderRadius, Spacing } from '../constants/theme';
+import { makeStyles, useColors } from '../hooks/use-theme';
 import { AnalysisCategory, analyzeLearning, DailyPlan } from '../utils/learning-analysis';
 import { reviewRouteForDue } from '../utils/study-recommendations';
 import { AppIcon } from './app-icon';
@@ -51,6 +52,8 @@ export function useLearningAnalysis() {
 }
 
 export function DailyPlanCard() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const analysis = useLearningAnalysis();
 
@@ -78,7 +81,7 @@ export function DailyPlanCard() {
           accessibilityHint="Öğrenme analizi ekranını açar"
         >
           <Text style={styles.analysisLinkText}>Analizi Gör</Text>
-          <AppIcon name="chevron.right" size={12} color={Colors.secondary} />
+          <AppIcon name="chevron.right" size={12} color={colors.secondary} />
         </TouchableOpacity>
       </View>
 
@@ -111,7 +114,7 @@ export function DailyPlanCard() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   card: { gap: Spacing.sm + 2 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm + 2 },
   title: { flex: 1, fontSize: 17, fontWeight: '700', color: Colors.primary },
@@ -129,4 +132,4 @@ const styles = StyleSheet.create({
     minHeight: Spacing.touchTargetMin, paddingLeft: Spacing.sm,
   },
   analysisLinkText: { fontSize: 13, fontWeight: '700', color: Colors.secondary },
-});
+}));

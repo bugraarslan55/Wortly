@@ -7,7 +7,8 @@ import { useRouter } from 'expo-router';
 import { useWordStore } from '../../store';
 import { useAuthStore } from '../../store/auth';
 import { confirmDeleteWord } from '../../utils/confirm-word-delete';
-import { Colors, Spacing, BorderRadius, Cards } from '../../constants/theme';
+import { Spacing, BorderRadius, getCards, ThemeColors } from '../../constants/theme';
+import { makeStyles, useColors } from '../../hooks/use-theme';
 import { Word, MasteryLevel } from '../../types';
 import { AppIcon } from '../../components/app-icon';
 import { ColoredGermanPlural, ColoredGermanWord } from '../../components/colored-german-word';
@@ -15,13 +16,15 @@ import { EmptyState, FilterChip, IconTile, ScreenHeader, SearchField } from '../
 
 const MASTERY_LABELS = ['Yeni', 'Öğreniliyor', 'Bilinçli', 'Öğrenildi'];
 // Rozet metinleri arka planlarına göre >= 4.5:1 kontrast verecek koyu tonlardadır.
-const MASTERY_COLORS = [Colors.onSurfaceVariant, Colors.secondary, Colors.secondary, Colors.success];
-const MASTERY_BACKGROUNDS = [
-  Colors.surfaceContainer, Colors.secondaryContainer, Colors.secondaryContainer, Colors.successContainer,
+const masteryColors = (colors: ThemeColors) => [colors.onSurfaceVariant, colors.secondary, colors.secondary, colors.success];
+const masteryBackgrounds = (colors: ThemeColors) => [
+  colors.surfaceContainer, colors.secondaryContainer, colors.secondaryContainer, colors.successContainer,
 ];
 const FILTERS: ('all' | MasteryLevel)[] = ['all', 0, 1, 2, 3];
 
 export default function KelimelerimScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const { words, deleteWord } = useWordStore();
   const sessionUserId = useAuthStore(state => state.session?.user.id);
@@ -63,7 +66,7 @@ export default function KelimelerimScreen() {
             accessibilityRole="button"
             accessibilityLabel="Yeni kelime ekle"
           >
-            <AppIcon name="plus" size={16} color={Colors.primary} />
+            <AppIcon name="plus" size={16} color={colors.primary} />
             <Text style={styles.addBtnText}>Ekle</Text>
           </TouchableOpacity>
         }
@@ -120,7 +123,7 @@ export default function KelimelerimScreen() {
           >
             <IconTile name="scope" size={36} tone="gold" />
             <Text style={styles.quizBannerText}>Kelimelerimle Çalış</Text>
-            <AppIcon name="chevron.right" size={14} color={Colors.golden} />
+            <AppIcon name="chevron.right" size={14} color={colors.golden} />
           </TouchableOpacity>
         ) : null}
         ListEmptyComponent={customWords.length === 0 ? (
@@ -153,6 +156,8 @@ export default function KelimelerimScreen() {
 function WordCard({
   word, onPress, onDelete
 }: { word: Word; onPress: () => void; onDelete: () => void }) {
+  const styles = useStyles();
+  const colors = useColors();
   const mastery = word.masteryLevel;
   const fullWord = `${word.article ? word.article + ' ' : ''}${word.german}`;
   return (
@@ -176,8 +181,8 @@ function WordCard({
         )}
       </View>
       <View style={styles.wordRight}>
-        <View style={[styles.masteryBadge, { backgroundColor: MASTERY_BACKGROUNDS[mastery] }]}>
-          <Text style={[styles.masteryText, { color: MASTERY_COLORS[mastery] }]} numberOfLines={1}>
+        <View style={[styles.masteryBadge, { backgroundColor: masteryBackgrounds(colors)[mastery] }]}>
+          <Text style={[styles.masteryText, { color: masteryColors(colors)[mastery] }]} numberOfLines={1}>
             {MASTERY_LABELS[mastery]}
           </Text>
         </View>
@@ -187,21 +192,21 @@ function WordCard({
           accessibilityRole="button"
           accessibilityLabel={`${word.german} kelimesini sil`}
         >
-          <AppIcon name="trash" size={17} color={Colors.error} />
+          <AppIcon name="trash" size={17} color={colors.error} />
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   addBtn: {
     minHeight: Spacing.touchTargetMin, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: Colors.golden, borderRadius: BorderRadius.full,
     boxShadow: '0 2px 10px rgba(244, 211, 94, 0.45)',
   },
-  addBtnText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
+  addBtnText: { fontSize: 14, fontWeight: '700', color: Colors.onGolden },
   search: { marginHorizontal: Spacing.marginMain, marginBottom: Spacing.md },
   filterScroll: { flexGrow: 0, marginBottom: Spacing.md },
   filterRow: { paddingHorizontal: Spacing.marginMain, gap: Spacing.sm },
@@ -211,9 +216,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: Spacing.md, padding: Spacing.sm + 4,
     backgroundColor: Colors.navy, borderRadius: BorderRadius.xl, borderCurve: 'continuous',
   },
-  quizBannerText: { flex: 1, fontSize: 15, fontWeight: '700', color: Colors.onPrimary },
+  quizBannerText: { flex: 1, fontSize: 15, fontWeight: '700', color: Colors.onNavy },
   wordCard: {
-    ...Cards.surface, padding: Spacing.md, paddingRight: Spacing.sm,
+    ...getCards(Colors).surface, padding: Spacing.md, paddingRight: Spacing.sm,
     flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, minHeight: 72,
   },
   wordLeft: { flex: 1 },
@@ -225,4 +230,4 @@ const styles = StyleSheet.create({
   masteryBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: BorderRadius.full },
   masteryText: { fontSize: 11, fontWeight: '700' },
   deleteBtn: { width: Spacing.touchTargetMin, height: Spacing.touchTargetMin, alignItems: 'center', justifyContent: 'center' },
-});
+}));

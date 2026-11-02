@@ -1,7 +1,8 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
-import { Colors } from '../constants/theme';
+
+import { makeStyles, useColors } from '../hooks/use-theme';
 
 type Props = {
   /** 0-1 arası oran; aralık dışı değerler sınırlandırılır. */
@@ -14,6 +15,8 @@ type Props = {
 
 /** Gerçek ilerlemeyi çizen halka (react-native-svg: iOS ve Android'de aynı). */
 export function ProgressRing({ progress, size = 88, strokeWidth = 9, value, total }: Props) {
+  const styles = useStyles();
+  const colors = useColors();
   const clamped = Number.isFinite(progress) ? Math.max(0, Math.min(1, progress)) : 0;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -29,12 +32,12 @@ export function ProgressRing({ progress, size = 88, strokeWidth = 9, value, tota
       <Svg width={size} height={size}>
         <Circle
           cx={size / 2} cy={size / 2} r={radius}
-          stroke={Colors.surfaceContainer} strokeWidth={strokeWidth} fill="none"
+          stroke={colors.surfaceContainer} strokeWidth={strokeWidth} fill="none"
         />
         {clamped > 0 && (
           <Circle
             cx={size / 2} cy={size / 2} r={radius}
-            stroke={Colors.golden} strokeWidth={strokeWidth} fill="none"
+            stroke={colors.golden} strokeWidth={strokeWidth} fill="none"
             strokeLinecap="round"
             strokeDasharray={`${circumference} ${circumference}`}
             strokeDashoffset={circumference * (1 - clamped)}
@@ -50,8 +53,8 @@ export function ProgressRing({ progress, size = 88, strokeWidth = 9, value, tota
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   center: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center' },
   value: { fontSize: 24, fontWeight: '700', color: Colors.primary, lineHeight: 28 },
   total: { fontSize: 11, color: Colors.onSurfaceVariant, marginTop: -2 },
-});
+}));

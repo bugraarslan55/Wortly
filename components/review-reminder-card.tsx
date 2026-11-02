@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Linking, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { FilterChip, IconTile } from './ui';
-import { Cards, Colors, Spacing } from '../constants/theme';
+import { Spacing, getCards } from '../constants/theme';
+import { makeStyles, useColors } from '../hooks/use-theme';
 import {
   DEFAULT_REMINDER,
   ensureNotificationPermission,
@@ -29,6 +30,8 @@ function SettingRow({
 }: {
   icon?: boolean; label: string; hint: string; value: boolean; onChange: (value: boolean) => void; disabled?: boolean;
 }) {
+  const styles = useStyles();
+  const colors = useColors();
   return (
     <View style={[styles.row, disabled && styles.rowDisabled]}>
       {icon ? <IconTile name="bell.fill" size={40} /> : null}
@@ -40,9 +43,9 @@ function SettingRow({
         value={value}
         onValueChange={onChange}
         disabled={disabled}
-        trackColor={{ false: Colors.outlineVariant, true: Colors.golden }}
-        thumbColor={Colors.warmWhite}
-        ios_backgroundColor={Colors.outlineVariant}
+        trackColor={{ false: colors.outlineVariant, true: colors.golden }}
+        thumbColor={colors.warmWhite}
+        ios_backgroundColor={colors.outlineVariant}
         accessibilityLabel={label}
       />
     </View>
@@ -50,6 +53,7 @@ function SettingRow({
 }
 
 export function ReviewReminderCard({ userId }: { userId: string | null }) {
+  const styles = useStyles();
   const [settings, setSettings] = useState<ReminderSettings>(DEFAULT_REMINDER);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -173,7 +177,7 @@ export function ReviewReminderCard({ userId }: { userId: string | null }) {
       <SettingRow
         icon
         label="Günlük hatırlatıcı"
-        hint="Her gün seçtiğin saatte kısa bir çalışma hatırlatması alırsın."
+        hint="Her gün seçtiğin saatte kısa bir çalışma hatırlatması alırsın; bazı bildirimler tek dokunuşla açılan bir kelime sorusudur."
         value={settings.enabled}
         onChange={handleToggle}
         disabled={disabled}
@@ -263,9 +267,9 @@ export function ReviewReminderCard({ userId }: { userId: string | null }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   card: {
-    ...Cards.surface,
+    ...getCards(Colors).surface,
     width: '100%',
     padding: Spacing.md,
     gap: Spacing.md,
@@ -287,6 +291,6 @@ const styles = StyleSheet.create({
   warning: { gap: Spacing.sm, padding: Spacing.md, borderRadius: 12, backgroundColor: Colors.surfaceContainerLow },
   message: { fontSize: 13, color: Colors.error, fontWeight: '600', lineHeight: 18 },
   settingsBtn: { alignSelf: 'flex-start', minHeight: Spacing.touchTargetMin, paddingHorizontal: 16, borderRadius: 999, backgroundColor: Colors.golden, alignItems: 'center', justifyContent: 'center' },
-  settingsBtnText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
+  settingsBtnText: { fontSize: 14, fontWeight: '700', color: Colors.onGolden },
   footnote: { fontSize: 11, color: Colors.onSurfaceVariant, lineHeight: 16 },
-});
+}));

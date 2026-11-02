@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Colors, Spacing } from '../constants/theme';
+import { Spacing } from '../constants/theme';
+import { makeStyles } from '../hooks/use-theme';
 import { BrandMark, PrimaryButton } from './ui';
 
 /**
@@ -11,6 +12,7 @@ import { BrandMark, PrimaryButton } from './ui';
 export function SyncProblemScreen({
   onRetry, busy, attempts = 0, email,
 }: { onRetry: () => void; busy?: boolean; attempts?: number; email?: string | null }) {
+  const styles = useStyles();
   return (
     <View style={styles.container}>
       <BrandMark />
@@ -33,7 +35,7 @@ export function SyncProblemScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   container: {
     flex: 1, backgroundColor: Colors.warmWhite, alignItems: 'center', justifyContent: 'center',
     gap: Spacing.lg, paddingHorizontal: Spacing.xl,
@@ -43,4 +45,4 @@ const styles = StyleSheet.create({
   text: { fontSize: 14, color: Colors.onSurfaceVariant, textAlign: 'center', lineHeight: 21 },
   failed: { fontSize: 13, fontWeight: '600', color: Colors.error, textAlign: 'center', lineHeight: 19 },
   button: { alignSelf: 'stretch' },
-});
+}));

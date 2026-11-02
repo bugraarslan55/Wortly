@@ -6,7 +6,8 @@ import {
   flushPendingChanges, getPendingChangeCount, useSessionStore, useUserStore, useWordStore,
 } from '../store';
 import { useAuthStore } from '../store/auth';
-import { Colors, Spacing, BorderRadius, Cards } from '../constants/theme';
+import { Spacing, BorderRadius, getCards } from '../constants/theme';
+import { makeStyles, useColors } from '../hooks/use-theme';
 import { AppIcon } from '../components/app-icon';
 import { Card, IconTile, SecondaryButton, SectionTitle, SegmentedControl } from '../components/ui';
 import { useAchievementViews, useOwnScenarioResults, useOwnSessions } from '../components/use-achievements';
@@ -18,6 +19,7 @@ import { readPronunciationRecordings } from '../utils/pronunciation-storage';
 import { ReviewReminderCard } from '../components/review-reminder-card';
 import { RecordingStorageCard } from '../components/recording-storage-card';
 import { LegacyRecordsCard } from '../components/legacy-records-card';
+import { AppearanceCard } from '../components/appearance-card';
 import { isReminderSupported } from '../utils/review-reminder';
 import { isLearningSyncEnabled } from '../utils/feature-flags';
 import { Level } from '../types';
@@ -40,6 +42,8 @@ function getInitials(name: string, email: string) {
 }
 
 export default function ProfileScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const { profile, updateProfile } = useUserStore();
   const { session, signOut } = useAuthStore();
@@ -207,7 +211,7 @@ export default function ProfileScreen() {
           accessibilityRole="button"
           accessibilityLabel="Geri"
         >
-          <AppIcon name="chevron.left" size={16} color={Colors.onSurfaceVariant} />
+          <AppIcon name="chevron.left" size={16} color={colors.onSurfaceVariant} />
           <Text style={styles.backText}>Geri</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Profil</Text>
@@ -244,7 +248,7 @@ export default function ProfileScreen() {
 
         {/* Başarılarım */}
         <TouchableOpacity
-          style={[Cards.surface, styles.achievementsRow]}
+          style={[getCards(colors).surface, styles.achievementsRow]}
           onPress={() => router.push('/basarilarim' as any)}
           activeOpacity={0.85}
           accessibilityRole="button"
@@ -256,7 +260,7 @@ export default function ProfileScreen() {
             <Text style={styles.prefLabel}>Başarılarım</Text>
             <Text style={styles.prefHint}>{earnedCount} / {badges.length} rozet kazanıldı</Text>
           </View>
-          <AppIcon name="chevron.right" size={14} color={Colors.outline} />
+          <AppIcon name="chevron.right" size={14} color={colors.outline} />
         </TouchableOpacity>
 
         {/* Öğrenme tercihleri */}
@@ -309,6 +313,7 @@ export default function ProfileScreen() {
         )}
 
         {/* Kullanılmayan telaffuz kayıtları varsa görünür; silme yalnızca onayla */}
+        <AppearanceCard />
         <RecordingStorageCard userId={session?.user?.id ?? null} />
 
         {/* Sahibi doğrulanamayan eski kayıtlar: yalnızca onayınla hesabına eklenir */}
@@ -324,8 +329,10 @@ export default function ProfileScreen() {
 }
 
 function StatBox({ icon, value, label }: { icon: string; value: number | string; label: string }) {
+  const styles = useStyles();
+  const colors = useColors();
   return (
-    <View style={[Cards.surface, styles.statBox]} accessible accessibilityLabel={`${label}: ${value}`}>
+    <View style={[getCards(colors).surface, styles.statBox]} accessible accessibilityLabel={`${label}: ${value}`}>
       <IconTile name={icon} size={34} />
       <Text style={styles.statValue} maxFontSizeMultiplier={1.3}>{value}</Text>
       <Text style={styles.statLabel} numberOfLines={2}>{label}</Text>
@@ -333,7 +340,7 @@ function StatBox({ icon, value, label }: { icon: string; value: number | string;
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   header: {
     minHeight: 56,
@@ -358,8 +365,8 @@ const styles = StyleSheet.create({
     width: 72, height: 72, borderRadius: 36, backgroundColor: Colors.golden,
     alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: 'rgba(244, 211, 94, 0.35)',
   },
-  avatarText: { fontSize: 26, fontWeight: '700', color: Colors.navy },
-  name: { fontSize: 21, lineHeight: 27, fontWeight: '700', color: Colors.onPrimary },
+  avatarText: { fontSize: 26, fontWeight: '700', color: Colors.onGolden },
+  name: { fontSize: 21, lineHeight: 27, fontWeight: '700', color: Colors.onNavy },
   email: { fontSize: 13, color: '#B8BCC8' },
   levelPill: {
     alignSelf: 'flex-start', marginTop: Spacing.sm, backgroundColor: 'rgba(244, 211, 94, 0.16)',
@@ -376,10 +383,10 @@ const styles = StyleSheet.create({
   card: { gap: Spacing.sm },
   prefLabel: { fontSize: 15, fontWeight: '700', color: Colors.primary },
   prefHint: { fontSize: 12, color: Colors.onSurfaceVariant, lineHeight: 17, marginBottom: 4 },
-  divider: { height: 1, backgroundColor: Cards.borderColor, marginVertical: Spacing.sm },
+  divider: { height: 1, backgroundColor: getCards(Colors).borderColor, marginVertical: Spacing.sm },
   achievementsRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, padding: Spacing.md, minHeight: 64 },
   achievementsText: { flex: 1 },
   infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.md },
   infoText: { flex: 1, gap: 2 },
   signedInAs: { fontSize: 12, color: Colors.onSurfaceVariant, textAlign: 'center' },
-});
+}));

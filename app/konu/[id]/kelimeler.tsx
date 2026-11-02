@@ -11,7 +11,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { getTopicById } from '../../../constants/topics';
-import { Colors, BorderRadius, Shadows, Spacing } from '../../../constants/theme';
+import { BorderRadius, Shadows, Spacing } from '../../../constants/theme';
+import { makeStyles, useColors } from '../../../hooks/use-theme';
 import { Word } from '../../../types';
 import { AppIcon } from '../../../components/app-icon';
 import { ColoredGermanPlural, ColoredGermanWord } from '../../../components/colored-german-word';
@@ -26,6 +27,8 @@ function getAlphabeticalKey(word: Word): string {
 }
 
 export default function KonuKelimeleriScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [search, setSearch] = useState('');
@@ -71,7 +74,7 @@ export default function KonuKelimeleriScreen() {
           <ColoredGermanPlural plural={item.plural} style={styles.plural} />
         ) : null}
       </View>
-      <AppIcon name="chevron.right" size={14} color={Colors.outline} />
+      <AppIcon name="chevron.right" size={14} color={colors.outline} />
     </TouchableOpacity>
   );
 
@@ -97,7 +100,7 @@ export default function KonuKelimeleriScreen() {
           accessibilityRole="button"
           accessibilityLabel="Geri"
         >
-          <AppIcon name="chevron.left" size={18} color={Colors.primary} />
+          <AppIcon name="chevron.left" size={18} color={colors.primary} />
         </TouchableOpacity>
         <View style={styles.headerText}>
           <Text style={styles.title} numberOfLines={1}>{topic.title}</Text>
@@ -107,13 +110,13 @@ export default function KonuKelimeleriScreen() {
       </View>
 
       <View style={styles.searchWrapper}>
-        <AppIcon name="magnifyingglass" size={17} color={Colors.outline} />
+        <AppIcon name="magnifyingglass" size={17} color={colors.outline} />
         <TextInput
           style={styles.searchInput}
           value={search}
           onChangeText={setSearch}
           placeholder="Almanca veya Türkçe ara"
-          placeholderTextColor={Colors.outlineVariant}
+          placeholderTextColor={colors.outlineVariant}
           autoCorrect={false}
           autoCapitalize="none"
           returnKeyType="search"
@@ -121,7 +124,7 @@ export default function KonuKelimeleriScreen() {
         />
         {search.length > 0 && Platform.OS !== 'ios' ? (
           <TouchableOpacity onPress={() => setSearch('')} accessibilityLabel="Aramayı temizle">
-            <AppIcon name="xmark.circle.fill" size={18} color={Colors.outlineVariant} />
+            <AppIcon name="xmark.circle.fill" size={18} color={colors.outlineVariant} />
           </TouchableOpacity>
         ) : null}
       </View>
@@ -141,7 +144,7 @@ export default function KonuKelimeleriScreen() {
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListEmptyComponent={(
           <View style={styles.empty}>
-            <AppIcon name="magnifyingglass" size={28} color={Colors.outlineVariant} />
+            <AppIcon name="magnifyingglass" size={28} color={colors.outlineVariant} />
             <Text style={styles.emptyTitle}>Kelime bulunamadı</Text>
             <Text style={styles.emptyText}>Farklı bir Almanca veya Türkçe arama deneyin.</Text>
           </View>
@@ -159,7 +162,7 @@ export default function KonuKelimeleriScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   header: {
     flexDirection: 'row', alignItems: 'center',
@@ -211,5 +214,5 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.lg, backgroundColor: Colors.golden,
     alignItems: 'center', justifyContent: 'center',
   },
-  backButtonText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
-});
+  backButtonText: { fontSize: 14, fontWeight: '700', color: Colors.onGolden },
+}));

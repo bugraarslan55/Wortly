@@ -3,7 +3,8 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Card } from '../components/ui';
-import { Colors, Spacing } from '../constants/theme';
+import { Spacing } from '../constants/theme';
+import { makeStyles, useColors } from '../hooks/use-theme';
 import { loadArchivedSessions } from '../store';
 import { useAuthStore } from '../store/auth';
 import { QuizSession } from '../types';
@@ -22,6 +23,8 @@ const formatDate = (timestamp: number) => {
  * Salt okunur: yalnızca bu hesabın arşivi gösterilir; hiçbir şey eklenmez/silinmez; istatistik, görev ve rozetlere sayılmaz.
  */
 export default function SessionArchiveScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const userId = useAuthStore(state => state.session?.user?.id ?? null);
   const [items, setItems] = useState<QuizSession[] | null>(null);
@@ -56,7 +59,7 @@ export default function SessionArchiveScreen() {
           Cihazdaki 100 kayıt sınırı nedeniyle listene sığmayan eski kayıtların burada güvende. Yalnızca bu hesabın kayıtları gösterilir; istatistik, günlük görev ve rozetlere sayılmazlar.
         </Text>
 
-        {items === null && <ActivityIndicator color={Colors.primary} />}
+        {items === null && <ActivityIndicator color={colors.primary} />}
         {failed && <Text style={styles.error} accessibilityLiveRegion="polite">Arşiv okunamadı. Kayıtların silinmedi; lütfen tekrar dene.</Text>}
         {items !== null && !failed && items.length === 0 && (
           <Text style={styles.subtitle} accessibilityLiveRegion="polite">Arşivde kayıt yok.</Text>
@@ -79,7 +82,7 @@ export default function SessionArchiveScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   topBar: { paddingHorizontal: Spacing.md, paddingTop: Spacing.sm },
   backButton: { minHeight: Spacing.touchTargetMin, justifyContent: 'center', alignSelf: 'flex-start' },
@@ -93,4 +96,4 @@ const styles = StyleSheet.create({
   itemMeta: { fontSize: 12, color: Colors.onSurfaceVariant },
   more: { minHeight: Spacing.touchTargetMin, alignItems: 'center', justifyContent: 'center' },
   moreText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
-});
+}));

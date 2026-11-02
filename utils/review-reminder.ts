@@ -8,6 +8,7 @@ import {
 } from './reminder-plan';
 import { createOwnerGate, createSerialQueue, runGuardedApply, type SchedulerAdapter } from './reminder-guard';
 import { rememberHandled } from './notification-routing';
+import { decoratePlanWithQuiz } from './reminder-quiz';
 
 // Expo Go (Android) uzaktan push ve expo-notifications'ın bazı native modüllerini (ör.
 // ExpoTopicSubscriptionModule) içermez. Paket yalnızca import edilse bile "Push notifications
@@ -38,9 +39,61 @@ export const DEFAULT_REMINDER: ReminderSettings = DEFAULT_REMINDER_PREFS;
 export const REVIEW_NOTIFICATION_TYPE = REMINDER_NOTIFICATION_TYPE;
 export const isReminderSupported = Notifications != null;
 
-/** Uygulama açıkken bildirim yanıtı hook'u. Desteklenmeyen ortamda sabit `null` döner (hook sırası değişmez). */
-export const useLastNotificationResponse: typeof NotificationsModule.useLastNotificationResponse =
-  isReminderSupported ? Notifications.useLastNotificationResponse : () => null;
+// Günlük bildirimin metni ve (varsa) mini quiz kelimesi. Uygun içerik yoksa planlanan genel metin korunur.
+export type ReminderContent = { body: string; wordId?: string };
+
+// İçerik sağlayıcı dışarıdan verilir; böylece bu dosya store'lara bağımlı olmaz (store/auth bu dosyayı içe aktarır).
+// Sağlayıcı HESABA BAĞLIDIR: yalnızca verilen kullanıcının verisinden içerik üretmelidir (bkz. utils/mini-quiz.ts).
+export type ReminderContentProvider = (userId: string, excludeIds: string[]) => ReminderContent | null;
+let contentProvider: ReminderContentProvider | null = null;
+export function setReminderContentProvider(provider: ReminderContentProvider | null) {
+  contentProvider = provider;
+}
+
+/** Plan uygulanırken mini quiz içeriği seçer; sağlayıcı yoksa/hata verirse null (genel metin kullanılır). */
+function pickQuizContent(userId: string, excludeIds: string[]): ReminderContent | null {
+  try {
+    return contentProvider?.(userId, excludeIds) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export type NotificationTapResponse = NotificationsModule.NotificationResponse;
+
+// Bildirime dokunma (yanıt) akışı. useLastNotificationResponse hook'u kullanılmaz: hook, kimliği
+// öncekiyle aynı olan yanıtı yok sayar ve bildirimlerimiz aynı kimliği taşıyabilir; bu yüzden
+// süreç bir kez yanıt aldıktan sonraki dokunuşlar kaybolur. Burada her yanıt işleyiciye iletilir:
+// uygulamayı açan dokunuş (kapalıyken) getLastNotificationResponseAsync ile, sonrakiler dinleyiciyle gelir.
+// Yönlendirme kararı (hesap sahipliği, tekrar dokunma, oturum) utils/notification-routing.ts içindedir.
+export function subscribeToNotificationResponses(
+  handler: (response: NotificationTapResponse) => void,
+): () => void {
+  if (!isReminderSupported) return () => undefined;
+  let active = true;
+  const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+    if (active) handler(response);
+  });
+  void Notifications.getLastNotificationResponseAsync()
+    .then((response) => {
+      if (active && response) handler(response);
+    })
+    .catch(() => undefined);
+  return () => {
+    active = false;
+    subscription.remove();
+  };
+}
+
+/** Yalnızca bildirimin kendisine dokunma sayılır (kapatma/özel eylemler yönlendirmez). */
+export const isNotificationTap = (response: NotificationTapResponse) =>
+  isReminderSupported && response.actionIdentifier === Notifications.DEFAULT_ACTION_IDENTIFIER;
+
+/** İşlenen yanıt, sonraki açılış/yeniden bağlanmada tekrar işlenmesin diye temizlenir. */
+export function clearHandledNotificationResponse(): void {
+  if (!isReminderSupported) return;
+  void Notifications.clearLastNotificationResponseAsync().catch(() => undefined);
+}
 
 // Kanal kimliği önceki sürümle aynı kalır (app.json `defaultChannel`); yalnızca görünen ad güncellenir.
 const CHANNEL_ID = 'daily-review';
@@ -179,8 +232,8 @@ function createAdapter(userId: string | null): SchedulerAdapter<PlannedReminder>
         content: {
           title: item.title,
           body: item.body,
-          // Yalnızca tür ve hesap kimliği; kelime metni bildirimde/verisinde bulunmaz.
-          data: { type: REVIEW_NOTIFICATION_TYPE, kind: item.kind, userId },
+          // Tür, hesap kimliği ve (mini quiz bildirimiyse) kelime kimliği; dokunma yönlendirmesi hesap sahipliğiyle doğrulanır.
+          data: { type: REVIEW_NOTIFICATION_TYPE, kind: item.kind, userId, ...(item.wordId ? { wordId: item.wordId } : {}) },
         },
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DATE,
@@ -202,7 +255,9 @@ export function applyReminderPlan(userId: string, plan: PlannedReminder[], isVal
   if (!isReminderSupported) return Promise.resolve();
   return enqueue(async () => {
     try {
-      await runGuardedApply({ adapter: createAdapter(userId), plan, userId, isValid });
+      // Günlük/tekrar bildirimlerine, yalnızca BU hesabın verisinden seçilen mini quiz kelimesi eklenir.
+      const decorated = decoratePlanWithQuiz(plan, (excludeIds) => pickQuizContent(userId, excludeIds));
+      await runGuardedApply({ adapter: createAdapter(userId), plan: decorated, userId, isValid });
     } catch (error) {
       console.warn('[Wortly] Hatırlatma planlanamadı:', error);
     }

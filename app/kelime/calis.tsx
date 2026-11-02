@@ -5,7 +5,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useWordStore } from '../../store';
-import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { makeStyles, useColors } from '../../hooks/use-theme';
 import { AppIcon } from '../../components/app-icon';
 import { EXERCISE_SYMBOLS } from '../../constants/symbols';
 import { goBack } from '../../utils/safe-back';
@@ -13,6 +14,8 @@ import { goBack } from '../../utils/safe-back';
 // Kelimelerim ekranındaki tüm kişisel kelimeler tek bir çalışma seti olarak
 // kullanılır — konu (topicId) filtresine bakılmaz.
 export default function KelimelerimleCalisScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const { words } = useWordStore();
 
@@ -32,7 +35,7 @@ export default function KelimelerimleCalisScreen() {
       icon: EXERCISE_SYMBOLS.flashcard,
       title: 'Flashcard',
       desc: 'Kartları çevirerek kelimeleri öğren',
-      color: '#EFF4FF',
+      color: colors.surfaceContainerLow,
       disabled: false,
       onPress: () => router.push('/konu/kelimelerim/flashcard' as any),
     },
@@ -43,7 +46,7 @@ export default function KelimelerimleCalisScreen() {
       desc: customWords.length >= 4
         ? 'Kelimeyi dinle, doğru Türkçe anlamı seç'
         : 'En az 4 kişisel kelime gerekli',
-      color: '#EAF2FF',
+      color: colors.tintBlue,
       disabled: customWords.length < 4,
       onPress: () => router.push(`/alistirma/dinle-sec?wordIds=${wordIds}` as any),
     },
@@ -52,7 +55,7 @@ export default function KelimelerimleCalisScreen() {
       icon: EXERCISE_SYMBOLS['dinle-yaz'],
       title: 'Dinle ve Yaz',
       desc: 'Kelimeyi dinle, Almancasını yaz',
-      color: '#F0EBFF',
+      color: colors.tintPurple,
       disabled: customWords.length === 0,
       onPress: () => router.push(`/alistirma/dinle-yaz?wordIds=${wordIds}` as any),
     },
@@ -63,7 +66,7 @@ export default function KelimelerimleCalisScreen() {
       desc: customWords.length >= 2
         ? 'Hızlı bilgi yoklaması'
         : 'En az 2 kişisel kelime gerekli',
-      color: '#D8F3DC',
+      color: colors.successContainer,
       disabled: customWords.length < 2,
       onPress: () => router.push(`/alistirma/dogru-yanlis?wordIds=${wordIds}` as any),
     },
@@ -72,7 +75,7 @@ export default function KelimelerimleCalisScreen() {
       icon: EXERCISE_SYMBOLS.yazma,
       title: 'Yazarak Tekrar',
       desc: 'Türkçeye bakarak Almancayı yaz',
-      color: '#FFF8E7',
+      color: colors.tintAmber,
       disabled: false,
       onPress: () => router.push(`/alistirma/yazma?wordIds=${wordIds}` as any),
     },
@@ -83,7 +86,7 @@ export default function KelimelerimleCalisScreen() {
       desc: wordsWithExample.length > 0
         ? `Türkçe cümleyi Almanca olarak yaz · ${wordsWithExample.length} uygun kelime`
         : 'İki dilde örnek cümlesi olan kelimen yok',
-      color: '#FCE8D5',
+      color: colors.tintOrange,
       disabled: wordsWithExample.length === 0,
       onPress: () => router.push(`/alistirma/cumle?wordIds=${wordIds}` as any),
     },
@@ -95,7 +98,7 @@ export default function KelimelerimleCalisScreen() {
         <View style={styles.handleBar} />
         <View style={styles.center}>
           <View style={styles.emptyIconBox}>
-            <AppIcon name="square.and.pencil" size={30} color={Colors.secondary} />
+            <AppIcon name="square.and.pencil" size={30} color={colors.secondary} />
           </View>
           <Text style={styles.emptyText}>Henüz kişisel kelime eklemedin.</Text>
           <Text style={styles.emptySubtext}>
@@ -132,13 +135,13 @@ export default function KelimelerimleCalisScreen() {
             activeOpacity={0.85}
           >
             <View style={styles.exerciseIconBox}>
-              <AppIcon name={ex.icon} size={22} color={Colors.secondary} />
+              <AppIcon name={ex.icon} size={22} color={colors.secondary} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.exerciseTitle}>{ex.title}</Text>
               <Text style={styles.exerciseDesc}>{ex.desc}</Text>
             </View>
-            {!ex.disabled && <AppIcon name="chevron.right" size={15} color={Colors.outline} />}
+            {!ex.disabled && <AppIcon name="chevron.right" size={15} color={colors.outline} />}
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -150,7 +153,7 @@ export default function KelimelerimleCalisScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   handleBar: {
     width: 36, height: 4, backgroundColor: Colors.outlineVariant,
@@ -186,5 +189,5 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 16, fontWeight: '700', color: Colors.primary, textAlign: 'center' },
   emptySubtext: { fontSize: 13, color: Colors.onSurfaceVariant, textAlign: 'center', lineHeight: 18 },
   backBtn: { backgroundColor: Colors.golden, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12, marginTop: Spacing.sm },
-  backBtnText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
-});
+  backBtnText: { fontSize: 14, fontWeight: '700', color: Colors.onGolden },
+}));

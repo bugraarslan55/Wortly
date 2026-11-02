@@ -6,7 +6,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useUserStore } from '../store';
-import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../constants/theme';
+import { Typography, Spacing, BorderRadius, Shadows } from '../constants/theme';
+import { makeStyles, useColors } from '../hooks/use-theme';
 import { Level } from '../types';
 import { AppIcon } from '../components/app-icon';
 import { KeyboardSafeView } from '../components/keyboard-safe-view';
@@ -19,6 +20,8 @@ const LEVELS: { key: Level; label: string; subtitle: string; desc: string }[] = 
 ];
 
 export default function OnboardingScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const { completeOnboarding } = useUserStore();
   const [step, setStep] = useState<'welcome' | 'name' | 'level'>('welcome');
@@ -80,7 +83,7 @@ export default function OnboardingScreen() {
               ].map((item) => (
                 <View key={item.icon} style={styles.featureCard}>
                   <View style={styles.featureIconBox}>
-                    <AppIcon name={item.icon} size={22} color={Colors.secondary} />
+                    <AppIcon name={item.icon} size={22} color={colors.secondary} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.featureTitle}>{item.title}</Text>
@@ -99,7 +102,7 @@ export default function OnboardingScreen() {
                 <TextInput
                   style={styles.input}
                   placeholder="örn: Ahmet"
-                  placeholderTextColor={Colors.outlineVariant}
+                  placeholderTextColor={colors.outlineVariant}
                   value={name}
                   onChangeText={setName}
                   autoFocus
@@ -174,7 +177,7 @@ export default function OnboardingScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   container: { flexGrow: 1, paddingHorizontal: Spacing.marginMain, paddingTop: Spacing.lg },
   stepRow: { flexDirection: 'row', justifyContent: 'center', gap: Spacing.sm, marginBottom: Spacing.xl },
@@ -236,9 +239,9 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   ctaBtnDisabled: { opacity: 0.5 },
-  ctaBtnText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
+  ctaBtnText: { fontSize: 15, fontWeight: '700', color: Colors.onGolden },
   backBtn: {
     alignItems: 'center', justifyContent: 'center', height: 44,
   },
   backBtnText: { fontSize: 15, color: Colors.onSurfaceVariant, fontWeight: '500' },
-});
+}));

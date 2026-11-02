@@ -2,7 +2,8 @@ import React, { useRef, useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../store/auth';
-import { Colors, Spacing } from '../constants/theme';
+import { Spacing } from '../constants/theme';
+import { makeStyles } from '../hooks/use-theme';
 import { AuthLayout } from '../components/auth-layout';
 import { FormField, Notice, PasswordField, PrimaryButton, TextField } from '../components/ui';
 
@@ -11,6 +12,7 @@ type AuthMode = 'signIn' | 'signUp';
 const MIN_PASSWORD_LENGTH = 6;
 
 export default function AuthScreen() {
+  const styles = useStyles();
   const router = useRouter();
   const { signIn, signUp, resetPasswordForEmail, isBusy } = useAuthStore();
   const [mode, setMode] = useState<AuthMode>('signIn');
@@ -199,11 +201,11 @@ export default function AuthScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   forgotButton: { alignSelf: 'flex-end', minHeight: Spacing.touchTargetMin, justifyContent: 'center', marginTop: -Spacing.sm },
   forgotText: { fontSize: 14, color: Colors.secondary, fontWeight: '700' },
   switchRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center' },
   switchPrompt: { fontSize: 14, color: Colors.onSurfaceVariant },
   switchButton: { minHeight: Spacing.touchTargetMin, paddingHorizontal: Spacing.sm, justifyContent: 'center' },
   switchText: { fontSize: 14, color: Colors.secondary, fontWeight: '700' },
-});
+}));

@@ -3,7 +3,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Keyboard, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppIcon } from '../../components/app-icon';
-import { BorderRadius, Colors, Shadows, Spacing } from '../../constants/theme';
+import { BorderRadius, Shadows, Spacing } from '../../constants/theme';
+import { makeStyles, useColors } from '../../hooks/use-theme';
 import { getTopicById } from '../../constants/topics';
 import { getGermanSpeechText } from '../../utils/german-speech';
 import { useGermanSpeech } from '../../utils/use-german-speech';
@@ -17,6 +18,8 @@ import { useSessionStore, useWordStore } from '../../store';
 
 const SESSION_SIZE = 10;
 export default function DinleYazScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const { topicId, wordIds } = useLocalSearchParams<{ topicId?: string; wordIds?: string }>();
   const topic = topicId ? getTopicById(topicId) : undefined;
@@ -177,7 +180,7 @@ export default function DinleYazScreen() {
 
         <View style={styles.listenCard}>
           <View style={styles.iconCircle}>
-            <AppIcon name="waveform" size={34} color={Colors.secondary} />
+            <AppIcon name="waveform" size={34} color={colors.secondary} />
           </View>
           <Text style={styles.listenTitle}>
             {speakingRate === 'slow'
@@ -194,7 +197,7 @@ export default function DinleYazScreen() {
               accessibilityRole="button"
               accessibilityLabel="Kelimeyi normal hızda dinle"
             >
-              <AppIcon name="speaker.wave.2.fill" size={21} color={Colors.secondary} />
+              <AppIcon name="speaker.wave.2.fill" size={21} color={colors.secondary} />
               <Text style={styles.speechButtonText}>Normal</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -204,7 +207,7 @@ export default function DinleYazScreen() {
               accessibilityRole="button"
               accessibilityLabel="Kelimeyi yavaş hızda dinle"
             >
-              <AppIcon name="tortoise.fill" size={21} color={Colors.secondary} />
+              <AppIcon name="tortoise.fill" size={21} color={colors.secondary} />
               <Text style={styles.speechButtonText}>Yavaş</Text>
             </TouchableOpacity>
           </View>
@@ -222,7 +225,7 @@ export default function DinleYazScreen() {
             value={answer}
             onChangeText={setAnswer}
             placeholder="Almanca cevabını yaz"
-            placeholderTextColor={Colors.outline}
+            placeholderTextColor={colors.outline}
             autoCapitalize="none"
             autoCorrect={false}
             returnKeyType="done"
@@ -282,7 +285,7 @@ export default function DinleYazScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   header: { height: 56, paddingHorizontal: Spacing.marginMain, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   backButton: { minWidth: 68, paddingVertical: Spacing.sm },
@@ -306,24 +309,24 @@ const styles = StyleSheet.create({
   answerSection: { width: '100%', marginTop: Spacing.xl, gap: Spacing.sm },
   answerLabel: { fontSize: 14, fontWeight: '700', color: Colors.primary },
   answerInput: { minHeight: 58, paddingHorizontal: Spacing.md, borderRadius: BorderRadius.lg, borderWidth: 1.5, borderColor: Colors.outlineVariant, backgroundColor: Colors.surfaceContainerLow, fontSize: 17, color: Colors.primary },
-  answerInputCorrect: { borderColor: Colors.success, backgroundColor: '#F0FFF4' },
+  answerInputCorrect: { borderColor: Colors.success, backgroundColor: Colors.successSurface },
   answerInputWrong: { borderColor: Colors.error, backgroundColor: Colors.errorContainer },
   characterRow: { width: '100%', flexDirection: 'row', gap: Spacing.sm },
   characterButton: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: BorderRadius.md, borderWidth: 1, borderColor: Colors.outlineVariant, backgroundColor: Colors.surfaceContainerLowest },
   characterButtonText: { fontSize: 19, fontWeight: '700', color: Colors.primary },
   resultBox: { width: '100%', padding: Spacing.md, borderRadius: BorderRadius.lg, gap: 4 },
-  resultBoxCorrect: { backgroundColor: '#D8F3DC' },
+  resultBoxCorrect: { backgroundColor: Colors.successContainer },
   resultBoxWrong: { backgroundColor: Colors.errorContainer },
   resultTitle: { fontSize: 16, fontWeight: '700', color: Colors.primary },
   correctAnswer: { fontSize: 15, color: Colors.onSurfaceVariant },
   correctAnswerTurkish: { fontSize: 13, lineHeight: 18, color: Colors.outline },
   checkButton: { height: 52, alignItems: 'center', justifyContent: 'center', borderRadius: BorderRadius.lg, backgroundColor: Colors.golden },
   checkButtonDisabled: { opacity: 0.45 },
-  checkButtonText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
+  checkButtonText: { fontSize: 15, fontWeight: '700', color: Colors.onGolden },
   unavailableText: { marginTop: Spacing.md, fontSize: 13, lineHeight: 18, color: Colors.error, textAlign: 'center' },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl, gap: Spacing.md },
   emptyTitle: { fontSize: 20, fontWeight: '700', color: Colors.primary, textAlign: 'center' },
   emptyText: { fontSize: 14, lineHeight: 20, color: Colors.onSurfaceVariant, textAlign: 'center' },
   emptyBackButton: { minHeight: 48, paddingHorizontal: Spacing.xl, borderRadius: BorderRadius.lg, backgroundColor: Colors.golden, alignItems: 'center', justifyContent: 'center' },
-  emptyBackButtonText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
-});
+  emptyBackButtonText: { fontSize: 15, fontWeight: '700', color: Colors.onGolden },
+}));

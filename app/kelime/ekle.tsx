@@ -6,7 +6,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useWordStore } from '../../store';
-import { Colors, Spacing, BorderRadius, Cards } from '../../constants/theme';
+import { Spacing, BorderRadius, getCards } from '../../constants/theme';
+import { makeStyles, useColors } from '../../hooks/use-theme';
 import { Article } from '../../types';
 import { KeyboardSafeView } from '../../components/keyboard-safe-view';
 import { GermanCharacterBar } from '../../components/german-character-bar';
@@ -24,6 +25,8 @@ const ARTICLE_LABELS: Record<Article, string> = {
 };
 
 export default function KelimeEkleScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const { addWord, words } = useWordStore();
   const germanInputRef = useRef<TextInput>(null);
@@ -155,7 +158,7 @@ export default function KelimeEkleScreen() {
             <FormField label="Artikel" hint="İsimlerin cinsiyetini belirtir. Emin değilsen “Yok” seç.">
               <SegmentedControl
                 options={ARTICLES.map(art => {
-                  const palette = getArticlePalette(art);
+                  const palette = getArticlePalette(art, colors);
                   return {
                     value: art,
                     label: ARTICLE_LABELS[art],
@@ -263,7 +266,7 @@ export default function KelimeEkleScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   handleBar: {
     width: 36, height: 4, backgroundColor: Colors.outlineVariant, borderRadius: 2,
@@ -279,13 +282,13 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: Spacing.marginMain, paddingBottom: Spacing.lg, gap: Spacing.sm },
   card: { gap: Spacing.md },
   preview: { gap: Spacing.sm },
-  previewCard: { ...Cards.surface, borderRadius: BorderRadius.lg, padding: Spacing.md, gap: 4 },
+  previewCard: { ...getCards(Colors).surface, borderRadius: BorderRadius.lg, padding: Spacing.md, gap: 4 },
   previewGerman: { fontSize: 22, fontWeight: '700', color: Colors.primary },
   previewArticle: { fontSize: 16, fontWeight: '700' },
   previewTurkish: { fontSize: 15, color: Colors.onSurfaceVariant },
   previewMeta: { fontSize: 12, color: Colors.outline },
   footer: {
     paddingHorizontal: Spacing.marginMain, paddingTop: Spacing.sm, paddingBottom: Spacing.md,
-    backgroundColor: Colors.warmWhite, borderTopWidth: 1, borderTopColor: Cards.borderColor,
+    backgroundColor: Colors.warmWhite, borderTopWidth: 1, borderTopColor: getCards(Colors).borderColor,
   },
-});
+}));

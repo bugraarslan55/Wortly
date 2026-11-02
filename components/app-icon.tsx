@@ -3,12 +3,12 @@ import { StyleProp, View, ViewStyle } from 'react-native';
 import {
   ArrowRight, AudioLines, BadgeCheck, Bell, BookOpen, Briefcase, Bus, ChartColumn,
   ChevronLeft, ChevronRight, Circle, CircleCheck, CircleQuestionMark, CircleUser, CircleX,
-  CalendarCheck, Check, Compass, Copy, Eye, EyeOff, Flame, Footprints, GraduationCap, Medal, Hand, Hash, House, Inbox, Layers, Library, Lightbulb, List, Lock,
-  Mail, MapPin, MessagesSquare, Mic, Palette, Pause, PencilLine, Play, Plus, Quote, RefreshCw,
-  RotateCw, Search, Square, SquarePen, Target, ThumbsUp, Trash, Trophy, Turtle, Users,
+  CalendarCheck, Check, Compass, Contrast, Copy, Eye, EyeOff, Flame, Footprints, GraduationCap, Medal, Hand, Hash, House, Inbox, Layers, Library, Lightbulb, List, Lock,
+  Mail, MapPin, MessagesSquare, Mic, Moon, Palette, Pause, PencilLine, Play, Plus, Quote, RefreshCw,
+  RotateCw, Search, Square, SquarePen, Sun, Target, ThumbsUp, Trash, Trophy, Turtle, Users,
   Utensils, Volume2, X,
 } from 'lucide-react-native';
-import { Colors } from '../constants/theme';
+import { useColors } from '../hooks/use-theme';
 
 // Tek ikon sistemi: iOS, Android ve web'de aynı SVG çizimleri kullanılır.
 // Uygulama genelinde ikon adları SF Symbols adlarıyla tutulur (bkz. constants/symbols.ts);
@@ -70,6 +70,9 @@ const ICONS: Record<string, IconDef> = {
   'chart.bar.fill': { Icon: ChartColumn },
   'bubble.left.and.bubble.right.fill': { Icon: MessagesSquare },
   'bell.fill': { Icon: Bell, solid: true },
+  'sun.max.fill': { Icon: Sun, solid: true },
+  'moon.fill': { Icon: Moon, solid: true },
+  'circle.lefthalf.filled': { Icon: Contrast },
   'trophy.fill': { Icon: Trophy, solid: true },
   'hand.thumbsup.fill': { Icon: ThumbsUp, solid: true },
   'hand.wave.fill': { Icon: Hand },
@@ -95,10 +98,12 @@ type AppIconProps = {
 export function AppIcon({
   name,
   size = 20,
-  color = Colors.primary,
+  color,
   label,
   style,
 }: AppIconProps) {
+  const colors = useColors();
+  const iconColor = color ?? colors.primary;
   const def = ICONS[name];
   if (!def) {
     if (__DEV__) console.warn(`[Wortly] "${name}" için ikon tanımı yok.`);
@@ -114,7 +119,7 @@ export function AppIcon({
       importantForAccessibility={label ? 'yes' : 'no-hide-descendants'}
       style={[{ width: size, height: size }, style]}
     >
-      <Icon size={size} color={color} strokeWidth={2} fill={solid ? color : 'none'} />
+      <Icon size={size} color={iconColor} strokeWidth={2} fill={solid ? iconColor : 'none'} />
     </View>
   );
 }

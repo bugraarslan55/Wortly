@@ -6,7 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ALL_TOPICS, getTopicById } from '../../constants/topics';
 import { useWordStore, useSessionStore } from '../../store';
-import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { makeStyles } from '../../hooks/use-theme';
 import { Word } from '../../types';
 import { ColoredGermanWord } from '../../components/colored-german-word';
 import { selectWordsForReview } from '../../utils/spaced-repetition';
@@ -25,6 +26,7 @@ const NUMBER_WORDS = new Set([
 ]);
 
 export default function DogruYanlisScreen() {
+  const styles = useStyles();
   const router = useRouter();
   const { wordIds, topicId } = useLocalSearchParams<{ wordIds: string; topicId?: string }>();
   const { words: customWords, reviewStates, updateMastery } = useWordStore();
@@ -239,7 +241,7 @@ export default function DogruYanlisScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -255,7 +257,7 @@ const styles = StyleSheet.create({
   scoreText: { fontSize: 13, fontWeight: '700', color: Colors.success },
   cardArea: { flex: 1, paddingHorizontal: Spacing.marginMain, justifyContent: 'center' },
   card: { backgroundColor: Colors.surfaceContainerLowest, borderRadius: 24, padding: Spacing.xl, alignItems: 'center', ...Shadows.level2 },
-  cardCorrect: { borderWidth: 2, borderColor: Colors.success, backgroundColor: '#F0FFF4' },
+  cardCorrect: { borderWidth: 2, borderColor: Colors.success, backgroundColor: Colors.successSurface },
   cardWrong: { borderWidth: 2, borderColor: Colors.error, backgroundColor: Colors.errorContainer },
   cardHint: { fontSize: 11, fontWeight: '600', color: Colors.outlineVariant, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 },
   cardArticle: { fontSize: 18, color: Colors.secondary, marginBottom: 2 },
@@ -268,14 +270,14 @@ const styles = StyleSheet.create({
   resultEmoji: { marginTop: Spacing.md, fontSize: 18, fontWeight: '700', color: Colors.primary },
   buttonRow: { flexDirection: 'row', paddingHorizontal: Spacing.marginMain, paddingBottom: 32, gap: Spacing.md },
   answerBtn: { flex: 1, height: 64, borderRadius: BorderRadius.xl, alignItems: 'center', justifyContent: 'center', gap: 4 },
-  wrongBtn: { backgroundColor: '#FFDAD6' },
-  correctBtn: { backgroundColor: '#D8F3DC' },
-  answerBtnEmoji: { fontSize: 22 },
+  wrongBtn: { backgroundColor: Colors.errorContainer },
+  correctBtn: { backgroundColor: Colors.successContainer },
+  answerBtnEmoji: { fontSize: 22, color: Colors.primary },
   answerBtnText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
   nextBtn: { marginHorizontal: Spacing.marginMain, marginBottom: 32, height: 54, backgroundColor: Colors.golden, borderRadius: BorderRadius.lg, alignItems: 'center', justifyContent: 'center' },
-  nextBtnText: { fontSize: 16, fontWeight: '700', color: Colors.primary },
+  nextBtnText: { fontSize: 16, fontWeight: '700', color: Colors.onGolden },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl, gap: Spacing.md },
   emptyText: { fontSize: 16, color: Colors.onSurfaceVariant },
   backBtn: { backgroundColor: Colors.golden, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12 },
-  backBtnText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
-});
+  backBtnText: { fontSize: 14, fontWeight: '700', color: Colors.onGolden },
+}));

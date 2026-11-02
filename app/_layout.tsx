@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Stack, useRootNavigationState, useRouter } from 'expo-router';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRootNavigationState, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { ActivityIndicator, AppState, Platform, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -13,19 +13,22 @@ import { useAuthStore } from '../store/auth';
 import { useAchievementStore } from '../store/achievements';
 import { AchievementTracker } from '../components/use-achievements';
 import { BrandMark } from '../components/ui';
-import { loadHandledTaps, markTapHandled, useLastNotificationResponse } from '../utils/review-reminder';
+import { useThemeStore } from '../store/theme';
+import { useTheme } from '../hooks/use-theme';
+import {
+  clearHandledNotificationResponse, isNotificationTap, loadHandledTaps, markTapHandled, NotificationTapResponse,
+  setReminderContentProvider, subscribeToNotificationResponses,
+} from '../utils/review-reminder';
 import { decideTap } from '../utils/notification-routing';
 import { useReminderSync } from '../components/use-reminder-sync';
 import { SyncProblemScreen } from '../components/sync-problem-screen';
 import { computeAccessGate } from '../utils/access-gate';
-import { getReviewRoute } from '../utils/review-route';
+import { getNotificationRoute, getReviewRoute } from '../utils/review-route';
+import { getMiniQuizReminderContent } from '../utils/mini-quiz';
 import { isLearningSyncEnabled } from '../utils/feature-flags';
-import { Colors } from '../constants/theme';
 
-// Android'de ekran geçişlerinde pencere arka planı (siyah) görünmesin; iOS davranışı değişmez.
-const androidScreenOptions = Platform.OS === 'android'
-  ? { contentStyle: { backgroundColor: Colors.warmWhite } }
-  : {};
+// Günlük bildirim metni için mini quiz kelimesi (modül yüklenirken, ilk planlamadan önce kaydedilir).
+setReminderContentProvider(getMiniQuizReminderContent);
 
 const devWarn = (...args: unknown[]) => {
   if (__DEV__) console.warn(...args);
@@ -38,7 +41,8 @@ const devLog = (...args: unknown[]) => {
 export default function RootLayout() {
   const router = useRouter();
   const navigationState = useRootNavigationState();
-  const lastNotificationResponse = useLastNotificationResponse();
+  // Dokunulan bildirim yanıtı; uygulama (oturum, veri, navigasyon) hazır olana kadar bekletilir.
+  const [pendingResponse, setPendingResponse] = useState<NotificationTapResponse | null>(null);
   // İşlenmiş bildirim dokunmaları (kalıcı kayıttan yüklenir) ve bir dokunmanın ilk görüldüğü an.
   const handledTapsRef = useRef<Set<string>>(new Set());
   const firstSeenTapRef = useRef<Map<string, number>>(new Map());
@@ -55,6 +59,30 @@ export default function RootLayout() {
     loadSessions, loadScenarioResults, syncScenarioResults, scenarioResultsOwner, syncSessions, isLoaded: areSessionsLoaded,
     syncedUserId: sessionsSyncedUserId,
   } = useSessionStore();
+  const { isDark, colors } = useTheme();
+  const { loadTheme, isLoaded: isThemeLoaded } = useThemeStore();
+  // Ekran geçişlerinde ve modallarda navigasyon katmanı da seçilen temanın zeminini kullanır.
+  const navigationTheme = useMemo(() => {
+    const base = isDark ? DarkTheme : DefaultTheme;
+    return {
+      ...base,
+      colors: {
+        ...base.colors,
+        primary: colors.secondary,
+        background: colors.warmWhite,
+        card: colors.surfaceContainerLowest,
+        text: colors.primary,
+        border: colors.outlineVariant,
+      },
+    };
+  }, [isDark, colors]);
+
+  // Web'de sayfa zemini ve yerel kontroller (kaydırma çubuğu vb.) seçilen temayı izlesin.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    document.documentElement.style.backgroundColor = colors.warmWhite;
+    document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
+  }, [isDark, colors]);
   const {
     initialize: initializeAuth,
     handleAuthUrl,
@@ -73,9 +101,10 @@ export default function RootLayout() {
     loadProfile();
     loadWords();
     loadSessions();
+    void loadTheme();
 
     return () => subscription.remove();
-  }, [handleAuthUrl, initializeAuth, loadProfile, loadWords, loadSessions]);
+  }, [handleAuthUrl, initializeAuth, loadProfile, loadWords, loadSessions, loadTheme]);
 
   useEffect(() => {
     if (!isAuthLoaded || !isLoaded || !session?.user.id) return;
@@ -253,12 +282,19 @@ export default function RootLayout() {
     void syncScenarioResults(session.user.id, { full: true });
   }, [scenarioResultsOwner, session?.user.id, syncScenarioResults]);
 
+  // Bildirime dokunma (uygulama kapalıyken, arka plandayken ya da açıkken) yakalanır ve bekletilir.
+  useEffect(() => subscribeToNotificationResponses(setPendingResponse), []);
+
   const isAppReady =
     isLoaded && isAuthLoaded && isUserDataSynced && !!currentUserId && !!profile?.onboardingCompleted;
   useEffect(() => {
-    if (!handledTapsLoaded || !isAuthLoaded || !navigationState?.key || !lastNotificationResponse) return;
-    const request = lastNotificationResponse.notification.request;
-    const key = `${request.identifier}:${lastNotificationResponse.notification.date}`;
+    if (!pendingResponse || !handledTapsLoaded || !isAuthLoaded || !navigationState?.key) return;
+    if (!isNotificationTap(pendingResponse)) {
+      setPendingResponse(null);
+      return;
+    }
+    const request = pendingResponse.notification.request;
+    const key = `${request.identifier}:${pendingResponse.notification.date}`;
     const now = Date.now();
     if (!firstSeenTapRef.current.has(key)) firstSeenTapRef.current.set(key, now);
 
@@ -270,16 +306,25 @@ export default function RootLayout() {
       firstSeenAt: firstSeenTapRef.current.get(key) ?? now,
       now,
     });
+    if (decision.action === 'wait') return; // oturum/veri hazır olunca yeniden değerlendirilir; yanıt bekletilir
+    // Karar verildi (yönlendir / yok say): yanıt bir daha işlenmesin. Aynı dokunuş hem başlangıç yanıtından hem
+    // dinleyiciden gelebilir; işlenenler eşzamanlı olarak kümeye eklenir, böylece çift yönlendirme olmaz.
+    setPendingResponse(null);
+    clearHandledNotificationResponse();
     if (decision.markHandled) {
       handledTapsRef.current.add(key);
       void markTapHandled(key);
     }
     if (decision.action !== 'navigate') return;
-    // Tekrar bildirimi tekrar akışına, diğerleri Ana Sayfa'ya gider. Rota dokunma anındaki gerçek veriden
-    // hesaplanır; Ana Sayfa için navigate, yığında ikinci bir Ana Sayfa oluşturmaz.
-    if (decision.target === 'review') router.push(getReviewRoute() as any);
+    // Rota dokunma anındaki gerçek veriden hesaplanır. Mini quiz yalnızca bu hesapta var olan bir kelime için açılır
+    // (silinmiş/başka hesaba ait kelime kimliği tekrar akışına düşer). Ana Sayfa için navigate, yığında ikinci bir
+    // Ana Sayfa oluşturmaz.
+    if (decision.target === 'quiz') router.push(getNotificationRoute({ wordId: decision.wordId }) as any);
+    else if (decision.target === 'review') router.push(getReviewRoute() as any);
     else router.navigate('/(tabs)' as any);
-  }, [handledTapsLoaded, isAuthLoaded, isAppReady, navigationState?.key, lastNotificationResponse, currentUserId, router]);
+  }, [pendingResponse, handledTapsLoaded, isAuthLoaded, isAppReady, navigationState?.key, currentUserId, router]);
+
+  if (!isThemeLoaded) return null;
 
   if (isLoaded && isAuthLoaded && syncProblem) {
     return <SyncProblemScreen onRetry={retrySync} busy={retryBusy} attempts={retryAttempts} email={session?.user.email ?? null} />;
@@ -289,22 +334,23 @@ export default function RootLayout() {
   if (!isLoaded || !isAuthLoaded || !isUserDataSynced) {
     return (
       <View
-        style={{ flex: 1, backgroundColor: Colors.warmWhite, alignItems: 'center', justifyContent: 'center', gap: 20 }}
+        style={{ flex: 1, backgroundColor: colors.warmWhite, alignItems: 'center', justifyContent: 'center', gap: 20 }}
         accessibilityRole="progressbar"
         accessibilityLabel="Wortly yükleniyor"
       >
         <BrandMark />
-        <ActivityIndicator color={Colors.secondary} />
+        <ActivityIndicator color={colors.secondary} />
       </View>
     );
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: Colors.warmWhite }}>
-      <SafeAreaProvider style={{ backgroundColor: Colors.warmWhite }}>
-        <StatusBar style="dark" />
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.warmWhite }}>
+      <SafeAreaProvider>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
         <AchievementTracker />
-        <Stack screenOptions={{ headerShown: false, ...androidScreenOptions }}>
+        <ThemeProvider value={navigationTheme}>
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.warmWhite } }}>
         <Stack.Screen
           name="auth"
           options={{ animation: 'fade' }}
@@ -324,6 +370,10 @@ export default function RootLayout() {
         <Stack.Screen
           name="basarilarim"
           options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
+          name="mini-quiz"
+          options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
         />
         <Stack.Screen
           name="analiz"
@@ -390,6 +440,7 @@ export default function RootLayout() {
           options={{ animation: 'slide_from_right' }}
         />
         </Stack>
+        </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

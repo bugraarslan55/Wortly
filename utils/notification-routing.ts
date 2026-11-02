@@ -10,11 +10,12 @@ export const TAP_MAX_AGE_MS = 15 * 60 * 1000;
 export interface NotificationTap {
   /** Bildirim kimliği + teslim zamanı: aynı bildirimin tekrar işlenmesini engellemek için. */
   key: string;
-  data: { type?: unknown; kind?: unknown; userId?: unknown } | null | undefined;
+  data: { type?: unknown; kind?: unknown; userId?: unknown; wordId?: unknown } | null | undefined;
 }
 
 export type TapDecision =
-  | { action: 'navigate'; target: 'review' | 'home'; markHandled: true }
+  /** 'quiz': günlük mini quiz bildirimi (kelime kimliğiyle); 'review': tekrar akışı; 'home': Ana Sayfa. */
+  | { action: 'navigate'; target: 'review' | 'home' | 'quiz'; wordId?: string; markHandled: true }
   /** Henüz yönlendirme yapılamaz (giriş yok / uygulama hazır değil). Daha sonra tekrar değerlendirilir. */
   | { action: 'wait'; markHandled: false }
   | { action: 'ignore'; markHandled: boolean; reason: 'not-wortly' | 'already-handled' | 'other-account' | 'expired' | 'no-owner' };
@@ -48,6 +49,9 @@ export function decideTap(input: {
   if (ownerId !== currentUserId) return { action: 'ignore', markHandled: true, reason: 'other-account' };
   if (!appReady) return { action: 'wait', markHandled: false };
 
+  const wordId = typeof tap.data?.wordId === 'string' && tap.data.wordId ? tap.data.wordId : null;
+  // Mini quiz yalnızca günlük/tekrar bildirimlerinde ve kelime kimliği varsa açılır; diğerleri eskisi gibi yönlenir.
+  if (wordId && (tap.data?.kind === 'daily' || tap.data?.kind === 'review')) return { action: 'navigate', target: 'quiz', wordId, markHandled: true };
   return { action: 'navigate', target: tap.data?.kind === 'review' ? 'review' : 'home', markHandled: true };
 }
 

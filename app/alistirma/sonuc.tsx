@@ -4,7 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useUserStore, useWordStore } from '../../store';
 import { useOwnSessions } from '../../components/use-achievements';
-import { Colors, Spacing, BorderRadius } from '../../constants/theme';
+import { Spacing, BorderRadius } from '../../constants/theme';
+import { makeStyles, useColors } from '../../hooks/use-theme';
 import { AppIcon } from '../../components/app-icon';
 import { Card, IconTile, PrimaryButton, SecondaryButton } from '../../components/ui';
 import { getActiveStreak } from '../../utils/progress-stats';
@@ -41,6 +42,8 @@ function getMessage(percentage: number) {
 }
 
 export default function SonucScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const { score, total, type, topicId, wrongIds } = useLocalSearchParams<{
     score: string;
@@ -132,17 +135,17 @@ export default function SonucScreen() {
 
         <View style={styles.statsRow}>
           <Card style={styles.statBox}>
-            <AppIcon name="checkmark.circle.fill" size={20} color={Colors.success} />
+            <AppIcon name="checkmark.circle.fill" size={20} color={colors.success} />
             <Text style={styles.statNumber}>{scoreNum}</Text>
             <Text style={styles.statLabel}>Doğru</Text>
           </Card>
           <Card style={styles.statBox}>
-            <AppIcon name="xmark.circle.fill" size={20} color={Colors.error} />
+            <AppIcon name="xmark.circle.fill" size={20} color={colors.error} />
             <Text style={styles.statNumber}>{wrongNum}</Text>
             <Text style={styles.statLabel}>Yanlış</Text>
           </Card>
           <Card style={styles.statBox}>
-            <AppIcon name="flame.fill" size={20} color={Colors.secondary} />
+            <AppIcon name="flame.fill" size={20} color={colors.secondary} />
             <Text style={styles.statNumber}>{streak}</Text>
             <Text style={styles.statLabel}>Günlük seri</Text>
           </Card>
@@ -150,7 +153,7 @@ export default function SonucScreen() {
 
         {newBadges.length > 0 && (
           <View style={styles.badgeBox} accessibilityLiveRegion="polite">
-            <AppIcon name="medal" size={20} color={Colors.secondary} />
+            <AppIcon name="medal" size={20} color={colors.secondary} />
             <View style={styles.badgeText}>
               <Text style={styles.badgeTitle}>
                 {newBadges.length === 1 ? 'Yeni rozet kazandın!' : `${newBadges.length} yeni rozet kazandın!`}
@@ -200,7 +203,7 @@ export default function SonucScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   container: {
     flexGrow: 1, alignItems: 'center', justifyContent: 'center',
@@ -239,4 +242,4 @@ const styles = StyleSheet.create({
   tipBox: { width: '100%', backgroundColor: Colors.surfaceContainerLow, borderRadius: BorderRadius.lg, padding: Spacing.md },
   tipText: { fontSize: 13, color: Colors.onSurfaceVariant, lineHeight: 19 },
   buttonGroup: { width: '100%', gap: Spacing.sm, marginTop: Spacing.sm },
-});
+}));

@@ -3,7 +3,8 @@ import { Animated, Easing, StyleSheet, Text, TouchableOpacity, View } from 'reac
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { getTopicById } from '../../../constants/topics';
-import { Colors, Spacing, BorderRadius } from '../../../constants/theme';
+import { Spacing, BorderRadius, getCards } from '../../../constants/theme';
+import { makeStyles, useColors } from '../../../hooks/use-theme';
 import { useWordStore, useSessionStore, useUserStore } from '../../../store';
 import { Word } from '../../../types';
 import { AppIcon } from '../../../components/app-icon';
@@ -21,6 +22,8 @@ const PERSONAL_WORDS_ID = 'kelimelerim';
 
 /** Tek kartın çevrilebilir yüzü. `key` ile yeniden bağlanır, böylece her yeni kart ön yüzle başlar. */
 function FlipCard({ word, onFlip }: { word: Word; onFlip: () => void }) {
+  const styles = useStyles();
+  const colors = useColors();
   const flip = useRef(new Animated.Value(0)).current;
   const [flipped, setFlipped] = useState(false);
 
@@ -61,7 +64,7 @@ function FlipCard({ word, onFlip }: { word: Word; onFlip: () => void }) {
         />
         {!!word.plural && <ColoredGermanPlural plural={word.plural} style={styles.plural} />}
         <View style={styles.tapHint}>
-          <AppIcon name="arrow.clockwise" size={13} color={Colors.outline} />
+          <AppIcon name="arrow.clockwise" size={13} color={colors.outline} />
           <Text style={styles.tapHintText}>Anlamı görmek için kartı çevir</Text>
         </View>
       </Animated.View>
@@ -85,6 +88,8 @@ function FlipCard({ word, onFlip }: { word: Word; onFlip: () => void }) {
 }
 
 export default function FlashcardScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { words: customWords, reviewStates, updateMastery } = useWordStore();
@@ -254,8 +259,8 @@ export default function FlashcardScreen() {
           accessibilityLabel="Bilmiyorum"
           accessibilityState={{ disabled: !revealed }}
         >
-          <AppIcon name="xmark" size={20} color={Colors.onErrorContainer} />
-          <Text style={[styles.resultBtnText, { color: Colors.onErrorContainer }]}>Bilmiyorum</Text>
+          <AppIcon name="xmark" size={20} color={colors.onErrorContainer} />
+          <Text style={[styles.resultBtnText, { color: colors.onErrorContainer }]}>Bilmiyorum</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.resultBtn, styles.rightBtn, !revealed && styles.resultBtnDisabled]}
@@ -266,15 +271,15 @@ export default function FlashcardScreen() {
           accessibilityLabel="Biliyorum"
           accessibilityState={{ disabled: !revealed }}
         >
-          <AppIcon name="checkmark" size={20} color={Colors.success} />
-          <Text style={[styles.resultBtnText, { color: Colors.success }]}>Biliyorum</Text>
+          <AppIcon name="checkmark" size={20} color={colors.success} />
+          <Text style={[styles.resultBtnText, { color: colors.success }]}>Biliyorum</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.marginMain, gap: Spacing.md },
   cardContainer: { flex: 1, paddingHorizontal: Spacing.marginMain, justifyContent: 'center' },
@@ -284,7 +289,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainerLowest, borderRadius: BorderRadius.xxl, borderCurve: 'continuous',
     padding: Spacing.xl, alignItems: 'center', justifyContent: 'center', gap: 6,
     backfaceVisibility: 'hidden', boxShadow: '0 8px 24px rgba(26, 31, 43, 0.12)',
-    borderWidth: 1, borderColor: 'rgba(26, 31, 43, 0.07)',
+    borderWidth: 1, borderColor: getCards(Colors).borderColor,
   },
   faceBack: { backgroundColor: Colors.navy, borderColor: Colors.navy },
   faceHint: { fontSize: 11, fontWeight: '700', color: Colors.secondary, letterSpacing: 1.2, marginBottom: Spacing.sm },
@@ -299,7 +304,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: BorderRadius.md,
     padding: Spacing.md, marginTop: Spacing.md, width: '100%', gap: 4,
   },
-  exampleDe: { fontSize: 14, fontWeight: '600', color: Colors.onPrimary, textAlign: 'center' },
+  exampleDe: { fontSize: 14, fontWeight: '600', color: Colors.onNavy, textAlign: 'center' },
   exampleTr: { fontSize: 13, color: '#B8BCC8', textAlign: 'center' },
   instruction: { fontSize: 13, color: Colors.onSurfaceVariant, textAlign: 'center', marginBottom: Spacing.sm, paddingHorizontal: Spacing.marginMain },
   buttonRow: { flexDirection: 'row', paddingHorizontal: Spacing.marginMain, paddingBottom: Spacing.md, gap: Spacing.md },
@@ -317,6 +322,6 @@ const styles = StyleSheet.create({
   resultStat: { flex: 1, alignItems: 'center', gap: 2 },
   resultNumber: { fontSize: 24, fontWeight: '700', color: Colors.primary },
   resultLabel: { fontSize: 11, color: Colors.onSurfaceVariant, textAlign: 'center' },
-  resultDivider: { width: 1, alignSelf: 'stretch', backgroundColor: 'rgba(26, 31, 43, 0.07)' },
+  resultDivider: { width: 1, alignSelf: 'stretch', backgroundColor: Colors.divider },
   resultActions: { width: '100%', gap: Spacing.sm, marginTop: Spacing.sm },
-});
+}));

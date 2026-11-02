@@ -6,7 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ALL_TOPICS, getTopicById } from '../../constants/topics';
 import { useWordStore, useSessionStore } from '../../store';
-import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { makeStyles, useColors } from '../../hooks/use-theme';
 import { Word } from '../../types';
 import { ColoredGermanWord } from '../../components/colored-german-word';
 import { getArticlePalette } from '../../constants/article-colors';
@@ -22,6 +23,8 @@ const SESSION_SIZE = 10;
 type Phase = 'input' | 'result';
 
 export default function YazmaScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const { wordIds, topicId } = useLocalSearchParams<{ wordIds: string; topicId?: string }>();
   const { words: customWords, reviewStates, updateMastery } = useWordStore();
@@ -193,13 +196,13 @@ export default function YazmaScreen() {
             <View style={[
               styles.articleHint,
               {
-                backgroundColor: getArticlePalette(currentWord.article).background,
-                borderColor: getArticlePalette(currentWord.article).foreground,
+                backgroundColor: getArticlePalette(currentWord.article, colors).background,
+                borderColor: getArticlePalette(currentWord.article, colors).foreground,
               },
             ]}>
               <Text style={[
                 styles.articleHintText,
-                { color: getArticlePalette(currentWord.article).foreground },
+                { color: getArticlePalette(currentWord.article, colors).foreground },
               ]}>
                 Artikel: {currentWord.article}
               </Text>
@@ -221,7 +224,7 @@ export default function YazmaScreen() {
             value={input}
             onChangeText={setInput}
             placeholder="Almanca kelimeyi yaz..."
-            placeholderTextColor={Colors.outlineVariant}
+            placeholderTextColor={colors.outlineVariant}
             autoCapitalize="none"
             autoCorrect={false}
             editable={phase === 'input'}
@@ -318,7 +321,7 @@ export default function YazmaScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   articleNote: { fontSize: 12, color: Colors.onSurfaceVariant, textAlign: 'center', marginTop: Spacing.xs },
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.marginMain, paddingVertical: Spacing.md },
@@ -335,22 +338,22 @@ const styles = StyleSheet.create({
   articleHint: { marginTop: Spacing.sm, paddingHorizontal: 12, paddingVertical: 4, borderRadius: BorderRadius.full, borderWidth: 1 },
   articleHintText: { fontSize: 12, fontWeight: '700' },
   inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surfaceContainerLowest, borderRadius: BorderRadius.lg, borderWidth: 1.5, borderColor: Colors.outlineVariant, paddingHorizontal: Spacing.md, ...Shadows.level1 },
-  inputCorrect: { borderColor: Colors.success, backgroundColor: '#F0FFF4' },
+  inputCorrect: { borderColor: Colors.success, backgroundColor: Colors.successSurface },
   inputWrong: { borderColor: Colors.error, backgroundColor: Colors.errorContainer },
   input: { flex: 1, height: 56, fontSize: 20, color: Colors.primary, fontWeight: '600' },
-  inputResultIcon: { fontSize: 20 },
+  inputResultIcon: { fontSize: 20, color: Colors.primary },
   charRow: { gap: Spacing.sm, paddingVertical: 4 },
   charBtn: { backgroundColor: Colors.surfaceContainerLowest, borderRadius: 10, width: 44, height: 44, alignItems: 'center', justifyContent: 'center', ...Shadows.level1 },
   charBtnText: { fontSize: 18, fontWeight: '600', color: Colors.primary },
   resultBox: { borderRadius: 16, padding: Spacing.md, gap: 6 },
-  resultBoxCorrect: { backgroundColor: '#D8F3DC' },
+  resultBoxCorrect: { backgroundColor: Colors.successContainer },
   resultBoxWrong: { backgroundColor: Colors.errorContainer },
   resultEmoji: { fontSize: 16, fontWeight: '700', color: Colors.primary },
   resultLabel: { fontSize: 12, color: Colors.onSurfaceVariant },
   resultCorrect: { fontSize: 22, fontWeight: '700', color: Colors.primary },
   resultCorrectArticle: { fontWeight: '700' },
   resultTurkish: { fontSize: 13, color: Colors.onSurfaceVariant, marginTop: 1 },
-  exampleBox: { marginTop: Spacing.sm, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.08)', paddingTop: Spacing.sm },
+  exampleBox: { marginTop: Spacing.sm, borderTopWidth: 1, borderTopColor: Colors.divider, paddingTop: Spacing.sm },
   exampleLabel: { fontSize: 11, color: Colors.outlineVariant, marginBottom: 4 },
   exampleText: { fontSize: 13, fontWeight: '600', color: Colors.primary },
   exampleTr: { fontSize: 12, color: Colors.onSurfaceVariant, marginTop: 2 },
@@ -360,9 +363,9 @@ const styles = StyleSheet.create({
   ctaBtn: { marginHorizontal: Spacing.marginMain, marginBottom: 32, height: 54, backgroundColor: Colors.golden, borderRadius: BorderRadius.lg, alignItems: 'center', justifyContent: 'center' },
   inputCtaBtn: { flex: 1.3, marginHorizontal: 0, marginBottom: 0 },
   ctaBtnDisabled: { opacity: 0.5 },
-  ctaBtnText: { fontSize: 16, fontWeight: '700', color: Colors.primary },
+  ctaBtnText: { fontSize: 16, fontWeight: '700', color: Colors.onGolden },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl, gap: Spacing.md },
   emptyText: { fontSize: 16, color: Colors.onSurfaceVariant },
   backBtn: { backgroundColor: Colors.golden, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12 },
-  backBtnText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
-});
+  backBtnText: { fontSize: 14, fontWeight: '700', color: Colors.onGolden },
+}));

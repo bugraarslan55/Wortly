@@ -1,13 +1,16 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { BorderRadius, Colors, Spacing } from '../constants/theme';
+import { BorderRadius, Spacing } from '../constants/theme';
+import { makeStyles, useColors } from '../hooks/use-theme';
 import { AppIcon } from './app-icon';
 import { Card, IconTile, ProgressBar } from './ui';
 import { useDailyTasks } from './use-achievements';
 
 /** Ana Sayfa "Günlük Görevler": yalnızca gerçek öğrenme verisinden hesaplanır, Türkiye gününe göre yenilenir. */
 export function DailyTasksCard() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const tasks = useDailyTasks();
   const doneCount = tasks.filter(task => task.completed).length;
@@ -30,7 +33,7 @@ export function DailyTasksCard() {
           accessibilityLabel="Başarılarım"
           accessibilityHint="Rozetlerini ve ilerlemeni gösterir"
         >
-          <AppIcon name="medal" size={15} color={Colors.secondary} />
+          <AppIcon name="medal" size={15} color={colors.secondary} />
           <Text style={styles.linkText}>Başarılarım</Text>
         </TouchableOpacity>
       </View>
@@ -67,7 +70,7 @@ export function DailyTasksCard() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   card: { gap: Spacing.sm + 2 },
   header: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: Spacing.sm },
   headerText: { flexGrow: 1, flexShrink: 1, minWidth: 160, gap: 2 },
@@ -91,4 +94,4 @@ const styles = StyleSheet.create({
   rowCount: { fontSize: 13, fontWeight: '700', color: Colors.onSurfaceVariant, fontVariant: ['tabular-nums'] },
   rowDescription: { fontSize: 12, color: Colors.onSurfaceVariant, lineHeight: 17 },
   rowDetail: { fontSize: 12, fontWeight: '600', color: Colors.secondary },
-});
+}));

@@ -3,7 +3,8 @@ import { Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react
 import { useFocusEffect } from 'expo-router';
 import { useWordStore } from '../store';
 import { IconTile } from './ui';
-import { Cards, Colors, Spacing } from '../constants/theme';
+import { Spacing, getCards } from '../constants/theme';
+import { makeStyles } from '../hooks/use-theme';
 import {
   cleanupKeptRecordings, cleanupOrphanRecordings, scanOrphanRecordings,
 } from '../utils/pronunciation-storage';
@@ -16,6 +17,7 @@ import { isStaticWordId } from '../utils/static-word-ids';
  * tarama yalnızca raporlar, silme açık kullanıcı onayıyla yapılır. Başka kullanıcıların kayıtları listelenmez/silinmez.
  */
 export function RecordingStorageCard({ userId }: { userId: string | null }) {
+  const styles = useStyles();
   const words = useWordStore(state => state.words);
   const wordsLoaded = useWordStore(state => state.isLoaded);
   const [report, setReport] = useState<OrphanReport>(EMPTY_REPORT);
@@ -132,17 +134,17 @@ export function RecordingStorageCard({ userId }: { userId: string | null }) {
   );
 }
 
-const styles = StyleSheet.create({
-  card: { ...Cards.surface, width: '100%', padding: Spacing.md, gap: Spacing.md },
+const useStyles = makeStyles(Colors => StyleSheet.create({
+  card: { ...getCards(Colors).surface, width: '100%', padding: Spacing.md, gap: Spacing.md },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   textBox: { flex: 1 },
   label: { fontSize: 15, fontWeight: '700', color: Colors.primary },
   hint: { fontSize: 12, color: Colors.onSurfaceVariant, marginTop: 2, lineHeight: 17 },
   btn: { alignSelf: 'flex-start', minHeight: Spacing.touchTargetMin, paddingHorizontal: 20, borderRadius: 999, backgroundColor: Colors.golden, alignItems: 'center', justifyContent: 'center' },
-  btnText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
+  btnText: { fontSize: 14, fontWeight: '700', color: Colors.onGolden },
   disabled: { opacity: 0.55 },
   keptBox: { gap: Spacing.sm, paddingTop: Spacing.sm, borderTopWidth: 1, borderTopColor: Colors.outlineVariant },
   btnOutline: { alignSelf: 'flex-start', minHeight: Spacing.touchTargetMin, paddingHorizontal: 20, borderRadius: 999, borderWidth: 1.5, borderColor: Colors.errorContainer, alignItems: 'center', justifyContent: 'center' },
   btnOutlineText: { fontSize: 14, fontWeight: '600', color: Colors.error },
   message: { fontSize: 13, color: Colors.onSurfaceVariant, fontWeight: '600' },
-});
+}));

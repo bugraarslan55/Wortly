@@ -7,7 +7,8 @@ import { useRouter } from 'expo-router';
 import { useUserStore, useWordStore } from '../../store';
 import { getTopicsForLevel } from '../../constants/topics';
 import { topicSymbol } from '../../constants/symbols';
-import { Colors, Spacing, BorderRadius, Cards } from '../../constants/theme';
+import { Spacing, BorderRadius, getCards } from '../../constants/theme';
+import { makeStyles, useColors } from '../../hooks/use-theme';
 import { AppIcon } from '../../components/app-icon';
 import { DailyPlanCard } from '../../components/daily-plan-card';
 import { DailyTasksCard } from '../../components/daily-tasks-card';
@@ -24,6 +25,8 @@ function getGreeting() {
 }
 
 export default function HomeScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const { profile } = useUserStore();
   const { words, reviewStates } = useWordStore();
@@ -68,7 +71,7 @@ export default function HomeScreen() {
           accessibilityRole="button"
           accessibilityLabel={`Profil, seviye ${level}`}
         >
-          <AppIcon name="person.crop.circle.fill" size={24} color={Colors.primary} />
+          <AppIcon name="person.crop.circle.fill" size={24} color={colors.primary} />
           <View style={styles.levelBadge}>
             <Text style={styles.levelBadgeText}>{level}</Text>
           </View>
@@ -88,7 +91,7 @@ export default function HomeScreen() {
               <Text style={styles.cardEyebrow}>GÜNLÜK HEDEF</Text>
               <Text style={styles.goalMessage}>{goalMessage}</Text>
               <View style={[styles.streakChip, streak > 0 && styles.streakChipActive]}>
-                <AppIcon name="flame.fill" size={13} color={streak > 0 ? Colors.secondary : Colors.outline} />
+                <AppIcon name="flame.fill" size={13} color={streak > 0 ? colors.secondary : colors.outline} />
                 <Text style={styles.streakText}>
                   {streak > 0 ? `${streak} günlük seri` : 'Seri başlamadı'}
                 </Text>
@@ -107,7 +110,7 @@ export default function HomeScreen() {
             <Text style={styles.goalAdjustLabel}>Hedef: {dailyGoal} kelime / gün</Text>
             <View style={styles.goalAdjustAction}>
               <Text style={styles.goalAdjustText}>Değiştir</Text>
-              <AppIcon name="chevron.right" size={12} color={Colors.secondary} />
+              <AppIcon name="chevron.right" size={12} color={colors.secondary} />
             </View>
           </TouchableOpacity>
         </Card>
@@ -132,7 +135,7 @@ export default function HomeScreen() {
             <Text style={styles.scenarioTitle}>Gerçek Hayat Senaryoları</Text>
             <Text style={styles.scenarioSubtitle}>Almancayı günlük konuşmalarla pratiğe dök.</Text>
           </View>
-          <AppIcon name="chevron.right" size={14} color={Colors.golden} />
+          <AppIcon name="chevron.right" size={14} color={colors.golden} />
         </TouchableOpacity>
 
         {customWordCount > 0 && (
@@ -148,7 +151,7 @@ export default function HomeScreen() {
               <Text style={styles.linkTitle}>Kelimelerimle Çalış</Text>
               <Text style={styles.linkSubtitle}>{customWordCount} kişisel kelimenle alıştırma yap</Text>
             </View>
-            <AppIcon name="chevron.right" size={14} color={Colors.outline} />
+            <AppIcon name="chevron.right" size={14} color={colors.outline} />
           </TouchableOpacity>
         )}
 
@@ -187,7 +190,7 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   topBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -198,7 +201,7 @@ const styles = StyleSheet.create({
   greetingSubtext: { fontSize: 13, color: Colors.onSurfaceVariant, marginTop: 2 },
   profileButton: {
     width: 46, height: 46, borderRadius: 23,
-    backgroundColor: Colors.surfaceContainerLowest, borderWidth: 1, borderColor: Cards.borderColor,
+    backgroundColor: Colors.surfaceContainerLowest, borderWidth: 1, borderColor: getCards(Colors).borderColor,
     alignItems: 'center', justifyContent: 'center',
   },
   levelBadge: {
@@ -222,7 +225,7 @@ const styles = StyleSheet.create({
   },
   streakChipActive: { backgroundColor: Colors.secondaryContainer },
   streakText: { fontSize: 12, fontWeight: '600', color: Colors.primary },
-  goalDivider: { height: 1, backgroundColor: Cards.borderColor },
+  goalDivider: { height: 1, backgroundColor: getCards(Colors).borderColor },
   goalAdjust: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     minHeight: Spacing.touchTargetMin, paddingHorizontal: Spacing.md,
@@ -238,10 +241,10 @@ const styles = StyleSheet.create({
     boxShadow: '0 6px 18px rgba(26, 31, 43, 0.18)',
   },
   scenarioText: { flex: 1 },
-  scenarioTitle: { fontSize: 16, fontWeight: '700', color: Colors.onPrimary },
+  scenarioTitle: { fontSize: 16, fontWeight: '700', color: Colors.onNavy },
   scenarioSubtitle: { fontSize: 12, color: '#B8BCC8', marginTop: 2, lineHeight: 17 },
 
-  linkCard: { ...Cards.surface, flexDirection: 'row', alignItems: 'center', gap: Spacing.md, padding: Spacing.md, minHeight: 64 },
+  linkCard: { ...getCards(Colors).surface, flexDirection: 'row', alignItems: 'center', gap: Spacing.md, padding: Spacing.md, minHeight: 64 },
   linkText: { flex: 1 },
   linkTitle: { fontSize: 14, fontWeight: '600', color: Colors.primary },
   linkSubtitle: { fontSize: 12, color: Colors.onSurfaceVariant, marginTop: 1 },
@@ -249,11 +252,11 @@ const styles = StyleSheet.create({
   section: { gap: Spacing.xs },
   topicsGrid: { flexDirection: 'row', gap: Spacing.sm },
   topicCard: {
-    ...Cards.surface, flex: 1, minHeight: 124,
+    ...getCards(Colors).surface, flex: 1, minHeight: 124,
     paddingVertical: Spacing.md, paddingHorizontal: Spacing.sm, alignItems: 'center', justifyContent: 'center', gap: 6,
   },
   topicTitle: { fontSize: 13, fontWeight: '700', color: Colors.primary, textAlign: 'center' },
   topicCount: { fontSize: 11, color: Colors.onSurfaceVariant },
-  emptyBox: { ...Cards.surface, padding: Spacing.lg, alignItems: 'center' },
+  emptyBox: { ...getCards(Colors).surface, padding: Spacing.lg, alignItems: 'center' },
   emptyText: { fontSize: 13, color: Colors.onSurfaceVariant },
-});
+}));

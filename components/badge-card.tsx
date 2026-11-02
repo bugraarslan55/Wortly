@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { BorderRadius, Cards, Colors, Spacing } from '../constants/theme';
+import { BorderRadius, Spacing, getCards } from '../constants/theme';
+import { makeStyles, useColors } from '../hooks/use-theme';
 import { formatTurkishDate } from '../utils/achievements';
 import { AppIcon } from './app-icon';
 import { IconTile, ProgressBar } from './ui';
@@ -8,6 +9,8 @@ import type { BadgeView } from './use-achievements';
 
 /** Tek rozet kartı: kazanıldı / kilitli durumları, koşul, gerçek ilerleme (hesaplanabiliyorsa). */
 export function BadgeCard({ badge }: { badge: BadgeView }) {
+  const styles = useStyles();
+  const colors = useColors();
   const hasProgress = badge.current !== null && badge.target !== null;
   // Tarih, rozetin bu cihazda İLK DOĞRULANDIĞI gündür; gerçek kazanılma anı olarak sunulmaz.
   const verifiedText = badge.verifiedAt ? `Bu cihazda ilk doğrulama: ${formatTurkishDate(badge.verifiedAt)}` : '';
@@ -28,7 +31,7 @@ export function BadgeCard({ badge }: { badge: BadgeView }) {
         <IconTile name={badge.icon} size={52} tone={badge.earned ? 'gold' : 'soft'} />
         {!badge.earned && (
           <View style={styles.lock}>
-            <AppIcon name="lock.fill" size={11} color={Colors.onPrimary} />
+            <AppIcon name="lock.fill" size={11} color={colors.onPrimary} />
           </View>
         )}
       </View>
@@ -37,7 +40,7 @@ export function BadgeCard({ badge }: { badge: BadgeView }) {
         <View style={styles.titleLine}>
           <Text style={[styles.title, !badge.earned && styles.titleLocked]} numberOfLines={2}>{badge.title}</Text>
           <View style={[styles.chip, badge.earned ? styles.chipEarned : styles.chipLocked]}>
-            {badge.earned && <AppIcon name="checkmark" size={11} color={Colors.success} />}
+            {badge.earned && <AppIcon name="checkmark" size={11} color={colors.success} />}
             <Text style={[styles.chipText, badge.earned ? styles.chipTextEarned : styles.chipTextLocked]} maxFontSizeMultiplier={1.3}>
               {badge.earned ? 'Kazanıldı' : 'Kilitli'}
             </Text>
@@ -61,8 +64,8 @@ export function BadgeCard({ badge }: { badge: BadgeView }) {
   );
 }
 
-const styles = StyleSheet.create({
-  card: { ...Cards.surface, flexDirection: 'row', gap: Spacing.md, padding: Spacing.md },
+const useStyles = makeStyles(Colors => StyleSheet.create({
+  card: { ...getCards(Colors).surface, flexDirection: 'row', gap: Spacing.md, padding: Spacing.md },
   cardEarned: { borderColor: 'rgba(244, 211, 94, 0.7)' },
   cardLocked: { backgroundColor: Colors.surfaceContainerLowest },
   tileWrap: { alignSelf: 'flex-start' },
@@ -89,4 +92,4 @@ const styles = StyleSheet.create({
   progress: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   progressBar: { flex: 1 },
   progressText: { fontSize: 12, fontWeight: '700', color: Colors.onSurfaceVariant, minWidth: 36, textAlign: 'right' },
-});
+}));

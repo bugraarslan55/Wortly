@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Keyboard, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Spacing } from '../constants/theme';
+import { Spacing } from '../constants/theme';
+import { makeStyles } from '../hooks/use-theme';
 import { KeyboardSafeView } from './keyboard-safe-view';
 import { BrandMark, Card } from './ui';
 
@@ -13,6 +14,7 @@ import { BrandMark, Card } from './ui';
 export function AuthLayout({
   title, subtitle, children, footer,
 }: { title: string; subtitle: string; children: React.ReactNode; footer?: React.ReactNode }) {
+  const styles = useStyles();
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
@@ -55,7 +57,7 @@ export function AuthLayout({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   // Üst ve alt boşluk dengeli; içerik hafifçe yukarı yaslanır (alt boşluk biraz fazla).
   container: {
@@ -73,4 +75,4 @@ const styles = StyleSheet.create({
   subtext: { fontSize: 15, color: Colors.onSurfaceVariant, textAlign: 'center', lineHeight: 21, maxWidth: 320 },
   form: { gap: Spacing.sm + 4, padding: Spacing.md + 4 },
   footer: { alignItems: 'center', marginTop: Spacing.sm },
-});
+}));

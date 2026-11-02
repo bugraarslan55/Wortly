@@ -55,6 +55,8 @@ export interface PlannedReminder {
   kind: ReminderKind;
   title: string;
   body: string;
+  /** Mini quiz bildirimiyse sorulan kelimenin kimliği (yalnızca bu hesabın verisinden seçilir). */
+  wordId?: string;
   /** Tetiklenme zamanı (epoch ms, cihazın o anki yerel saatiyle hesaplanır). */
   date: number;
 }

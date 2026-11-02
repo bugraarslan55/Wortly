@@ -2,7 +2,8 @@ import React, { useCallback, useState } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { IconTile } from './ui';
-import { Cards, Colors, Spacing } from '../constants/theme';
+import { Spacing, getCards } from '../constants/theme';
+import { makeStyles } from '../hooks/use-theme';
 import { getLegacyOffer, LegacyOfferInfo, restoreLegacyRecords } from '../store';
 import {
   describeRestoreOutcome, describeWaiting, HOLD_MESSAGE, OFFER_CAVEAT, OutcomeTone,
@@ -19,6 +20,7 @@ import {
  *   durur ve istatistik/görev/rozetlere katılmaz.
  */
 export function LegacyRecordsCard({ userId, email }: { userId: string | null; email?: string | null }) {
+  const styles = useStyles();
   const router = useRouter();
   const [info, setInfo] = useState<LegacyOfferInfo | null>(null);
   const [busy, setBusy] = useState(false);
@@ -135,8 +137,8 @@ export function LegacyRecordsCard({ userId, email }: { userId: string | null; em
   );
 }
 
-const styles = StyleSheet.create({
-  card: { ...Cards.surface, width: '100%', padding: Spacing.md, gap: Spacing.md },
+const useStyles = makeStyles(Colors => StyleSheet.create({
+  card: { ...getCards(Colors).surface, width: '100%', padding: Spacing.md, gap: Spacing.md },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   textBox: { flex: 1, gap: 4 },
   label: { fontSize: 15, fontWeight: '700', color: Colors.primary },
@@ -144,11 +146,11 @@ const styles = StyleSheet.create({
   waiting: { fontSize: 12, fontWeight: '600', color: Colors.secondary, lineHeight: 17 },
   account: { fontSize: 12, fontWeight: '700', color: Colors.primary },
   btn: { alignSelf: 'flex-start', minHeight: Spacing.touchTargetMin, paddingHorizontal: 20, borderRadius: 999, backgroundColor: Colors.golden, alignItems: 'center', justifyContent: 'center' },
-  btnText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
+  btnText: { fontSize: 14, fontWeight: '700', color: Colors.onGolden },
   linkBtn: { alignSelf: 'flex-start', minHeight: Spacing.touchTargetMin, justifyContent: 'center' },
   linkText: { fontSize: 14, fontWeight: '700', color: Colors.primary, textDecorationLine: 'underline' },
   disabled: { opacity: 0.55 },
   message: { fontSize: 13, color: Colors.onSurfaceVariant, fontWeight: '600', lineHeight: 18 },
   messageSuccess: { color: Colors.success },
   messageError: { color: Colors.error },
-});
+}));

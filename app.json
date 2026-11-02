@@ -5,12 +5,12 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "scheme": "wortly",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.wortly.app",
-      "buildNumber": "5",
+      "buildNumber": "6",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -35,6 +35,14 @@
         }
       ],
       "expo-status-bar",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "enableSceneSupport": true
+          }
+        }
+      ],
       "expo-image",
       [
         "expo-splash-screen",

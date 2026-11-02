@@ -2,13 +2,16 @@ import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { BorderRadius, Colors, Spacing } from '../constants/theme';
+import { BorderRadius, Spacing } from '../constants/theme';
+import { makeStyles, useColors } from '../hooks/use-theme';
 import { AppIcon } from '../components/app-icon';
 import { BadgeCard } from '../components/badge-card';
 import { Card, IconTile, ProgressBar, SectionTitle } from '../components/ui';
 import { useAchievementViews } from '../components/use-achievements';
 
 export default function AchievementsScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const { badges, earnedCount } = useAchievementViews();
   const earned = badges.filter(badge => badge.earned);
@@ -23,7 +26,7 @@ export default function AchievementsScreen() {
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
         <TouchableOpacity onPress={goBack} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Geri">
-          <AppIcon name="chevron.left" size={16} color={Colors.onSurfaceVariant} />
+          <AppIcon name="chevron.left" size={16} color={colors.onSurfaceVariant} />
           <Text style={styles.backText}>Geri</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle} accessibilityRole="header">Başarılarım</Text>
@@ -60,7 +63,7 @@ export default function AchievementsScreen() {
         {locked.map(badge => <BadgeCard key={badge.id} badge={badge} />)}
 
         <View style={styles.note} accessibilityRole="text">
-          <AppIcon name="lock.fill" size={14} color={Colors.onSurfaceVariant} />
+          <AppIcon name="lock.fill" size={14} color={colors.onSurfaceVariant} />
           <Text style={styles.noteText}>
             Rozetler yalnızca bu cihazdaki gerçek çalışma verilerinle hesaplanır ve bu cihazda saklanır. Aynı
             hesabı başka bir cihazda kullanırsan oradaki rozetler farklı görünebilir. Kanıtlayamadığımız hiçbir
@@ -73,7 +76,7 @@ export default function AchievementsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   header: {
     minHeight: 56, paddingHorizontal: Spacing.marginMain,
@@ -99,4 +102,4 @@ const styles = StyleSheet.create({
     padding: Spacing.md, borderRadius: BorderRadius.lg, backgroundColor: Colors.surfaceContainerLow,
   },
   noteText: { flex: 1, fontSize: 12, lineHeight: 18, color: Colors.onSurfaceVariant },
-});
+}));

@@ -1,5 +1,5 @@
 // Wortly Design System — Stitch tasarımından birebir alınmıştır
-export const Colors = {
+export const LightColors = {
   // Core
   primary: '#1A1F2B',
   onPrimary: '#FFFFFF',
@@ -43,12 +43,22 @@ export const Colors = {
   // App specific
   warmWhite: '#FAF9F6',   // Ana arka plan
   golden: '#F4D35E',      // CTA buton rengi
+  onGolden: '#1A1F2B',    // Altın zemin üzerindeki metin/ikon (her temada koyu)
   navy: '#1A1F2B',        // Ana metin
+  onNavy: '#FFFFFF',      // Koyu (navy) kartlar üzerindeki metin (her temada açık)
 
   // Success
   success: '#2D6A4F',
   successContainer: '#D8F3DC',
   onSuccess: '#FFFFFF',
+  successSurface: '#F0FFF4',
+
+  // Alıştırma kartı tonları ve ince ayırıcı çizgi
+  tintBlue: '#E8F0FF',
+  tintPurple: '#F1ECFF',
+  tintAmber: '#FFF8E7',
+  tintOrange: '#FCE8D5',
+  divider: 'rgba(0, 0, 0, 0.08)',
 
   // German noun articles — consistent learning colors
   articleDer: '#2563EB',
@@ -59,6 +69,81 @@ export const Colors = {
   articleDasContainer: '#DCFCE7',
   articlePlural: '#7C3AED',
   articlePluralContainer: '#EDE9FE',
+};
+
+export type ThemeColors = { [K in keyof typeof LightColors]: string };
+
+// Koyu tema: aynı anlam rolleri, lacivert zemin üzerinde. Altın (CTA) aynı kalır;
+// artikel renkleri aynı anlamı korur, yalnızca koyu zeminde okunacak şekilde açılır.
+export const DarkColors: ThemeColors = {
+  // Core
+  primary: '#F3F1EC',
+  onPrimary: '#1A1F2B',
+  primaryContainer: '#2B3347',
+  onPrimaryContainer: '#A9AFC4',
+
+  // Secondary (golden yellow — CTA)
+  secondary: '#E4C451',
+  onSecondary: '#3A2F00',
+  secondaryContainer: '#4D4012',
+  onSecondaryContainer: '#FFE17A',
+  secondaryFixed: '#ffe17a',
+  secondaryFixedDim: '#e4c451',
+
+  // Surface
+  surface: '#12151F',
+  surfaceBright: '#2B3347',
+  surfaceDim: '#0D1019',
+  surfaceContainerLowest: '#1B2030',
+  surfaceContainerLow: '#232A3B',
+  surfaceContainer: '#2B3347',
+  surfaceContainerHigh: '#343D54',
+  surfaceContainerHighest: '#3E4863',
+  onSurface: '#E6E8F0',
+  onSurfaceVariant: '#B4B7C4',
+
+  // Outline
+  outline: '#8D90A0',
+  outlineVariant: '#454C60',
+
+  // Error
+  error: '#FF8A80',
+  onError: '#690005',
+  errorContainer: '#5C1F1B',
+  onErrorContainer: '#FFDAD6',
+
+  // Background
+  background: '#12151F',
+  onBackground: '#E6E8F0',
+
+  // App specific
+  warmWhite: '#12151F',
+  golden: '#F4D35E',
+  onGolden: '#1A1F2B',
+  navy: '#2B3347',
+  onNavy: '#F3F1EC',
+
+  // Success
+  success: '#6FD39A',
+  successContainer: '#16382A',
+  onSuccess: '#0B2A1B',
+  successSurface: '#14291F',
+
+  tintBlue: '#1F2A44',
+  tintPurple: '#2B2646',
+  tintAmber: '#3A3218',
+  tintOrange: '#3D2B1B',
+  divider: 'rgba(255, 255, 255, 0.1)',
+
+  // German noun articles — aynı renk anlamı, koyu zeminde okunur tonlar
+  articleDer: '#7DA9FF',
+  articleDerContainer: '#1E2F57',
+  articleDie: '#FF8585',
+  articleDieContainer: '#4A1F24',
+  articleDas: '#5ED68A',
+  articleDasContainer: '#173D28',
+  articlePlural: '#B79CFF',
+  articlePluralContainer: '#33285C',
 };
 
 export const Typography = {
@@ -105,17 +190,21 @@ export const Shadows = {
 };
 
 // Ortak kart yüzeyi: ince kenarlık + hafif gölge (tüm ekranlarda aynı yükseklik hissi).
-export const Cards = {
-  borderColor: 'rgba(26, 31, 43, 0.07)',
-  surface: {
-    backgroundColor: '#ffffff',
-    borderRadius: BorderRadius.xl,
-    borderCurve: 'continuous' as const,
-    borderWidth: 1,
-    borderColor: 'rgba(26, 31, 43, 0.07)',
-    boxShadow: '0 2px 12px rgba(26, 31, 43, 0.06)',
-  },
-};
+export function getCards(colors: ThemeColors) {
+  const dark = colors === DarkColors;
+  const border = dark ? 'rgba(255, 255, 255, 0.10)' : 'rgba(26, 31, 43, 0.07)';
+  return {
+    borderColor: border,
+    surface: {
+      backgroundColor: colors.surfaceContainerLowest,
+      borderRadius: BorderRadius.xl,
+      borderCurve: 'continuous' as const,
+      borderWidth: 1,
+      borderColor: border,
+      boxShadow: dark ? '0 2px 12px rgba(0, 0, 0, 0.35)' : '0 2px 12px rgba(26, 31, 43, 0.06)',
+    },
+  };
+}
 
 export const Fonts = {
   regular: 'HankenGrotesk_400Regular',

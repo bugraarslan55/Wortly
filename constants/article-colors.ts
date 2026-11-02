@@ -1,14 +1,17 @@
 import { Article } from '../types';
-import { Colors } from './theme';
+import { ThemeColors } from './theme';
 
-export const ARTICLE_PALETTES = {
-  der: { foreground: Colors.articleDer, background: Colors.articleDerContainer },
-  die: { foreground: Colors.articleDie, background: Colors.articleDieContainer },
-  das: { foreground: Colors.articleDas, background: Colors.articleDasContainer },
-  plural: { foreground: Colors.articlePlural, background: Colors.articlePluralContainer },
-  none: { foreground: Colors.onSurfaceVariant, background: Colors.surfaceContainer },
-} as const;
+export function getArticlePalettes(colors: ThemeColors) {
+  return {
+    der: { foreground: colors.articleDer, background: colors.articleDerContainer },
+    die: { foreground: colors.articleDie, background: colors.articleDieContainer },
+    das: { foreground: colors.articleDas, background: colors.articleDasContainer },
+    plural: { foreground: colors.articlePlural, background: colors.articlePluralContainer },
+    none: { foreground: colors.onSurfaceVariant, background: colors.surfaceContainer },
+  } as const;
+}
 
-export function getArticlePalette(article: Article) {
-  return article ? ARTICLE_PALETTES[article] : ARTICLE_PALETTES.none;
+export function getArticlePalette(article: Article, colors: ThemeColors) {
+  const palettes = getArticlePalettes(colors);
+  return article ? palettes[article] : palettes.none;
 }

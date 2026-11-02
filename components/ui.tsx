@@ -2,7 +2,8 @@ import React from 'react';
 import {
   StyleProp, StyleSheet, Text, TextInput, TextInputProps, TouchableOpacity, View, ViewStyle,
 } from 'react-native';
-import { BorderRadius, Cards, Colors, Shadows, Spacing } from '../constants/theme';
+import { BorderRadius, Shadows, Spacing, getCards } from '../constants/theme';
+import { makeStyles, useColors } from '../hooks/use-theme';
 import { AppIcon } from './app-icon';
 
 // Wortly ortak arayüz bileşenleri: iOS ve Android'de aynı görünür (platforma özel dal yok).
@@ -13,6 +14,7 @@ import { AppIcon } from './app-icon';
 export function ScreenHeader({
   title, subtitle, right,
 }: { title: string; subtitle?: string; right?: React.ReactNode }) {
+  const styles = useStyles();
   return (
     <View style={styles.screenHeader}>
       <View style={styles.screenHeaderText}>
@@ -27,6 +29,8 @@ export function ScreenHeader({
 export function SectionTitle({
   children, action,
 }: { children: string; action?: { label: string; onPress: () => void; accessibilityLabel?: string } }) {
+  const styles = useStyles();
+  const colors = useColors();
   return (
     <View style={styles.sectionHeader}>
       <Text style={styles.sectionTitle} accessibilityRole="header">{children}</Text>
@@ -38,7 +42,7 @@ export function SectionTitle({
           accessibilityLabel={action.accessibilityLabel ?? action.label}
         >
           <Text style={styles.sectionActionText}>{action.label}</Text>
-          <AppIcon name="chevron.right" size={12} color={Colors.secondary} />
+          <AppIcon name="chevron.right" size={12} color={colors.secondary} />
         </TouchableOpacity>
       )}
     </View>
@@ -48,14 +52,17 @@ export function SectionTitle({
 // ─── Kart ve ikon kutusu ────────────────────────────────────────────────────
 
 export function Card({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
-  return <View style={[Cards.surface, styles.cardPadding, style]}>{children}</View>;
+  const styles = useStyles();
+  const colors = useColors();
+  return <View style={[getCards(colors).surface, styles.cardPadding, style]}>{children}</View>;
 }
 
 export function IconTile({
   name, size = 40, tone = 'soft',
 }: { name: string; size?: number; tone?: 'soft' | 'navy' | 'gold' }) {
-  const background = tone === 'navy' ? Colors.navy : tone === 'gold' ? Colors.golden : Colors.surfaceContainerLow;
-  const color = tone === 'navy' ? Colors.golden : Colors.secondary;
+  const colors = useColors();
+  const background = tone === 'navy' ? colors.navy : tone === 'gold' ? colors.golden : colors.surfaceContainerLow;
+  const color = tone === 'navy' ? colors.golden : colors.secondary;
   return (
     <View
       style={{
@@ -83,6 +90,8 @@ type ButtonProps = {
 };
 
 export function PrimaryButton({ label, onPress, disabled, loading, icon, accessibilityHint, style }: ButtonProps) {
+  const styles = useStyles();
+  const colors = useColors();
   const inactive = disabled || loading;
   return (
     <TouchableOpacity
@@ -96,7 +105,7 @@ export function PrimaryButton({ label, onPress, disabled, loading, icon, accessi
       accessibilityState={{ disabled: !!inactive, busy: !!loading }}
     >
       <Text style={styles.primaryButtonText} numberOfLines={1}>{label}</Text>
-      {icon && <AppIcon name={icon} size={15} color={Colors.primary} />}
+      {icon && <AppIcon name={icon} size={15} color={colors.primary} />}
     </TouchableOpacity>
   );
 }
@@ -104,8 +113,10 @@ export function PrimaryButton({ label, onPress, disabled, loading, icon, accessi
 export function SecondaryButton({
   label, onPress, disabled, tone = 'neutral', accessibilityHint, style,
 }: Omit<ButtonProps, 'loading' | 'icon'> & { tone?: 'neutral' | 'danger' }) {
-  const color = tone === 'danger' ? Colors.error : Colors.onSurfaceVariant;
-  const border = tone === 'danger' ? `${Colors.error}66` : Colors.outlineVariant;
+  const styles = useStyles();
+  const colors = useColors();
+  const color = tone === 'danger' ? colors.error : colors.onSurfaceVariant;
+  const border = tone === 'danger' ? `${colors.error}66` : colors.outlineVariant;
   return (
     <TouchableOpacity
       style={[styles.button, styles.secondaryButton, { borderColor: border }, disabled && styles.buttonInactive, style]}
@@ -140,6 +151,8 @@ export type SegmentOption<T extends string | number> = {
 export function SegmentedControl<T extends string | number>({
   options, value, onChange,
 }: { options: SegmentOption<T>[]; value: T; onChange: (value: T) => void }) {
+  const styles = useStyles();
+  const colors = useColors();
   return (
     <View style={styles.segmentTrack} accessibilityRole="radiogroup">
       {options.map(option => {
@@ -150,7 +163,7 @@ export function SegmentedControl<T extends string | number>({
             style={[
               styles.segment,
               selected && {
-                backgroundColor: option.activeBackground ?? Colors.golden,
+                backgroundColor: option.activeBackground ?? colors.golden,
                 borderColor: option.activeBorder ?? 'transparent',
               },
               option.disabled && styles.segmentDisabled,
@@ -163,13 +176,13 @@ export function SegmentedControl<T extends string | number>({
           >
             <View style={styles.segmentRow}>
               <Text
-                style={[styles.segmentLabel, selected && { color: option.activeColor ?? Colors.primary }]}
+                style={[styles.segmentLabel, selected && { color: option.activeColor ?? colors.primary }]}
                 numberOfLines={1}
                 maxFontSizeMultiplier={1.6}
               >
                 {option.label}
               </Text>
-              {option.icon && <AppIcon name={option.icon} size={11} color={Colors.outline} />}
+              {option.icon && <AppIcon name={option.icon} size={11} color={colors.outline} />}
             </View>
             {!!option.sublabel && (
               <Text style={styles.segmentSub} numberOfLines={1} maxFontSizeMultiplier={1.4}>{option.sublabel}</Text>
@@ -184,6 +197,7 @@ export function SegmentedControl<T extends string | number>({
 export function FilterChip({
   label, count, selected, onPress, accessibilityLabel,
 }: { label: string; count?: number; selected: boolean; onPress: () => void; accessibilityLabel?: string }) {
+  const styles = useStyles();
   return (
     <TouchableOpacity
       style={[styles.chip, selected && styles.chipSelected]}
@@ -208,13 +222,15 @@ export function FilterChip({
 export function SearchField({
   value, onChangeText, placeholder, style,
 }: { value: string; onChangeText: (text: string) => void; placeholder: string; style?: StyleProp<ViewStyle> }) {
+  const styles = useStyles();
+  const colors = useColors();
   return (
     <View style={[styles.search, style]}>
-      <AppIcon name="magnifyingglass" size={16} color={Colors.outline} />
+      <AppIcon name="magnifyingglass" size={16} color={colors.outline} />
       <TextInput
         style={styles.searchInput}
         placeholder={placeholder}
-        placeholderTextColor={Colors.outline}
+        placeholderTextColor={colors.outline}
         value={value}
         onChangeText={onChangeText}
         returnKeyType="search"
@@ -228,7 +244,7 @@ export function SearchField({
           accessibilityRole="button"
           accessibilityLabel="Aramayı temizle"
         >
-          <AppIcon name="xmark.circle.fill" size={18} color={Colors.outline} />
+          <AppIcon name="xmark.circle.fill" size={18} color={colors.outline} />
         </TouchableOpacity>
       )}
     </View>
@@ -238,6 +254,7 @@ export function SearchField({
 export function FormField({
   label, optional, hint, error, children,
 }: { label: string; optional?: boolean; hint?: string; error?: string; children: React.ReactNode }) {
+  const styles = useStyles();
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>
@@ -253,11 +270,13 @@ export function FormField({
 
 export const TextField = React.forwardRef<TextInput, TextInputProps & { invalid?: boolean }>(
   function TextField({ invalid, style, onFocus, onBlur, ...props }, ref) {
+  const styles = useStyles();
+  const colors = useColors();
     const [focused, setFocused] = React.useState(false);
     return (
       <TextInput
         ref={ref}
-        placeholderTextColor={Colors.outline}
+        placeholderTextColor={colors.outline}
         {...props}
         onFocus={(event) => { setFocused(true); onFocus?.(event); }}
         onBlur={(event) => { setFocused(false); onBlur?.(event); }}
@@ -276,6 +295,8 @@ export const TextField = React.forwardRef<TextInput, TextInputProps & { invalid?
 /** Şifre alanı: göster/gizle düğmesiyle (44 px dokunma alanı). */
 export const PasswordField = React.forwardRef<TextInput, TextInputProps & { invalid?: boolean }>(
   function PasswordField({ style, ...props }, ref) {
+  const styles = useStyles();
+  const colors = useColors();
     const [visible, setVisible] = React.useState(false);
     return (
       <View style={styles.passwordWrap}>
@@ -293,7 +314,7 @@ export const PasswordField = React.forwardRef<TextInput, TextInputProps & { inva
           accessibilityRole="button"
           accessibilityLabel={visible ? 'Şifreyi gizle' : 'Şifreyi göster'}
         >
-          <AppIcon name={visible ? 'eye.slash' : 'eye'} size={20} color={Colors.outline} />
+          <AppIcon name={visible ? 'eye.slash' : 'eye'} size={20} color={colors.outline} />
         </TouchableOpacity>
       </View>
     );
@@ -302,6 +323,8 @@ export const PasswordField = React.forwardRef<TextInput, TextInputProps & { inva
 
 /** Hata veya başarı mesajı kutusu (ekran okuyucuya otomatik duyurulur). */
 export function Notice({ type, children }: { type: 'error' | 'success'; children: string }) {
+  const styles = useStyles();
+  const colors = useColors();
   const isError = type === 'error';
   return (
     <View
@@ -312,9 +335,9 @@ export function Notice({ type, children }: { type: 'error' | 'success'; children
       <AppIcon
         name={isError ? 'circle.fill' : 'checkmark.circle.fill'}
         size={isError ? 8 : 16}
-        color={isError ? Colors.error : Colors.success}
+        color={isError ? colors.error : colors.success}
       />
-      <Text style={[styles.noticeText, { color: isError ? Colors.onErrorContainer : Colors.success }]} selectable>
+      <Text style={[styles.noticeText, { color: isError ? colors.onErrorContainer : colors.success }]} selectable>
         {children}
       </Text>
     </View>
@@ -323,6 +346,7 @@ export function Notice({ type, children }: { type: 'error' | 'success'; children
 
 /** Wortly marka alanı: lacivert monogram + yazı işareti. */
 export function BrandMark() {
+  const styles = useStyles();
   return (
     <View style={styles.brand} accessible accessibilityRole="image" accessibilityLabel="Wortly">
       <View style={styles.brandTile}>
@@ -340,8 +364,10 @@ export function EmptyState({
 }: {
   icon: string; eyebrow?: string; title: string; description?: string; actionLabel?: string; onAction?: () => void;
 }) {
+  const styles = useStyles();
+  const colors = useColors();
   return (
-    <View style={[Cards.surface, styles.empty]}>
+    <View style={[getCards(colors).surface, styles.empty]}>
       <IconTile name={icon} size={60} />
       {!!eyebrow && <Text style={styles.emptyEyebrow}>{eyebrow}</Text>}
       <Text style={styles.emptyTitle}>{title}</Text>
@@ -353,7 +379,7 @@ export function EmptyState({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   screenHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.md,
     paddingHorizontal: Spacing.marginMain, paddingTop: Spacing.md, paddingBottom: Spacing.md,
@@ -377,7 +403,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm,
   },
   primaryButton: { backgroundColor: Colors.golden, ...Shadows.level1 },
-  primaryButtonText: { fontSize: 16, fontWeight: '700', color: Colors.primary },
+  primaryButtonText: { fontSize: 16, fontWeight: '700', color: Colors.onGolden },
   secondaryButton: { borderWidth: 1.5, backgroundColor: 'transparent' },
   secondaryButtonText: { fontSize: 15, fontWeight: '600' },
   buttonInactive: { opacity: 0.45 },
@@ -403,7 +429,7 @@ const styles = StyleSheet.create({
   },
   chipSelected: { backgroundColor: Colors.navy, borderColor: Colors.navy },
   chipText: { fontSize: 13, fontWeight: '600', color: Colors.onSurfaceVariant },
-  chipTextSelected: { color: Colors.onPrimary },
+  chipTextSelected: { color: Colors.onNavy },
   chipCount: {
     minWidth: 24, height: 24, paddingHorizontal: 6, borderRadius: BorderRadius.full,
     alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.surfaceContainer,
@@ -416,7 +442,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, minHeight: 48,
     paddingLeft: Spacing.md, paddingRight: 2,
     borderRadius: BorderRadius.lg, borderCurve: 'continuous',
-    backgroundColor: Colors.surfaceContainerLowest, borderWidth: 1, borderColor: Cards.borderColor,
+    backgroundColor: Colors.surfaceContainerLowest, borderWidth: 1, borderColor: getCards(Colors).borderColor,
   },
   searchInput: { flex: 1, fontSize: 15, color: Colors.primary, paddingVertical: 0 },
   searchClear: { width: Spacing.touchTargetMin, height: Spacing.touchTargetMin, alignItems: 'center', justifyContent: 'center' },
@@ -460,7 +486,7 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 18, fontWeight: '700', color: Colors.primary, textAlign: 'center' },
   emptyDesc: { fontSize: 14, color: Colors.onSurfaceVariant, textAlign: 'center', lineHeight: 21, maxWidth: 300 },
   emptyAction: { alignSelf: 'stretch', marginTop: Spacing.sm },
-});
+}));
 
 // ─── İlerleme çubuğu ────────────────────────────────────────────────────────
 
@@ -468,6 +494,8 @@ const styles = StyleSheet.create({
 export function ProgressBar({
   value, max, label, tone = 'gold',
 }: { value: number; max: number; label?: string; tone?: 'gold' | 'success' }) {
+  const colors = useColors();
+  const progressStyles = useProgressStyles();
   const ratio = max > 0 && Number.isFinite(value) ? Math.max(0, Math.min(1, value / max)) : 0;
   return (
     <View
@@ -480,14 +508,14 @@ export function ProgressBar({
       <View
         style={[
           progressStyles.fill,
-          { width: `${ratio * 100}%`, backgroundColor: tone === 'success' ? Colors.success : Colors.golden },
+          { width: `${ratio * 100}%`, backgroundColor: tone === 'success' ? colors.success : colors.golden },
         ]}
       />
     </View>
   );
 }
 
-const progressStyles = StyleSheet.create({
+const useProgressStyles = makeStyles(Colors => StyleSheet.create({
   track: { height: 8, borderRadius: BorderRadius.full, backgroundColor: Colors.surfaceContainer, overflow: 'hidden' },
   fill: { height: 8, borderRadius: BorderRadius.full },
-});
+}));

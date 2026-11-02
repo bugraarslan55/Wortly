@@ -8,11 +8,14 @@ import {
   getScenarioMeta, getScenariosForLevel, isScenarioLevelLocked, Scenario, SCENARIO_LEVELS,
 } from '../../constants/scenarios';
 import { countQuestions, isPlayableScenario, scenarioHistory, ScenarioHistory } from '../../utils/scenario-engine';
-import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { makeStyles, useColors } from '../../hooks/use-theme';
 import { Level } from '../../types';
 import { AppIcon } from '../../components/app-icon';
 
 export default function ScenariosScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const { profile } = useUserStore();
   const scenarioResults = useOwnScenarioResults();
@@ -73,7 +76,7 @@ export default function ScenariosScreen() {
               <Text style={[styles.levelTabText, active && styles.levelTabTextActive, locked && styles.levelTabTextLocked]}>
                 {level}
               </Text>
-              {locked && <AppIcon name="lock.fill" size={11} color={Colors.outline} />}
+              {locked && <AppIcon name="lock.fill" size={11} color={colors.outline} />}
             </TouchableOpacity>
           );
         })}
@@ -102,6 +105,8 @@ export default function ScenariosScreen() {
 }
 
 function ScenarioCard({ scenario, history, onPress }: { scenario: Scenario; history: ScenarioHistory | null; onPress: () => void }) {
+  const styles = useStyles();
+  const colors = useColors();
   const meta = getScenarioMeta(scenario.id);
   const questions = countQuestions(scenario.steps);
   return (
@@ -122,26 +127,26 @@ function ScenarioCard({ scenario, history, onPress }: { scenario: Scenario; hist
         {!!meta && <Text style={styles.cardGerman}>{meta.germanTitle}</Text>}
         <Text style={styles.cardDesc}>{meta?.goal ?? scenario.description}</Text>
         <View style={styles.metaRow}>
-          <AppIcon name="mappin.and.ellipse" size={12} color={Colors.secondary} />
+          <AppIcon name="mappin.and.ellipse" size={12} color={colors.secondary} />
           <Text style={styles.metaText}>{scenario.place}</Text>
           <Text style={styles.metaDot}>·</Text>
           <Text style={styles.metaText}>{questions} soru</Text>
         </View>
         {history ? (
           <View style={styles.doneRow}>
-            <AppIcon name="checkmark.circle.fill" size={14} color={Colors.success} />
+            <AppIcon name="checkmark.circle.fill" size={14} color={colors.success} />
             <Text style={styles.doneText}>
               Tamamlandı · en iyi %{history.bestPercent}{history.attempts > 1 ? ` · ${history.attempts} deneme` : ''}
             </Text>
           </View>
         ) : null}
       </View>
-      <AppIcon name="chevron.right" size={14} color={Colors.outline} />
+      <AppIcon name="chevron.right" size={14} color={colors.outline} />
     </TouchableOpacity>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   topBar: { paddingHorizontal: Spacing.marginMain, height: 48, justifyContent: 'center' },
   backButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
@@ -189,4 +194,4 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' },
   metaText: { fontSize: 12, color: Colors.onSurfaceVariant },
   metaDot: { fontSize: 12, color: Colors.outlineVariant },
-});
+}));

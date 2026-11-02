@@ -7,7 +7,8 @@ import { useRouter } from 'expo-router';
 import { useUserStore } from '../../store';
 import { getTopicsForLevel } from '../../constants/topics';
 import { topicSymbol } from '../../constants/symbols';
-import { Colors, Spacing, Cards } from '../../constants/theme';
+import { Spacing, getCards } from '../../constants/theme';
+import { makeStyles, useColors } from '../../hooks/use-theme';
 import { Level, Topic } from '../../types';
 import { AppIcon } from '../../components/app-icon';
 import { EmptyState, IconTile, ScreenHeader, SearchField, SegmentedControl } from '../../components/ui';
@@ -15,6 +16,7 @@ import { EmptyState, IconTile, ScreenHeader, SearchField, SegmentedControl } fro
 const LEVEL_TABS: Level[] = ['A1', 'A2', 'B1'];
 
 export default function KonularScreen() {
+  const styles = useStyles();
   const router = useRouter();
   const { profile } = useUserStore();
   // Güvenlik: profile.level her ne olursa olsun (eski/geçersiz veri dahil),
@@ -94,6 +96,8 @@ export default function KonularScreen() {
 }
 
 function TopicCard({ topic, onPress }: { topic: Topic; onPress: () => void }) {
+  const styles = useStyles();
+  const colors = useColors();
   return (
     <TouchableOpacity
       style={styles.topicCard}
@@ -108,22 +112,22 @@ function TopicCard({ topic, onPress }: { topic: Topic; onPress: () => void }) {
         <Text style={styles.topicTitle} numberOfLines={2}>{topic.title}</Text>
         <Text style={styles.topicMeta}>{topic.wordCount} kelime · {topic.level}</Text>
       </View>
-      <AppIcon name="chevron.right" size={15} color={Colors.outline} />
+      <AppIcon name="chevron.right" size={15} color={colors.outline} />
     </TouchableOpacity>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   search: { marginHorizontal: Spacing.marginMain, marginBottom: Spacing.md },
   levelTabs: { paddingHorizontal: Spacing.marginMain, marginBottom: Spacing.md },
   scroll: { flex: 1 },
   content: { paddingHorizontal: Spacing.marginMain, paddingBottom: 100, gap: Spacing.sm + 2 },
   topicCard: {
-    ...Cards.surface, padding: Spacing.md, minHeight: 76,
+    ...getCards(Colors).surface, padding: Spacing.md, minHeight: 76,
     flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
   },
   topicText: { flex: 1 },
   topicTitle: { fontSize: 16, fontWeight: '700', color: Colors.primary, marginBottom: 2 },
   topicMeta: { fontSize: 12, color: Colors.onSurfaceVariant },
-});
+}));

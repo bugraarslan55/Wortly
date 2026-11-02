@@ -13,7 +13,8 @@ import { useGermanSpeech } from '../../utils/use-german-speech';
 import { useRecordingActive } from '../../utils/use-recording-active';
 import { getReviewState } from '../../utils/spaced-repetition';
 import { ALL_TOPICS } from '../../constants/topics';
-import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { makeStyles, useColors } from '../../hooks/use-theme';
 import { Article, MasteryLevel } from '../../types';
 import { AppIcon } from '../../components/app-icon';
 import { GermanCharacterBar } from '../../components/german-character-bar';
@@ -28,6 +29,8 @@ const MASTERY_LABELS = ['Yeni', 'Öğreniliyor', 'Bilinçli', 'Öğrenildi'];
 const ARTICLES: Article[] = ['der', 'die', 'das', ''];
 
 export default function KelimeDetayScreen() {
+  const styles = useStyles();
+  const colors = useColors();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { words, reviewStates, updateWord, deleteWord } = useWordStore();
@@ -68,7 +71,7 @@ export default function KelimeDetayScreen() {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
-          <AppIcon name="questionmark.circle" size={36} color={Colors.outlineVariant} />
+          <AppIcon name="questionmark.circle" size={36} color={colors.outlineVariant} />
           <Text style={styles.emptyText}>Kelime bulunamadı</Text>
           <TouchableOpacity style={styles.backBtn} onPress={() => goBack(router)}>
             <Text style={styles.backBtnText}>← Geri</Text>
@@ -196,7 +199,7 @@ export default function KelimeDetayScreen() {
                     accessibilityRole="button"
                     accessibilityLabel="Kelimeyi normal hızda dinle"
                   >
-                    <AppIcon name="speaker.wave.2.fill" size={17} color={Colors.primary} />
+                    <AppIcon name="speaker.wave.2.fill" size={17} color={colors.primary} />
                     <Text style={styles.speechBtnText}>Dinle</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -207,7 +210,7 @@ export default function KelimeDetayScreen() {
                     accessibilityRole="button"
                     accessibilityLabel="Kelimeyi yavaş hızda dinle"
                   >
-                    <AppIcon name="tortoise.fill" size={17} color={Colors.primary} />
+                    <AppIcon name="tortoise.fill" size={17} color={colors.primary} />
                     <Text style={styles.speechBtnText}>Yavaş</Text>
                   </TouchableOpacity>
                 </View>
@@ -218,7 +221,7 @@ export default function KelimeDetayScreen() {
               <Text style={styles.editLabel}>Artikel</Text>
               <View style={styles.articleRow}>
                 {ARTICLES.map(art => {
-                  const palette = getArticlePalette(art);
+                  const palette = getArticlePalette(art, colors);
                   const isActive = article === art;
                   return (
                     <TouchableOpacity
@@ -301,7 +304,7 @@ export default function KelimeDetayScreen() {
           <View style={styles.masteryStars}>
             {[0, 1, 2, 3].map(i => (
               <View key={i} style={[styles.masteryStar, i <= masteryLevel && styles.masteryStarFilled]}>
-                <AppIcon name="circle.fill" size={10} color={Colors.secondaryFixedDim} />
+                <AppIcon name="circle.fill" size={10} color={colors.secondaryFixedDim} />
               </View>
             ))}
           </View>
@@ -311,7 +314,7 @@ export default function KelimeDetayScreen() {
         {(word.example || isEditing) && (
           <View style={styles.exampleCard}>
             <View style={styles.exampleTitleRow}>
-              <AppIcon name="text.quote" size={16} color={Colors.secondary} />
+              <AppIcon name="text.quote" size={16} color={colors.secondary} />
               <Text style={styles.exampleTitle}>Örnek Cümle</Text>
             </View>
             {!isEditing ? (
@@ -369,7 +372,7 @@ export default function KelimeDetayScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.marginMain, paddingVertical: Spacing.md },
   backBtnHeader: { paddingVertical: 6 },
@@ -377,7 +380,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.primary },
   editBtn: { backgroundColor: Colors.golden, paddingHorizontal: 14, paddingVertical: 7, borderRadius: BorderRadius.md },
   editBtnDisabled: { opacity: 0.5 },
-  editBtnText: { fontSize: 13, fontWeight: '700', color: Colors.primary },
+  editBtnText: { fontSize: 13, fontWeight: '700', color: Colors.onGolden },
   content: { paddingHorizontal: Spacing.marginMain, paddingBottom: 60, gap: Spacing.md },
   mainCard: { backgroundColor: Colors.surfaceContainerLowest, borderRadius: 24, padding: Spacing.xl, alignItems: 'center', ...Shadows.level2 },
   articleDisplay: { fontSize: 20, fontWeight: '700' },
@@ -408,11 +411,11 @@ const styles = StyleSheet.create({
   exampleGerman: { fontSize: 15, fontWeight: '600', color: Colors.primary },
   exampleTurkish: { fontSize: 13, color: Colors.onSurfaceVariant },
   quizBtn: { backgroundColor: Colors.golden, borderRadius: BorderRadius.lg, height: 54, alignItems: 'center', justifyContent: 'center' },
-  quizBtnText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
+  quizBtnText: { fontSize: 15, fontWeight: '700', color: Colors.onGolden },
   deleteBtn: { borderRadius: BorderRadius.lg, height: 50, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: Colors.errorContainer },
   deleteBtnText: { fontSize: 14, color: Colors.error, fontWeight: '600' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl, gap: Spacing.md },
   emptyText: { fontSize: 16, color: Colors.onSurfaceVariant },
   backBtn: { backgroundColor: Colors.golden, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12 },
-  backBtnText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
-});
+  backBtnText: { fontSize: 14, fontWeight: '700', color: Colors.onGolden },
+}));

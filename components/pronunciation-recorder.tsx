@@ -12,7 +12,8 @@ import {
 import { useAuthStore } from '../store/auth';
 import { Word } from '../types';
 import { AppIcon } from './app-icon';
-import { BorderRadius, Colors, Shadows, Spacing } from '../constants/theme';
+import { BorderRadius, Shadows, Spacing } from '../constants/theme';
+import { makeStyles, useColors } from '../hooks/use-theme';
 import {
   deletePronunciationFile,
   measureRecordingDuration,
@@ -39,6 +40,8 @@ import { useGermanSpeech } from '../utils/use-german-speech';
  * Kayıt/saklama mantığı `utils/pronunciation-controller.ts` içindedir (test edilmiş saf mantık).
  */
 export function PronunciationRecorder({ word }: { word: Word }) {
+  const styles = useStyles();
+  const colors = useColors();
   const wordId = word.id;
   const userId = useAuthStore(state => state.session?.user.id ?? 'guest');
   const playLockRef = useRef(false);
@@ -230,7 +233,7 @@ export function PronunciationRecorder({ word }: { word: Word }) {
   return (
     <View style={[styles.card, isRecording && styles.cardRecording]}>
       <View style={styles.titleRow}>
-        <AppIcon name="mic.fill" size={16} color={Colors.secondary} />
+        <AppIcon name="mic.fill" size={16} color={colors.secondary} />
         <Text style={styles.title}>Telaffuz çalışması</Text>
       </View>
 
@@ -255,7 +258,7 @@ export function PronunciationRecorder({ word }: { word: Word }) {
             accessibilityRole="button"
             accessibilityLabel="Kaydı durdur"
           >
-            <AppIcon name="stop.fill" size={16} color={Colors.primary} />
+            <AppIcon name="stop.fill" size={16} color={colors.primary} />
             <Text style={styles.primaryBtnText}>Kaydı Durdur</Text>
           </TouchableOpacity>
         </>
@@ -275,7 +278,7 @@ export function PronunciationRecorder({ word }: { word: Word }) {
             accessibilityState={{ disabled: controlsBusy }}
             accessibilityLabel={state.uri ? 'Telaffuzumu yeniden kaydet' : 'Telaffuzumu kaydet'}
           >
-            <AppIcon name="mic.fill" size={18} color={Colors.primary} />
+            <AppIcon name="mic.fill" size={18} color={colors.primary} />
             <Text style={styles.primaryBtnText}>{state.uri ? 'Yeniden Kaydet' : 'Telaffuzumu Kaydet'}</Text>
           </TouchableOpacity>
 
@@ -290,7 +293,7 @@ export function PronunciationRecorder({ word }: { word: Word }) {
                   accessibilityRole="button"
                   accessibilityLabel={isPlaying ? 'Kaydı duraklat' : 'Kaydımı dinle'}
                 >
-                  <AppIcon name={isPlaying ? 'pause.fill' : 'play.fill'} size={16} color={Colors.primary} />
+                  <AppIcon name={isPlaying ? 'pause.fill' : 'play.fill'} size={16} color={colors.primary} />
                   <Text style={styles.secondaryBtnText} maxFontSizeMultiplier={1.4}>
                     {isPlaying ? 'Duraklat' : 'Kaydımı Dinle'}
                   </Text>
@@ -303,7 +306,7 @@ export function PronunciationRecorder({ word }: { word: Word }) {
                   accessibilityRole="button"
                   accessibilityLabel="Önce Almanca sesi, sonra kaydımı dinle"
                 >
-                  <AppIcon name="speaker.wave.2.fill" size={16} color={Colors.primary} />
+                  <AppIcon name="speaker.wave.2.fill" size={16} color={colors.primary} />
                   <Text style={styles.secondaryBtnText} maxFontSizeMultiplier={1.4}>
                     {compareStatus === 'reference' ? 'Referans çalıyor…' : 'Karşılaştır'}
                   </Text>
@@ -317,7 +320,7 @@ export function PronunciationRecorder({ word }: { word: Word }) {
                 accessibilityRole="button"
                 accessibilityLabel="Kaydı sil"
               >
-                <AppIcon name="trash" size={16} color={Colors.error} />
+                <AppIcon name="trash" size={16} color={colors.error} />
                 <Text style={styles.deleteBtnText} maxFontSizeMultiplier={1.4}>Kaydı Sil</Text>
               </TouchableOpacity>
             </>
@@ -349,7 +352,7 @@ export function PronunciationRecorder({ word }: { word: Word }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(Colors => StyleSheet.create({
   card: { backgroundColor: Colors.surfaceContainerLowest, borderRadius: 20, padding: Spacing.md, ...Shadows.level1, gap: Spacing.sm },
   cardRecording: { borderWidth: 1.5, borderColor: Colors.error },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
@@ -361,7 +364,7 @@ const styles = StyleSheet.create({
   recText: { fontSize: 15, fontWeight: '700', color: Colors.error, flexShrink: 1 },
   primaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 52, paddingHorizontal: Spacing.md, backgroundColor: Colors.golden, borderRadius: BorderRadius.lg },
   stopBtn: { backgroundColor: Colors.errorContainer },
-  primaryBtnText: { fontSize: 15, fontWeight: '700', color: Colors.primary, flexShrink: 1 },
+  primaryBtnText: { fontSize: 15, fontWeight: '700', color: Colors.onGolden, flexShrink: 1 },
   disabled: { opacity: 0.55 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   secondaryBtn: { flex: 1, minWidth: 130, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, minHeight: Spacing.touchTargetMin, paddingHorizontal: Spacing.sm, backgroundColor: Colors.surfaceContainer, borderRadius: BorderRadius.lg, borderWidth: 1.5, borderColor: 'transparent' },
@@ -373,6 +376,6 @@ const styles = StyleSheet.create({
   error: { fontSize: 13, color: Colors.error, fontWeight: '600', lineHeight: 18 },
   notice: { fontSize: 13, color: Colors.onSurfaceVariant, fontWeight: '600', lineHeight: 18 },
   settingsBtn: { alignSelf: 'flex-start', minHeight: Spacing.touchTargetMin, paddingHorizontal: 16, borderRadius: 999, backgroundColor: Colors.golden, alignItems: 'center', justifyContent: 'center' },
-  settingsBtnText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
+  settingsBtnText: { fontSize: 14, fontWeight: '700', color: Colors.onGolden },
   footnote: { fontSize: 11, color: Colors.onSurfaceVariant, lineHeight: 16 },
-});
+}));
