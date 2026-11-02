@@ -58,7 +58,7 @@ const MESSY_SCENARIOS = [
 // ─── Tamamlanan alıştırma: tüm ekranlarda aynı tanım ─────────────────────────
 test('tamamlanan alıştırma: Profil, Analiz, Başarılarım ve Görevler bozuk/tekrarlı kayıtlarda AYNI sayıyı verir', () => {
   const base = reportInput({ sessions: MESSY_SESSIONS, scenarioResults: MESSY_SCENARIOS });
-  const profile = P.summarizeCompletedExercises(null, MESSY_SESSIONS, MESSY_SCENARIOS, NOW);
+  const profile = P.summarizeCompletedExercises(null, MESSY_SESSIONS, MESSY_SCENARIOS, null, NOW);
   const analysis = R.buildLearningReport(base).overview.completed;
   const achievements = A.collectCompletedExercises(snapshotOf(base)).length;
   const category = L.analyzeLearning({ sessions: MESSY_SESSIONS, scenarioResults: MESSY_SCENARIOS, now: NOW }).totalSessions;
@@ -92,7 +92,7 @@ test('aynı oturum iki kez kaydedilmişse tüm hesaplarda bir kez sayılır (kat
 test('sınırdaki yerel liste: geçersiz kayıtlar sayıyı şişirmez ama "en az" işareti ham listeye göre kalır', () => {
   const valid = Array.from({ length: 98 }, (_, i) => session('s' + i, 'yazma', 1, 1, at(1)));
   const raw = [...valid, session('b1', 'yazma', 9, 1, at(1)), session('b2', 'yazma', 0, 0, at(1))];
-  const summary = P.summarizeCompletedExercises(null, raw, [], NOW);
+  const summary = P.summarizeCompletedExercises(null, raw, [], null, NOW);
   assert.equal(summary.count, 98);
   assert.equal(summary.exact, false, 'ham liste 100: gerçek toplam daha fazla olabilir');
 });

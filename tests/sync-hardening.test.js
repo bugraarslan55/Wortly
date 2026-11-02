@@ -235,8 +235,10 @@ test('yalnızca bilinen statik kimlikler gönderilir; kişisel, silinmiş ve bil
 // ─── Senaryo geçmişi: bulut toplamı ─────────────────────────────────────────
 
 test('bulut senaryo toplamı biliniyorsa yerel 100 sınırı sayıyı kısıtlamaz', () => {
-  const sessions = Array.from({ length: 10 }, (_, i) => ({ id: String(i) }));
-  const local = Array.from({ length: 100 }, (_, i) => ({ id: `s${i}` }));
+  // Tamamlanmış kayıt tanımı tek yerde (isCompletedRecord): geçerli skor/toplam/tarih gerekir.
+  const record = (id) => ({ id, score: 1, total: 1, date: Date.now() });
+  const sessions = Array.from({ length: 10 }, (_, i) => record(String(i)));
+  const local = Array.from({ length: 100 }, (_, i) => record(`s${i}`));
   assert.deepEqual(stats.summarizeCompletedExercises(10, sessions, local, 340), { count: 350, exact: true });
   assert.deepEqual(stats.summarizeCompletedExercises(10, sessions, local, null), { count: 110, exact: false });
 });
