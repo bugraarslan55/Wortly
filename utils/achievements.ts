@@ -49,7 +49,7 @@ export function nextDeviceMidnight(now: number): number {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 0, 0).getTime();
 }
 
-function previousDayKey(key: string): string {
+export function previousDayKey(key: string): string {
   return new Date(Date.parse(`${key}T00:00:00Z`) - DAY_MS).toISOString().slice(0, 10);
 }
 
