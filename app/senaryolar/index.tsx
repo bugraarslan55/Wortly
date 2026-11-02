@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useUserStore } from '../../store';
+import { useSessionStore, useUserStore } from '../../store';
 import {
-  getScenariosForLevel, isScenarioLevelLocked, Scenario, SCENARIO_LEVELS,
+  getScenarioMeta, getScenariosForLevel, isScenarioLevelLocked, Scenario, SCENARIO_LEVELS,
 } from '../../constants/scenarios';
+import { countQuestions, isPlayableScenario, scenarioHistory, ScenarioHistory } from '../../utils/scenario-engine';
 import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
 import { Level } from '../../types';
 import { AppIcon } from '../../components/app-icon';
@@ -13,6 +14,7 @@ import { AppIcon } from '../../components/app-icon';
 export default function ScenariosScreen() {
   const router = useRouter();
   const { profile } = useUserStore();
+  const scenarioResults = useSessionStore(state => state.scenarioResults);
   const userLevel: Level = SCENARIO_LEVELS.includes(profile?.level as Level) ? (profile!.level as Level) : 'A1';
   const [activeLevel, setActiveLevel] = useState<Level>(userLevel);
   const [lockedNotice, setLockedNotice] = useState('');
@@ -32,7 +34,8 @@ export default function ScenariosScreen() {
   };
 
   const shownLevel = isScenarioLevelLocked(activeLevel, userLevel) ? userLevel : activeLevel;
-  const scenarios = getScenariosForLevel(shownLevel);
+  // Bozuk/eksik veriye sahip senaryolar listelenmez (açılınca çökmesin).
+  const scenarios = getScenariosForLevel(shownLevel).filter(isPlayableScenario);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -88,6 +91,7 @@ export default function ScenariosScreen() {
           <ScenarioCard
             key={scenario.id}
             scenario={scenario}
+            history={scenarioHistory(scenarioResults, scenario.id)}
             onPress={() => router.push(`/senaryolar/${scenario.id}` as any)}
           />
         ))}
@@ -96,14 +100,16 @@ export default function ScenariosScreen() {
   );
 }
 
-function ScenarioCard({ scenario, onPress }: { scenario: Scenario; onPress: () => void }) {
+function ScenarioCard({ scenario, history, onPress }: { scenario: Scenario; history: ScenarioHistory | null; onPress: () => void }) {
+  const meta = getScenarioMeta(scenario.id);
+  const questions = countQuestions(scenario.steps);
   return (
     <TouchableOpacity
       style={styles.card}
       onPress={onPress}
       activeOpacity={0.85}
       accessibilityRole="button"
-      accessibilityLabel={`${scenario.title}, ${scenario.place}, ${scenario.level}, ${scenario.steps.length} adım`}
+      accessibilityLabel={`${scenario.title}, ${scenario.place}, ${scenario.level}, ${questions} soru${history ? `, tamamlandı, en iyi başarı yüzde ${history.bestPercent}` : ''}`}
     >
       <View style={styles.cardBody}>
         <View style={styles.cardTitleRow}>
@@ -112,13 +118,22 @@ function ScenarioCard({ scenario, onPress }: { scenario: Scenario; onPress: () =
             <Text style={styles.levelBadgeText}>{scenario.level}</Text>
           </View>
         </View>
-        <Text style={styles.cardDesc}>{scenario.description}</Text>
+        {!!meta && <Text style={styles.cardGerman}>{meta.germanTitle}</Text>}
+        <Text style={styles.cardDesc}>{meta?.goal ?? scenario.description}</Text>
         <View style={styles.metaRow}>
           <AppIcon name="mappin.and.ellipse" size={12} color={Colors.secondary} />
           <Text style={styles.metaText}>{scenario.place}</Text>
           <Text style={styles.metaDot}>·</Text>
-          <Text style={styles.metaText}>{scenario.steps.length} adım</Text>
+          <Text style={styles.metaText}>{questions} soru</Text>
         </View>
+        {history ? (
+          <View style={styles.doneRow}>
+            <AppIcon name="checkmark.circle.fill" size={14} color={Colors.success} />
+            <Text style={styles.doneText}>
+              Tamamlandı · en iyi %{history.bestPercent}{history.attempts > 1 ? ` · ${history.attempts} deneme` : ''}
+            </Text>
+          </View>
+        ) : null}
       </View>
       <AppIcon name="chevron.right" size={14} color={Colors.outline} />
     </TouchableOpacity>
@@ -166,6 +181,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.secondaryContainer,
   },
   levelBadgeText: { fontSize: 11, fontWeight: '700', color: Colors.onSecondaryContainer },
+  cardGerman: { fontSize: 13, fontWeight: '600', fontStyle: 'italic', color: Colors.secondary },
+  doneRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+  doneText: { fontSize: 12, fontWeight: '700', color: Colors.success, flexShrink: 1 },
   cardDesc: { fontSize: 13, color: Colors.onSurfaceVariant, lineHeight: 18 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' },
   metaText: { fontSize: 12, color: Colors.onSurfaceVariant },

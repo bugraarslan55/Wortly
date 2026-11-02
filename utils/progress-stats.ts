@@ -21,6 +21,20 @@ export function previousLocalDateKey(now: Date = new Date()): string {
 }
 
 /**
+ * Bir çalışma tamamlandığında yeni seri durumu. Aynı gün ikinci kez çağrılırsa null döner (seri iki kez artmaz).
+ * Dün çalışıldıysa seri bir artar, aksi halde 1'den başlar. Bozuk/negatif kayıtlı seri 0 sayılır.
+ */
+export function nextStreakState(
+  current: { streak?: number; lastStudyDate?: string },
+  today: string,
+  yesterday: string,
+): { streak: number; lastStudyDate: string } | null {
+  if (current.lastStudyDate === today) return null;
+  const base = Number.isFinite(current.streak) && (current.streak as number) > 0 ? Math.floor(current.streak as number) : 0;
+  return { streak: current.lastStudyDate === yesterday ? base + 1 : 1, lastStudyDate: today };
+}
+
+/**
  * Gösterilecek seri: son çalışma bugün ya da dündense kayıtlı seri, daha eskiyse 0.
  * (Kayıtlı değer yalnızca çalışma yapıldığında güncellendiği için bayat kalabilir.)
  */

@@ -6,7 +6,7 @@ import { supabase } from '../utils/supabase';
 import { ReviewStateMap } from '../utils/spaced-repetition';
 import { ScenarioResult } from '../utils/learning-analysis';
 import {
-  LOCAL_SCENARIO_LIMIT, LOCAL_SESSION_LIMIT, previousLocalDateKey, toLocalDateKey,
+  LOCAL_SCENARIO_LIMIT, LOCAL_SESSION_LIMIT, nextStreakState, previousLocalDateKey, toLocalDateKey,
 } from '../utils/progress-stats';
 import { nextMasteryLevel } from '../utils/mastery';
 import { withoutReviewState } from '../utils/known-words';
@@ -818,13 +818,9 @@ export const useUserStore = create<UserStore>((set, get) => ({
     const profile = get().profile;
     if (!profile) return;
     // Yerel takvim günü kullanılır (UTC değil): gece yarısından sonra gün doğru değişir.
-    const today = toLocalDateKey();
-    const lastDate = profile.lastStudyDate;
-    if (lastDate === today) return; // Aynı gün
-
-    const yesterday = previousLocalDateKey();
-    const newStreak = lastDate === yesterday ? profile.streak + 1 : 1;
-    await get().updateProfile({ streak: newStreak, lastStudyDate: today });
+    const next = nextStreakState(profile, toLocalDateKey(), previousLocalDateKey());
+    if (!next) return; // Aynı gün: seri tekrar artmaz
+    await get().updateProfile(next);
   },
 }));
 
