@@ -1,5 +1,5 @@
 import React, { useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, AlertButton, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -10,6 +10,10 @@ import { Colors, Spacing, BorderRadius, Cards } from '../constants/theme';
 import { AppIcon } from '../components/app-icon';
 import { Card, IconTile, SecondaryButton, SectionTitle, SegmentedControl } from '../components/ui';
 import { useAchievementViews } from '../components/use-achievements';
+import { makeIsKnownWordId } from '../utils/known-words';
+import { isStaticWordId } from '../utils/static-word-ids';
+import { buildSignOutPlan, countUnverifiedProgress } from '../utils/signout-plan';
+import { readPronunciationRecordings } from '../utils/pronunciation-storage';
 import { ReviewReminderCard } from '../components/review-reminder-card';
 import { isReminderSupported } from '../utils/review-reminder';
 import { Level } from '../types';
@@ -50,7 +54,11 @@ export default function ProfileScreen() {
     : [...DAILY_GOAL_OPTIONS, dailyGoal].sort((a, b) => a - b);
 
   // Tüm sayılar yerel gerçek veriden hesaplanır; veri yoksa 0 görünür.
-  const learnedCount = useMemo(() => countLearnedWords(reviewStates, words), [reviewStates, words]);
+  // Silinmiş kelimelerin kalıntı ilerleme kayıtları sayıya girmez.
+  const learnedCount = useMemo(
+    () => countLearnedWords(reviewStates, words, makeIsKnownWordId(words, isStaticWordId)),
+    [reviewStates, words],
+  );
   // Gerçek toplam buluttan sayılır; bilinmiyorsa (çevrimdışı/ilk açılış) yerel sayı "N+" olarak gösterilir.
   const currentUserId = session?.user?.id;
   const exercises = useMemo(
@@ -87,11 +95,47 @@ export default function ProfileScreen() {
     router.replace('/auth' as any);
   };
 
-  // Çıkışta yerel veri silinir. Buluta ulaşmamış değişiklik varsa kullanıcıyı uyar,
-  // önce senkronize etmeyi öner; senkronize edilemezse çıkış yapma.
+  // Konu kelimelerinin çalışma geçmişi bu sürümde buluta kaydedilmiyor (öğrenme senkronu kapalı) ve
+  // çıkışta cihazdan silinir. Bu yüzden "senkronize edildi" gibi gösterilmez; veri varken kullanıcı
+  // açıkça onay vermeden çıkış yapılmaz. Senaryo sonuçları çıkışta SİLİNMEZ (kullanıcıya özel yerel
+  // anahtarda kalır), ancak buluta da gitmez; bu yüzden uyarıya dahil edilmez.
+  const getLocalOnlyProgress = () => {
+    const { reviewStates: states, words: allWords } = useWordStore.getState();
+    return countUnverifiedProgress({
+      syncEnabled: false,
+      syncedForUser: false,
+      reviewStates: states,
+      words: allWords,
+    });
+  };
+
+  // Yerel telaffuz kayıtları da çıkışta silinir ve hiçbir yere senkronize edilmez.
+  const withRecordingNote = async (message: string, userId?: string) => {
+    if (!userId) return message;
+    const count = Object.keys(await readPronunciationRecordings(userId).catch(() => ({}))).length;
+    return count > 0
+      ? `${message}\n\nAyrıca bu cihazdaki ${count} telaffuz kaydın da silinir.`
+      : message;
+  };
+
+  const confirmDeleteProgressAndSignOut = async (userId?: string) => {
+    const plan = buildSignOutPlan(0, getLocalOnlyProgress());
+    const message = await withRecordingNote(plan.message, userId);
+    Alert.alert(plan.title, message, [
+      { text: 'İptal', style: 'cancel' },
+      { text: 'İlerlemeyi silip çık', style: 'destructive', onPress: () => { void performSignOut(); } },
+    ]);
+  };
+
+  // Buluta ulaşmamış değişiklik varsa önce senkronize etmeyi öner; senkronize edilemezse çıkış yapma.
+  // Senkron başarılı olsa bile konu ilerlemesi hâlâ yalnızca bu cihazdadır; yeniden onay istenir.
   const syncThenSignOut = async (userId: string) => {
     const remaining = await flushPendingChanges(userId).catch(() => -1);
     if (remaining === 0) {
+      if (getLocalOnlyProgress() > 0) {
+        await confirmDeleteProgressAndSignOut(userId);
+        return;
+      }
       await performSignOut();
       return;
     }
@@ -111,28 +155,30 @@ export default function ProfileScreen() {
     try {
       const userId = session?.user?.id;
       const pending = userId ? await getPendingChangeCount(userId).catch(() => 0) : 0;
+      const plan = buildSignOutPlan(pending, getLocalOnlyProgress());
+      const message = await withRecordingNote(plan.message, userId);
 
-      if (!userId || pending === 0) {
-        Alert.alert(
-          'Çıkış Yap',
-          'Hesabından çıkış yapmak istiyor musun?',
-          [
-            { text: 'İptal', style: 'cancel' },
-            { text: 'Çıkış Yap', style: 'destructive', onPress: () => { void performSignOut(); } },
-          ]
-        );
+      if (plan.kind === 'plain') {
+        Alert.alert(plan.title, message, [
+          { text: 'İptal', style: 'cancel' },
+          { text: 'Çıkış Yap', style: 'destructive', onPress: () => { void performSignOut(); } },
+        ]);
         return;
       }
 
-      Alert.alert(
-        'Senkronize edilmemiş değişiklikler',
-        `${pending} değişiklik henüz buluta gönderilmedi. Şimdi çıkış yaparsan bu değişiklikler kaybolur.`,
-        [
-          { text: 'İptal', style: 'cancel' },
-          { text: 'Senkronize et ve çık', onPress: () => { void syncThenSignOut(userId); } },
-          { text: 'Yine de çık', style: 'destructive', onPress: () => { void performSignOut(); } },
-        ]
-      );
+      const buttons: AlertButton[] = [{ text: 'İptal', style: 'cancel' }];
+      if (plan.offerSync && userId) {
+        buttons.push({
+          text: plan.kind === 'both' ? 'Önce senkronize et' : 'Senkronize et ve çık',
+          onPress: () => { void syncThenSignOut(userId); },
+        });
+      }
+      buttons.push({
+        text: plan.kind === 'pending' ? 'Yine de çık' : 'İlerlemeyi silip çık',
+        style: 'destructive',
+        onPress: () => { void performSignOut(); },
+      });
+      Alert.alert(plan.title, message, buttons);
     } finally {
       signingOutRef.current = false;
     }
