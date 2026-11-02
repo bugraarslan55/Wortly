@@ -16,6 +16,8 @@ import { BrandMark } from '../components/ui';
 import { loadHandledTaps, markTapHandled, useLastNotificationResponse } from '../utils/review-reminder';
 import { decideTap } from '../utils/notification-routing';
 import { useReminderSync } from '../components/use-reminder-sync';
+import { SyncProblemScreen } from '../components/sync-problem-screen';
+import { computeAccessGate } from '../utils/access-gate';
 import { getReviewRoute } from '../utils/review-route';
 import { Colors } from '../constants/theme';
 
@@ -151,7 +153,34 @@ export default function RootLayout() {
     };
   }, [currentUserId, dataSynced, profileSyncedUserId, wordsSyncedUserId, sessionsSyncedUserId]);
 
-  const isUserDataSynced = !currentUserId || dataSynced || forceOpen;
+  // Sahiplik doğrulaması: cihazdaki kişisel veri YALNIZCA bu kullanıcıya aitse (kayıtlı sahip eşleşiyorsa) gösterilir.
+  // Başka kullanıcıya ait ya da sahibi bilinmeyen veri varken eşitleme bitse de, zaman aşımı dolsa da ekranlar açılmaz;
+  // bunun yerine güvenli hata ekranı ve "Tekrar dene" gösterilir. Zaman aşımı güvenlik kontrolünü ATLAMAZ.
+  const wordsOwner = useWordStore(state => state.wordsOwner);
+  const reviewOwner = useWordStore(state => state.reviewOwner);
+  const wordCount = useWordStore(state => state.words.length);
+  const reviewCount = useWordStore(state => Object.keys(state.reviewStates).length);
+  const profileOwner = useUserStore(state => state.profileOwner);
+  const sessionsOwner = useSessionStore(state => state.sessionsOwner);
+  const sessionCount = useSessionStore(state => state.sessions.length);
+  const gate = computeAccessGate({
+    userId: currentUserId,
+    dataSynced,
+    forceOpen,
+    state: { profile, profileOwner, wordsOwner, wordCount, reviewOwner, reviewCount, sessionsOwner, sessionCount },
+  });
+  const isUserDataSynced = gate.isUserDataSynced;
+  const syncProblem = gate.syncProblem;
+  const [retryBusy, setRetryBusy] = useState(false);
+  const [retryAttempts, setRetryAttempts] = useState(0);
+  // "Tekrar dene": yalnızca eşitlemeyi yeniden başlatır (idempotent); veri silmez veya çoğaltmaz.
+  const retrySync = () => {
+    if (!currentUserId || retryBusy) return;
+    setRetryBusy(true);
+    void Promise.allSettled([
+      syncProfile(currentUserId), syncWords(currentUserId), syncSessions(currentUserId),
+    ]).finally(() => { setRetryAttempts(count => count + 1); setRetryBusy(false); });
+  };
 
   useEffect(() => {
     devLog('[Wortly][gate] durum:', {
@@ -233,6 +262,10 @@ export default function RootLayout() {
     else router.navigate('/(tabs)' as any);
   }, [handledTapsLoaded, isAuthLoaded, isAppReady, navigationState?.key, lastNotificationResponse, currentUserId, router]);
 
+  if (isLoaded && isAuthLoaded && syncProblem) {
+    return <SyncProblemScreen onRetry={retrySync} busy={retryBusy} attempts={retryAttempts} email={session?.user.email ?? null} />;
+  }
+
   // Veriler yüklenirken (ağ yavaşsa birkaç saniye sürebilir) boş ekran yerine marka ve yükleme göstergesi.
   if (!isLoaded || !isAuthLoaded || !isUserDataSynced) {
     return (
@@ -263,6 +296,10 @@ export default function RootLayout() {
         />
         <Stack.Screen
           name="profile"
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
+          name="oturum-arsivi"
           options={{ animation: 'slide_from_right' }}
         />
         <Stack.Screen
