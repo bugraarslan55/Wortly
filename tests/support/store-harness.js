@@ -15,6 +15,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const ts = require(path.join(ROOT, 'node_modules', 'typescript'));
 
 // ─── .ts yükleyici ───────────────────────────────────────────────────────────
+const transpileCache = new Map();
 let installed = false;
 let current = null; // etkin dünya (disk + bulut)
 
@@ -24,12 +25,19 @@ function install() {
   globalThis.__DEV__ = false;
 
   Module._extensions['.ts'] = (module, filename) => {
+    // Dönüştürme sonucu kaynak metne göre önbelleğe alınır (her "boot" modülleri YENİDEN yükler ama yeniden derlemez):
+    // davranış aynıdır, yalnızca yüzlerce yeniden başlatma yapan testler hızlanır.
     const source = fs.readFileSync(filename, 'utf8');
-    const output = ts.transpileModule(source, {
-      fileName: filename,
-      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true },
-    }).outputText;
-    module._compile(output, filename);
+    let cached = transpileCache.get(filename);
+    if (!cached || cached.source !== source) {
+      const output = ts.transpileModule(source, {
+        fileName: filename,
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true },
+      }).outputText;
+      cached = { source, output };
+      transpileCache.set(filename, cached);
+    }
+    module._compile(cached.output, filename);
   };
 
   const originalLoad = Module._load;

@@ -50,8 +50,7 @@ const readWords = (disk) => (disk.has(WORDS) ? JSON.parse(disk.get(WORDS)) : [])
 const parkedFor = (disk, owner, dataset = 'words') => D.parkedKeysFor([...disk.keys()], owner, dataset);
 
 // store/index.ts -> reconcileWordData ile aynı akış (kelime kümesi)
-function reconcileWords(storage, userId, { hasOwnPending = false, applyFails = false } = {}) {
-  const service = I.createDataIsolation(storage);
+function reconcileWords(storage, userId, { hasOwnPending = false, applyFails = false, service = I.createDataIsolation(storage) } = {}) {
   const disk = storage.__disk;
   const raw = disk.has(WORDS) ? disk.get(WORDS) : '[]';
   const current = JSON.parse(raw);
@@ -155,7 +154,11 @@ test('aynı içerik iki kez park edilmez (idempotent); farklı içerik ayrı kay
 
 test('eşzamanlı iki uzlaştırma (üst üste eşitleme) aynı veriyi iki kez park etmez', async () => {
   const disk = deviceOf('A', ['a1']);
-  const results = await Promise.all([reconcileWords(withDisk(disk), 'B'), reconcileWords(withDisk(disk), 'B')]);
+  // Uygulamadaki gibi TEK servis örneği (kilit paylaşılır). Her çağrıya ayrı örnek vermek var olmayan bir durumu modeller ve
+  // zaman damgası milisaniyesine bağlı olarak (≈%50) iki kez park ettirir.
+  const storage = withDisk(disk);
+  const service = I.createDataIsolation(storage);
+  const results = await Promise.all([reconcileWords(storage, 'B', { service }), reconcileWords(storage, 'B', { service })]);
   assert.equal(parkedFor(disk, 'A').length, 1);
   assert.deepEqual(readWords(disk), []);
   assert.ok(results.includes('parked'));
