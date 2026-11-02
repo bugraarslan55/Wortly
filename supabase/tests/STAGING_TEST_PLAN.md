@@ -27,6 +27,7 @@ Ayrı proje en güvenlisi: yanlışlıkla üretime bağlanma riski yalnızca iki
 ```powershell
 # PowerShell, proje kökünde. Değerleri TEST projesinden al; üretim anahtarlarını kullanma.
 $env:STAGING_URL = "https://<test-proje-ref>.supabase.co"
+$env:STAGING_PROJECT_REF = "<test-proje-ref>"   # URL ile eşleşmeli (açık tanımlama zorunlu)
 $env:STAGING_ANON_KEY = "<test publishable key>"
 $env:STAGING_SERVICE_ROLE_KEY = "<test service_role key>"
 $env:STAGING_CONFIRM = "EVET-BU-URETIM-DEGIL"
@@ -36,7 +37,7 @@ $env:PHASE = "before"; node supabase/tests/staging.integration.test.js   # migra
 $env:PHASE = "after";  node supabase/tests/staging.integration.test.js    # migration sonrası
 
 # Oturumu temizle
-Remove-Item Env:STAGING_SERVICE_ROLE_KEY, Env:STAGING_ANON_KEY, Env:STAGING_URL, Env:STAGING_CONFIRM
+Remove-Item Env:STAGING_SERVICE_ROLE_KEY, Env:STAGING_ANON_KEY, Env:STAGING_URL, Env:STAGING_PROJECT_REF, Env:STAGING_CONFIRM
 ```
 Yerel (PGlite) testler: bkz. `user_word_tombstones.test.js` başlığı.
 
@@ -56,3 +57,39 @@ Sonra `npx expo start --clear`. Test bitince `.env.local` dosyasını sil ve yen
 - Eşzamanlı silme/upsert yarışı gerçek ortamda ölçülür; 0 olmayan sonuç tasarımın gözden geçirilmesi demektir.
 - Migration öncesi silinmiş kelimeler için tombstone yoktur.
 - Test script'i, service_role anahtarıyla sentetik kullanıcı oluşturur ve siler; yalnızca test projesinde çalıştırılmalıdır.
+
+## Öğrenme senkronizasyonu tabloları (user_word_progress, scenario_results)
+
+Durum: HAZIRLIK. Gerçek bir test projesi olmadan bu testler çalıştırılmaz ve başarılı sayılmaz.
+
+### Ek güvenlik kuralları (tüm staging betikleri için, supabase/tests/staging-guard.js)
+- Test projesi AÇIKÇA tanımlanır: STAGING_URL ve STAGING_PROJECT_REF birlikte verilmelidir ve eşleşmelidir.
+- STAGING_URL, kök .env dosyasındaki (üretim) adresle veya isteğe bağlı PRODUCTION_SUPABASE_URL ile aynıysa
+  hiçbir istek atılmadan durulur (çıkış kodu 2).
+- STAGING_ANON_KEY publishable, STAGING_SERVICE_ROLE_KEY secret/service_role türünde olmalıdır; karışırsa durulur.
+- Ağ denetimi: projede @wortly-test.invalid dışında kullanıcı varsa durulur (gerçek kullanıcılı proje test
+  projesi sayılmaz). Yalnızca bilinçli olarak, boş olmayan bir TEST projesinde STAGING_ALLOW_OTHER_USERS=EVET.
+- Çıktıdaki anahtarlar maskelenir. service_role yalnızca test kullanıcısı oluşturma/silme ve doğrulama
+  sayımları içindir; veri testleri oturum açmış sentetik kullanıcılarla (RLS altında) yapılır.
+- Gerçek kullanıcı hesabıyla test yapılmaz; mobil uygulamaya service_role konmaz.
+
+### Sıra
+1. Test projesinde migration'ları sırayla uygula: 20261021153000, 20261021160000, 20261021170000,
+   20261023210000, 20261101090000 (tombstone), 20261102090000 (user_word_progress), 20261102091000 (scenario_results).
+2. PowerShell (proje kökünde; değerler yalnızca TEST projesinden):
+```powershell
+$env:STAGING_URL = "https://<test-proje-ref>.supabase.co"
+$env:STAGING_PROJECT_REF = "<test-proje-ref>"
+$env:STAGING_ANON_KEY = "<test publishable key>"
+$env:STAGING_SERVICE_ROLE_KEY = "<test secret / service_role key>"
+$env:STAGING_CONFIRM = "EVET-BU-URETIM-DEGIL"
+node supabase/tests/learning-sync.staging.test.js
+Remove-Item Env:STAGING_SERVICE_ROLE_KEY, Env:STAGING_ANON_KEY, Env:STAGING_URL, Env:STAGING_PROJECT_REF, Env:STAGING_CONFIRM
+```
+   Tablolar yoksa betik "migration uygulanmamış olabilir" mesajıyla çıkış kodu 3 verir (başarısız sayılır).
+3. Kapsam (19 test): INSERT/SELECT/UPDATE, izolasyon, geç gelen eski kayıt, aynı kaydın tekrarı, gelecek damga,
+   DELETE engeli, senaryo tekrarsızlığı, UPDATE/DELETE engeli, 1000+ kayıt sayfalama (ilerleme ve senaryo),
+   çevrimdışı kuyruk, iki cihaz, çıkış-yeniden giriş, hesap silme cascade. Testler uygulamanın kullandığı
+   taşıyıcı kodunu (utils/learning-transports.ts, utils/learning-sync.ts) derleyip çalıştırır.
+4. Uygulamayı test projesine bağlayıp cihaz testi: .env.local içinde test URL/anahtarı ve
+   EXPO_PUBLIC_LEARNING_SYNC=true; test bitince .env.local dosyasını sil ve --clear ile yeniden başlat.

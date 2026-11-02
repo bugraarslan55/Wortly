@@ -19,6 +19,7 @@ import { ReviewReminderCard } from '../components/review-reminder-card';
 import { RecordingStorageCard } from '../components/recording-storage-card';
 import { LegacyRecordsCard } from '../components/legacy-records-card';
 import { isReminderSupported } from '../utils/review-reminder';
+import { isLearningSyncEnabled } from '../utils/feature-flags';
 import { Level } from '../types';
 import {
   countLearnedWords, DAILY_GOAL_OPTIONS, getActiveStreak, normalizeDailyGoal, summarizeCompletedExercises,
@@ -47,6 +48,7 @@ export default function ProfileScreen() {
   const sessions = useOwnSessions();
   const scenarioResults = useOwnScenarioResults();
   const sessionTotal = useSessionStore(state => state.sessionTotal);
+  const scenarioTotal = useSessionStore(state => state.scenarioTotal);
 
   const { badges, earnedCount } = useAchievementViews();
   const email = session?.user?.email ?? '';
@@ -70,8 +72,9 @@ export default function ProfileScreen() {
       sessionTotal && sessionTotal.userId === currentUserId ? sessionTotal.count : null,
       sessions,
       scenarioResults,
+      scenarioTotal && scenarioTotal.userId === currentUserId ? scenarioTotal.count : null,
     ),
-    [sessionTotal, currentUserId, sessions, scenarioResults],
+    [sessionTotal, scenarioTotal, currentUserId, sessions, scenarioResults],
   );
   const streak = getActiveStreak(profile?.streak, profile?.lastStudyDate);
 
@@ -106,15 +109,15 @@ export default function ProfileScreen() {
     router.replace('/auth' as any);
   };
 
-  // Konu kelimelerinin çalışma geçmişi bu sürümde buluta kaydedilmiyor (öğrenme senkronu kapalı) ve
-  // çıkışta cihazdan silinir. Bu yüzden "senkronize edildi" gibi gösterilmez; veri varken kullanıcı
-  // açıkça onay vermeden çıkış yapılmaz. Senaryo sonuçları çıkışta SİLİNMEZ (kullanıcıya özel yerel
-  // anahtarda kalır), ancak buluta da gitmez; bu yüzden uyarıya dahil edilmez.
-  const getLocalOnlyProgress = () => {
-    const { reviewStates: states, words: allWords } = useWordStore.getState();
+  // Konu kelimelerinin çalışma geçmişi çıkışta cihazdan silinir. Öğrenme senkronu KAPALIYSA (varsayılan) hiçbir
+  // yere kaydedilmez ve "senkronize edildi" gibi gösterilmez; veri varken kullanıcı açıkça onay vermeden çıkış
+  // yapılmaz. Bayrak açık ve bu kullanıcı için bulutla senkron DOĞRULANMIŞSA yalnızca bekleyen kayıtlar uyarılır.
+  // Senaryo sonuçları çıkışta SİLİNMEZ (kullanıcıya özel yerel anahtarda kalır); uyarıya dahil edilmez.
+  const getLocalOnlyProgress = (userId?: string) => {
+    const { reviewStates: states, words: allWords, progressSyncedUserId } = useWordStore.getState();
     return countUnverifiedProgress({
-      syncEnabled: false,
-      syncedForUser: false,
+      syncEnabled: isLearningSyncEnabled(),
+      syncedForUser: !!userId && progressSyncedUserId === userId,
       reviewStates: states,
       words: allWords,
     });
@@ -130,7 +133,7 @@ export default function ProfileScreen() {
   };
 
   const confirmDeleteProgressAndSignOut = async (userId?: string) => {
-    const plan = buildSignOutPlan(0, getLocalOnlyProgress());
+    const plan = buildSignOutPlan(0, getLocalOnlyProgress(userId));
     const message = await withRecordingNote(plan.message, userId);
     Alert.alert(plan.title, message, [
       { text: 'İptal', style: 'cancel' },
@@ -143,7 +146,7 @@ export default function ProfileScreen() {
   const syncThenSignOut = async (userId: string) => {
     const remaining = await flushPendingChanges(userId).catch(() => -1);
     if (remaining === 0) {
-      if (getLocalOnlyProgress() > 0) {
+      if (getLocalOnlyProgress(userId) > 0) {
         await confirmDeleteProgressAndSignOut(userId);
         return;
       }
@@ -166,7 +169,7 @@ export default function ProfileScreen() {
     try {
       const userId = session?.user?.id;
       const pending = userId ? await getPendingChangeCount(userId).catch(() => 0) : 0;
-      const plan = buildSignOutPlan(pending, getLocalOnlyProgress());
+      const plan = buildSignOutPlan(pending, getLocalOnlyProgress(userId));
       const message = await withRecordingNote(plan.message, userId);
 
       if (plan.kind === 'plain') {

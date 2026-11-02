@@ -18,29 +18,21 @@ const path = require('path');
 const crypto = require('crypto');
 const assert = require('assert');
 
-function productionUrl() {
-  try {
-    const env = fs.readFileSync(path.resolve(__dirname, '..', '..', '.env'), 'utf8');
-    const m = env.match(/^EXPO_PUBLIC_SUPABASE_URL=(.+)$/m);
-    return m ? m[1].trim().replace(/\/+$/, '') : null;
-  } catch {
-    return null;
-  }
-}
+const guard = require('./staging-guard');
 
-const { STAGING_URL, STAGING_ANON_KEY, STAGING_SERVICE_ROLE_KEY, STAGING_CONFIRM } = process.env;
+const { STAGING_URL, STAGING_ANON_KEY, STAGING_SERVICE_ROLE_KEY } = process.env;
 const PHASE = process.env.PHASE || 'after';
 
 function refuse(msg) {
-  console.error('DURDURULDU: ' + msg);
+  console.error('DURDURULDU: ' + guard.redact(msg));
   process.exit(2);
 }
-if (!STAGING_URL || !STAGING_ANON_KEY || !STAGING_SERVICE_ROLE_KEY) refuse('STAGING_* ortam değişkenleri eksik.');
-if (STAGING_CONFIRM !== 'EVET-BU-URETIM-DEGIL') refuse('STAGING_CONFIRM=EVET-BU-URETIM-DEGIL ayarlanmalı.');
 if (!['before', 'after'].includes(PHASE)) refuse('PHASE before veya after olmalı.');
-const prod = productionUrl();
-if (prod && prod.toLowerCase() === STAGING_URL.trim().replace(/\/+$/, '').toLowerCase()) {
-  refuse('STAGING_URL üretim projesiyle aynı. Hiçbir istek gönderilmedi.');
+// Ortak güvenlik denetimi: açık proje referansı, üretim adresi reddi, anahtar türü, onay değeri.
+try {
+  guard.assertSafeStagingEnv(process.env, { productionUrls: guard.readProductionUrls(path.resolve(__dirname, '..', '..')) });
+} catch (error) {
+  refuse(error.message);
 }
 
 const { createClient } = require('@supabase/supabase-js');
@@ -82,6 +74,7 @@ async function test(name, fn) {
 (async () => {
   let A, B;
   try {
+    await guard.assertNoRealUsers(admin, { allowOthers: process.env.STAGING_ALLOW_OTHER_USERS === 'EVET' });
     A = await makeUser('a');
     B = await makeUser('b');
     const after = PHASE === 'after';
