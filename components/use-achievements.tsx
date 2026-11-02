@@ -3,6 +3,8 @@ import { AppState } from 'react-native';
 import { useSessionStore, useUserStore, useWordStore } from '../store';
 import { useAuthStore } from '../store/auth';
 import { useAchievementStore } from '../store/achievements';
+import { makeIsKnownWordId } from '../utils/known-words';
+import { isStaticWordId } from '../utils/static-word-ids';
 import {
   AchievementView, DailyTask, LearningSnapshot, computeDailyTasks, evaluateAchievements, nextDeviceMidnight,
   pickNewlyEarned, recordForUser, toAchievementViews,
@@ -71,6 +73,9 @@ export function useLearningSnapshot(now: number): LearningSnapshot {
   const scenarioResults = useSessionStore(state => state.scenarioResults);
   const sessionTotal = useSessionStore(state => state.sessionTotal);
 
+  // Silinmiş kelimelerin kalıntı ilerleme kayıtları "öğrenilen kelime" sayısına ve rozetlere girmesin.
+  const isKnownWordId = useMemo(() => makeIsKnownWordId(words, isStaticWordId), [words]);
+
   return useMemo(() => ({
     now,
     sessions,
@@ -79,7 +84,8 @@ export function useLearningSnapshot(now: number): LearningSnapshot {
     words,
     profile,
     knownSessionTotal: sessionTotal && sessionTotal.userId === userId ? sessionTotal.count : null,
-  }), [now, sessions, scenarioResults, reviewStates, words, profile, sessionTotal, userId]);
+    isKnownWordId,
+  }), [now, sessions, scenarioResults, reviewStates, words, profile, sessionTotal, userId, isKnownWordId]);
 }
 
 export function useDailyTasks(): DailyTask[] {

@@ -9,6 +9,7 @@ import {
   LOCAL_SCENARIO_LIMIT, LOCAL_SESSION_LIMIT, previousLocalDateKey, toLocalDateKey,
 } from '../utils/progress-stats';
 import { nextMasteryLevel } from '../utils/mastery';
+import { withoutReviewState } from '../utils/known-words';
 
 // ─── STORAGE KEYS ───────────────────────────────────────────────────────────
 const KEYS = {
@@ -545,8 +546,13 @@ export const useWordStore = create<WordStore>((set, get) => ({
 
   deleteWord: async (id) => {
     const updated = get().words.filter(w => w.id !== id);
-    set({ words: updated });
+    // Silinen kelimenin ilerleme kaydı da kaldırılır; aksi halde "öğrenilen kelime" istatistiğinde ve
+    // rozetlerde var olmayan kelime sayılmaya devam ederdi.
+    const reviewStates = withoutReviewState(get().reviewStates, id);
+    const hadReviewState = reviewStates !== get().reviewStates;
+    set(hadReviewState ? { words: updated, reviewStates } : { words: updated });
     await safeSetItem(KEYS.WORDS, JSON.stringify(updated));
+    if (hadReviewState) await safeSetItem(KEYS.REVIEW_STATES, JSON.stringify(reviewStates));
     const userId = await getMutationUserId(KEYS.WORDS_OWNER);
     await queuePendingChange({ entity: 'word', id, operation: 'delete', userId });
     if (userId && await deleteCloudWord(userId, id)) {

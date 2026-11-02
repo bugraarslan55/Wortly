@@ -70,11 +70,13 @@ export function countReviewedToday(
 export function countLearnedWords(
   reviewStates: ReviewStateMap | null | undefined,
   words: Word[] | null | undefined,
+  /** Verilirse yalnızca bilinen kelime kimlikleri sayılır (silinmiş kelimelerin kalıntısı sayılmaz). */
+  isKnownId?: (id: string) => boolean,
 ): number {
   const states = reviewStates ?? {};
   const learned = new Set<string>();
   for (const [id, state] of Object.entries(states)) {
-    if (state?.masteryLevel === 3) learned.add(id);
+    if (state?.masteryLevel === 3 && (!isKnownId || isKnownId(id))) learned.add(id);
   }
   for (const word of words ?? []) {
     if (word.isCustom && !(word.id in states) && getReviewState(word, states).masteryLevel === 3) {

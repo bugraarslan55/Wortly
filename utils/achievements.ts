@@ -70,6 +70,8 @@ export interface LearningSnapshot {
   knownSessionTotal?: number | null;
   /** Gün tanımı; verilmezse cihaz yerel günü. */
   dayKey?: DayKeyOf;
+  /** Verilirse "öğrenilen kelime" sayımı yalnızca bilinen kelime kimliklerini sayar. */
+  isKnownWordId?: (id: string) => boolean;
 }
 
 const keyOf = (snapshot: LearningSnapshot): DayKeyOf => snapshot.dayKey ?? deviceDayKey;
@@ -248,7 +250,7 @@ export function evaluateAchievements(snapshot: LearningSnapshot): AchievementSta
   const exercises = collectCompletedExercises(snapshot);
   const knownTotal = typeof snapshot.knownSessionTotal === 'number' ? snapshot.knownSessionTotal : 0;
   const completedCount = Math.max(exercises.length, knownTotal);
-  const learned = countLearnedWords(snapshot.reviewStates, snapshot.words);
+  const learned = countLearnedWords(snapshot.reviewStates, snapshot.words, snapshot.isKnownWordId);
   const streak = provableStreak(snapshot);
 
   const eligible = exercises.filter(e => e.verified && e.total >= MIN_QUESTIONS_FOR_SUCCESS);
