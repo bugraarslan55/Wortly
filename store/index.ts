@@ -9,6 +9,7 @@ import {
   LOCAL_SCENARIO_LIMIT, LOCAL_SESSION_LIMIT, previousLocalDateKey, toLocalDateKey,
 } from '../utils/progress-stats';
 import { nextMasteryLevel } from '../utils/mastery';
+import { mergeCustomWordProgress } from '../utils/progress-merge';
 
 // ─── STORAGE KEYS ───────────────────────────────────────────────────────────
 const KEYS = {
@@ -469,16 +470,38 @@ export const useWordStore = create<WordStore>((set, get) => ({
       for (const word of localCustomWords) {
         if (pendingUpsertIds.has(word.id)) nextWordsById.set(word.id, word);
       }
-      const nextWords = Array.from(nextWordsById.values());
       // Ağ beklenirken kullanıcı kelime ekledi/düzenledi/sildiyse bu eski anlık görüntüyle
       // üzerine yazma; bekleyen kayıtlar bir sonraki senkronizasyonda işlenir.
       if (get().words !== wordsAtStart) {
         devLog('[Wortly][sync] syncWords: yerel değişiklik algılandı, birleştirme ertelendi');
         return;
       }
-      set({ words: nextWords });
+
+      // Kişisel kelimenin ilerlemesi (seviye + son tekrar) hem bulut satırında hem yerel
+      // reviewStates kaydında bulunur. Eski veri yeni veriyi ezmesin diye kelime başına
+      // `last_reviewed` değeri yeni olan taraf seçilir (yanlış cevapla düşen seviye de korunur).
+      // Aşağıdaki hesaplama, bulut isteğinden sonra await içermediği için en güncel yerel
+      // reviewStates üzerinde yapılır; araya yeni cevap giremez.
+      const merge = mergeCustomWordProgress({
+        cloudWords: nextWordsById,
+        localCustomWords,
+        reviewStates: get().reviewStates,
+        pendingUpsertIds,
+      });
+      const { reviewStatesChanged, reviewStates: nextReviewStates, pushIds } = merge;
+      const nextWords = Array.from(merge.words.values());
+      set(reviewStatesChanged ? { words: nextWords, reviewStates: nextReviewStates } : { words: nextWords });
       await safeSetItem(KEYS.WORDS, JSON.stringify(nextWords));
+      if (reviewStatesChanged) await safeSetItem(KEYS.REVIEW_STATES, JSON.stringify(nextReviewStates));
       await safeSetItem(KEYS.WORDS_OWNER, userId);
+
+      // Yerel ilerleme buluttakinden yeniyse buluta da gönder (çevrimdışıysa kuyrukta bekler).
+      for (const id of pushIds) {
+        const word = nextWords.find(item => item.id === id);
+        if (!word) continue;
+        await queuePendingChange({ entity: 'word', id, operation: 'upsert', userId });
+        if (await saveCloudWord(userId, word)) await clearPendingChange('word', id);
+      }
     } catch (err) {
       devWarn('[Wortly] Kelime senkronizasyonunda beklenmeyen hata:', err);
     } finally {

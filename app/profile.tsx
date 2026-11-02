@@ -1,5 +1,5 @@
 import React, { useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, AlertButton, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -11,6 +11,7 @@ import { AppIcon } from '../components/app-icon';
 import { Card, IconTile, SecondaryButton, SectionTitle, SegmentedControl } from '../components/ui';
 import { ReviewReminderCard } from '../components/review-reminder-card';
 import { isReminderSupported } from '../utils/review-reminder';
+import { buildSignOutPlan, countLocalOnlyProgress } from '../utils/signout-plan';
 import { Level } from '../types';
 import {
   countLearnedWords, DAILY_GOAL_OPTIONS, getActiveStreak, normalizeDailyGoal, summarizeCompletedExercises,
@@ -85,11 +86,31 @@ export default function ProfileScreen() {
     router.replace('/auth' as any);
   };
 
+  // Konu kelimelerinin çalışma geçmişi şu an buluta kaydedilmiyor; çıkışta cihazdan silinir.
+  // Bu veri varken kullanıcı açıkça onay vermeden çıkış yapılmaz ve "senkronize" gibi gösterilmez.
+  const getLocalOnlyProgress = (_userId?: string) => {
+    const { reviewStates: states, words: allWords } = useWordStore.getState();
+    return countLocalOnlyProgress(states, allWords);
+  };
+
+  const confirmDeleteProgressAndSignOut = (userId?: string) => {
+    const plan = buildSignOutPlan(0, getLocalOnlyProgress(userId));
+    Alert.alert(plan.title, plan.message, [
+      { text: 'İptal', style: 'cancel' },
+      { text: 'İlerlemeyi silip çık', style: 'destructive', onPress: () => { void performSignOut(); } },
+    ]);
+  };
+
   // Çıkışta yerel veri silinir. Buluta ulaşmamış değişiklik varsa kullanıcıyı uyar,
   // önce senkronize etmeyi öner; senkronize edilemezse çıkış yapma.
   const syncThenSignOut = async (userId: string) => {
     const remaining = await flushPendingChanges(userId).catch(() => -1);
     if (remaining === 0) {
+      // Bekleyen kayıtlar gitti; ama konu ilerlemesi hâlâ yalnızca bu cihazda.
+      if (getLocalOnlyProgress(userId) > 0) {
+        confirmDeleteProgressAndSignOut(userId);
+        return;
+      }
       await performSignOut();
       return;
     }
@@ -109,28 +130,29 @@ export default function ProfileScreen() {
     try {
       const userId = session?.user?.id;
       const pending = userId ? await getPendingChangeCount(userId).catch(() => 0) : 0;
+      const plan = buildSignOutPlan(pending, getLocalOnlyProgress(userId));
 
-      if (!userId || pending === 0) {
-        Alert.alert(
-          'Çıkış Yap',
-          'Hesabından çıkış yapmak istiyor musun?',
-          [
-            { text: 'İptal', style: 'cancel' },
-            { text: 'Çıkış Yap', style: 'destructive', onPress: () => { void performSignOut(); } },
-          ]
-        );
+      if (plan.kind === 'plain') {
+        Alert.alert(plan.title, plan.message, [
+          { text: 'İptal', style: 'cancel' },
+          { text: 'Çıkış Yap', style: 'destructive', onPress: () => { void performSignOut(); } },
+        ]);
         return;
       }
 
-      Alert.alert(
-        'Senkronize edilmemiş değişiklikler',
-        `${pending} değişiklik henüz buluta gönderilmedi. Şimdi çıkış yaparsan bu değişiklikler kaybolur.`,
-        [
-          { text: 'İptal', style: 'cancel' },
-          { text: 'Senkronize et ve çık', onPress: () => { void syncThenSignOut(userId); } },
-          { text: 'Yine de çık', style: 'destructive', onPress: () => { void performSignOut(); } },
-        ]
-      );
+      const buttons: AlertButton[] = [{ text: 'İptal', style: 'cancel' }];
+      if (plan.offerSync && userId) {
+        buttons.push({
+          text: plan.kind === 'both' ? 'Önce senkronize et' : 'Senkronize et ve çık',
+          onPress: () => { void syncThenSignOut(userId); },
+        });
+      }
+      buttons.push({
+        text: plan.kind === 'pending' ? 'Yine de çık' : 'İlerlemeyi silip çık',
+        style: 'destructive',
+        onPress: () => { void performSignOut(); },
+      });
+      Alert.alert(plan.title, plan.message, buttons);
     } finally {
       signingOutRef.current = false;
     }
