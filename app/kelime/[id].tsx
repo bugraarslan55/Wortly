@@ -1,11 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, TextInput,
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import * as Speech from 'expo-speech';
 import { useWordStore } from '../../store';
+import { useAuthStore } from '../../store/auth';
+import { confirmDeleteWord } from '../../utils/confirm-word-delete';
+import { KeyboardSafeView } from '../../components/keyboard-safe-view';
+import { useActionLock } from '../../components/exercise-ui';
+import { useGermanSpeech } from '../../utils/use-german-speech';
+import { useRecordingActive } from '../../utils/use-recording-active';
+import { getReviewState } from '../../utils/spaced-repetition';
 import { ALL_TOPICS } from '../../constants/topics';
 import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
 import { Article, MasteryLevel } from '../../types';
@@ -16,6 +22,7 @@ import { ColoredGermanPlural, ColoredGermanWord } from '../../components/colored
 import { findDuplicateCustomWord, MAX_EXAMPLE_LENGTH } from '../../utils/word-validation';
 import { getArticlePalette } from '../../constants/article-colors';
 import { getGermanSpeechText } from '../../utils/german-speech';
+import { goBack } from '../../utils/safe-back';
 
 const MASTERY_LABELS = ['Yeni', 'Öğreniliyor', 'Bilinçli', 'Öğrenildi'];
 const ARTICLES: Article[] = ['der', 'die', 'das', ''];
@@ -23,13 +30,16 @@ const ARTICLES: Article[] = ['der', 'die', 'das', ''];
 export default function KelimeDetayScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { words, updateWord, deleteWord } = useWordStore();
+  const { words, reviewStates, updateWord, deleteWord } = useWordStore();
+  const sessionUserId = useAuthStore(state => state.session?.user.id);
 
   const builtInTopic = ALL_TOPICS.find(topic =>
     topic.words.some(candidate => candidate.id === id)
   );
   const builtInWord = builtInTopic?.words.find(candidate => candidate.id === id);
   const word = words.find(candidate => candidate.id === id) || builtInWord;
+  // Konu kelimelerinin seviyesi reviewStates'te tutulur (kelime nesnesinde hep 0'dır).
+  const masteryLevel = word ? getReviewState(word, reviewStates).masteryLevel : 0;
   const germanInputRef = useRef<TextInput>(null);
   const turkishInputRef = useRef<TextInput>(null);
 
@@ -41,16 +51,14 @@ export default function KelimeDetayScreen() {
   const [example, setExample] = useState(word?.example || '');
   const [exampleTurkish, setExampleTurkish] = useState(word?.exampleTurkish || '');
   const [saving, setSaving] = useState(false);
-  const [speakingRate, setSpeakingRate] = useState<'normal' | 'slow' | null>(null);
+  const saveLock = useActionLock();
+  const { speak, speakingRate } = useGermanSpeech();
+  // Mikrofon kaydı sürerken referans sesi kayda karışmasın diye dinleme düğmeleri pasiftir.
+  const recordingActive = useRecordingActive();
   const [errors, setErrors] = useState<{ german?: string; turkish?: string; duplicate?: string }>({});
-  const speechRequestRef = useRef(0);
 
-  const canUseSpeech = builtInTopic?.level === 'A1' || builtInTopic?.level === 'A2' || builtInTopic?.level === 'B1';
-
-  useEffect(() => () => {
-    speechRequestRef.current += 1;
-    void Speech.stop();
-  }, []);
+  // Almanca okuma hem hazır konu kelimeleri hem kişisel kelimeler için kullanılabilir.
+  const canUseSpeech = true;
 
   const duplicateWord = word
     ? findDuplicateCustomWord(words, german, article, word.id)
@@ -62,7 +70,7 @@ export default function KelimeDetayScreen() {
         <View style={styles.center}>
           <AppIcon name="questionmark.circle" size={36} color={Colors.outlineVariant} />
           <Text style={styles.emptyText}>Kelime bulunamadı</Text>
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => goBack(router)}>
             <Text style={styles.backBtnText}>← Geri</Text>
           </TouchableOpacity>
         </View>
@@ -71,7 +79,7 @@ export default function KelimeDetayScreen() {
   }
 
   const handleSave = async () => {
-    if (saving) return;
+    if (!saveLock.acquire()) return; // hızlı çift dokunuşta iki kez kaydetme
 
     const nextErrors = {
       german: german.trim() ? undefined : 'Almanca kelimeyi yazmalısın.',
@@ -83,10 +91,12 @@ export default function KelimeDetayScreen() {
     setErrors(nextErrors);
 
     if (nextErrors.german || nextErrors.duplicate) {
+      saveLock.release();
       germanInputRef.current?.focus();
       return;
     }
     if (nextErrors.turkish) {
+      saveLock.release();
       turkishInputRef.current?.focus();
       return;
     }
@@ -101,6 +111,7 @@ export default function KelimeDetayScreen() {
       exampleTurkish: exampleTurkish.trim() || undefined,
     });
 
+    saveLock.release();
     if (!result.ok) {
       setSaving(false);
       setErrors(current => ({
@@ -117,45 +128,28 @@ export default function KelimeDetayScreen() {
   };
 
   const handleDelete = () => {
-    Alert.alert(
-      'Kelimeyi Sil',
-      `"${word.german}" kelimesini silmek istiyor musun?`,
-      [
-        { text: 'İptal', style: 'cancel' },
-        { text: 'Sil', style: 'destructive', onPress: async () => { await deleteWord(id); router.back(); } },
-      ]
-    );
+    // Telaffuz kaydı varsa kullanıcıya ayrıca sorulur; onay olmadan ses dosyası silinmez.
+    void confirmDeleteWord({
+      userId: sessionUserId,
+      wordId: id,
+      label: word.german,
+      onDeleteWord: async () => {
+        await deleteWord(id);
+        if (router.canGoBack()) router.back();
+        else router.replace('/(tabs)/kelimelerim' as any);
+      },
+    });
   };
 
-  const handleSpeak = async (mode: 'normal' | 'slow') => {
-    if (!word || !canUseSpeech) return;
-
-    const requestId = speechRequestRef.current + 1;
-    speechRequestRef.current = requestId;
-    setSpeakingRate(mode);
-    await Speech.stop();
-
-    if (speechRequestRef.current !== requestId) return;
-
-    const finish = () => {
-      if (speechRequestRef.current === requestId) setSpeakingRate(null);
-    };
-
-    Speech.speak(getGermanSpeechText(word), {
-      language: 'de-DE',
-      rate: mode === 'slow' ? 0.30 : 0.92,
-      pitch: 1,
-      onDone: finish,
-      onError: finish,
-      onStopped: finish,
-    });
+  const handleSpeak = (mode: 'normal' | 'slow') => {
+    if (word) void speak(getGermanSpeechText(word), mode);
   };
 
   return (
     <SafeAreaView style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtnHeader}>
+        <TouchableOpacity onPress={() => goBack(router)} style={styles.backBtnHeader}>
           <Text style={styles.backBtnHeaderText}>← Geri</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Kelime Detayı</Text>
@@ -172,7 +166,12 @@ export default function KelimeDetayScreen() {
         )}
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <KeyboardSafeView>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* Main card */}
         <View style={styles.mainCard}>
           {!isEditing ? (
@@ -190,7 +189,8 @@ export default function KelimeDetayScreen() {
               {canUseSpeech && (
                 <View style={styles.speechRow}>
                   <TouchableOpacity
-                    style={[styles.speechBtn, speakingRate === 'normal' && styles.speechBtnActive]}
+                    style={[styles.speechBtn, speakingRate === 'normal' && styles.speechBtnActive, recordingActive && { opacity: 0.45 }]}
+                    disabled={recordingActive}
                     onPress={() => handleSpeak('normal')}
                     activeOpacity={0.8}
                     accessibilityRole="button"
@@ -200,7 +200,8 @@ export default function KelimeDetayScreen() {
                     <Text style={styles.speechBtnText}>Dinle</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.speechBtn, speakingRate === 'slow' && styles.speechBtnActive]}
+                    style={[styles.speechBtn, speakingRate === 'slow' && styles.speechBtnActive, recordingActive && { opacity: 0.45 }]}
+                    disabled={recordingActive}
                     onPress={() => handleSpeak('slow')}
                     activeOpacity={0.8}
                     accessibilityRole="button"
@@ -296,10 +297,10 @@ export default function KelimeDetayScreen() {
         {/* Mastery level */}
         <View style={styles.masteryCard}>
           <Text style={styles.masteryLabel}>Öğrenme Seviyesi</Text>
-          <Text style={styles.masteryValue}>{MASTERY_LABELS[word.masteryLevel]}</Text>
+          <Text style={styles.masteryValue}>{MASTERY_LABELS[masteryLevel]}</Text>
           <View style={styles.masteryStars}>
             {[0, 1, 2, 3].map(i => (
-              <View key={i} style={[styles.masteryStar, i <= word.masteryLevel && styles.masteryStarFilled]}>
+              <View key={i} style={[styles.masteryStar, i <= masteryLevel && styles.masteryStarFilled]}>
                 <AppIcon name="circle.fill" size={10} color={Colors.secondaryFixedDim} />
               </View>
             ))}
@@ -350,7 +351,7 @@ export default function KelimeDetayScreen() {
         {/* Quiz CTA */}
         <TouchableOpacity
           style={styles.quizBtn}
-          onPress={() => router.push(`/alistirma/dogru-yanlis?wordIds=${word.id}` as any)}
+          onPress={() => router.push(`/alistirma/yazma?wordIds=${word.id}` as any)}
           activeOpacity={0.85}
         >
           <Text style={styles.quizBtnText}>Bu Kelimeyle Çalış</Text>
@@ -363,6 +364,7 @@ export default function KelimeDetayScreen() {
           </TouchableOpacity>
         )}
       </ScrollView>
+      </KeyboardSafeView>
     </SafeAreaView>
   );
 }

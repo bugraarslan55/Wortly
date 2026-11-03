@@ -14,6 +14,7 @@ import { getSentenceInputLimit } from '../../utils/word-validation';
 import { KeyboardSafeView } from '../../components/keyboard-safe-view';
 import { ExerciseHeader, ExerciseProgress, confirmLeaveExercise, useActionLock } from '../../components/exercise-ui';
 import { ColoredGermanWord } from '../../components/colored-german-word';
+import { goBack } from '../../utils/safe-back';
 
 type Phase = 'write' | 'checked';
 
@@ -141,7 +142,7 @@ export default function CumleScreen() {
             Kelime eklerken Almanca örnek cümleyi ve Türkçe çevirisini birlikte yazarsan
             bu alıştırmayı kullanabilirsin.
           </Text>
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => goBack(router)}>
             <Text style={styles.backBtnText}>Geri</Text>
           </TouchableOpacity>
         </View>
@@ -155,7 +156,7 @@ export default function CumleScreen() {
         title="Cümle Yazma"
         current={currentIndex + 1}
         total={words.length}
-        onClose={() => confirmLeaveExercise(currentIndex > 0 || phase === 'checked', () => router.back())}
+        onClose={() => confirmLeaveExercise(currentIndex > 0 || phase === 'checked', () => goBack(router))}
       />
       <ExerciseProgress current={currentIndex + 1} total={words.length} />
 

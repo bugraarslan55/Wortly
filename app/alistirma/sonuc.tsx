@@ -1,14 +1,17 @@
 import React, { useEffect, useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useUserStore, useSessionStore, useWordStore } from '../../store';
+import { useUserStore, useWordStore } from '../../store';
+import { useOwnSessions } from '../../components/use-achievements';
 import { Colors, Spacing, BorderRadius } from '../../constants/theme';
 import { AppIcon } from '../../components/app-icon';
 import { Card, IconTile, PrimaryButton, SecondaryButton } from '../../components/ui';
 import { getActiveStreak } from '../../utils/progress-stats';
 import { getReviewState } from '../../utils/spaced-repetition';
 import { ALL_TOPICS } from '../../constants/topics';
+import { useAchievementStore } from '../../store/achievements';
+import { ACHIEVEMENTS } from '../../utils/achievements';
 
 const TYPE_LABELS: Record<string, string> = {
   flashcard: 'Flashcard',
@@ -48,7 +51,7 @@ export default function SonucScreen() {
   }>();
   const { profile, updateStreak } = useUserStore();
   const { reviewStates, words } = useWordStore();
-  const sessions = useSessionStore(state => state.sessions);
+  const sessions = useOwnSessions();
 
   const totalNum = Math.max(0, parseInt(total || '0', 10) || 0);
   const scoreNum = Math.min(totalNum, Math.max(0, parseInt(score || '0', 10) || 0));
@@ -59,8 +62,9 @@ export default function SonucScreen() {
   const restartRoute = RESTART_ROUTES[typeKey];
   const hasTopic = Boolean(topicId);
 
+  // Seri yalnızca gerçek bir sonuç varken (en az 1 soru) güncellenir; boş/bozuk bir bağlantıyla açılan sonuç ekranı seriyi artırmaz.
   useEffect(() => {
-    void updateStreak();
+    if (totalNum > 0) void updateStreak();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -82,6 +86,12 @@ export default function SonucScreen() {
   }, [sessions, words, reviewStates, typeKey, scoreNum, totalNum]);
 
   const streak = getActiveStreak(profile?.streak, profile?.lastStudyDate);
+
+  // Bu çalışmayla yeni kazanılan rozetler (kalıcı kayıttan; sahte bildirim yok).
+  const recentlyEarned = useAchievementStore(state => state.recentlyEarned);
+  const clearRecent = useAchievementStore(state => state.clearRecent);
+  const newBadges = ACHIEVEMENTS.filter(badge => recentlyEarned.includes(badge.id));
+  useEffect(() => clearRecent, [clearRecent]);
   const resultIcon = percentage >= 80 ? 'trophy.fill' : percentage >= 50 ? 'hand.thumbsup.fill' : 'arrow.clockwise';
 
   const retryWrongAnswers = () => {
@@ -138,6 +148,26 @@ export default function SonucScreen() {
           </Card>
         </View>
 
+        {newBadges.length > 0 && (
+          <View style={styles.badgeBox} accessibilityLiveRegion="polite">
+            <AppIcon name="medal" size={20} color={Colors.secondary} />
+            <View style={styles.badgeText}>
+              <Text style={styles.badgeTitle}>
+                {newBadges.length === 1 ? 'Yeni rozet kazandın!' : `${newBadges.length} yeni rozet kazandın!`}
+              </Text>
+              <Text style={styles.badgeNames}>{newBadges.map(badge => badge.title).join(' · ')}</Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => router.push('/basarilarim' as any)}
+              style={styles.badgeLink}
+              accessibilityRole="link"
+              accessibilityLabel="Başarılarım"
+            >
+              <Text style={styles.badgeLinkText}>Gör</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {progress && (
           <View style={styles.progressBox} accessibilityLiveRegion="polite">
             <Text style={styles.progressTitle}>Öğrenme ilerlemesi</Text>
@@ -191,6 +221,15 @@ const styles = StyleSheet.create({
   statBox: { flex: 1, alignItems: 'center', gap: 4, paddingVertical: Spacing.md, paddingHorizontal: Spacing.sm },
   statNumber: { fontSize: 22, fontWeight: '700', color: Colors.primary },
   statLabel: { fontSize: 11, color: Colors.onSurfaceVariant, textAlign: 'center' },
+  badgeBox: {
+    width: '100%', flexDirection: 'row', alignItems: 'center', gap: Spacing.sm + 4,
+    backgroundColor: Colors.secondaryContainer, borderRadius: BorderRadius.lg, padding: Spacing.md,
+  },
+  badgeText: { flex: 1 },
+  badgeTitle: { fontSize: 14, fontWeight: '700', color: Colors.primary },
+  badgeNames: { fontSize: 12, color: Colors.primary, marginTop: 1 },
+  badgeLink: { minHeight: Spacing.touchTargetMin, minWidth: Spacing.touchTargetMin, alignItems: 'center', justifyContent: 'center' },
+  badgeLinkText: { fontSize: 13, fontWeight: '700', color: Colors.secondary },
   progressBox: {
     width: '100%', backgroundColor: Colors.successContainer, borderRadius: BorderRadius.lg,
     padding: Spacing.md, gap: 2,

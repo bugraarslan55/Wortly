@@ -13,6 +13,12 @@ export type ReplyStep = {
   german: string;
   turkish: string;
   wrongOptions: [string, string];
+  /** İsteğe bağlı: yanlış seçeneklerin Türkçe anlamları (wrongOptions ile aynı sırada). */
+  wrongTurkish?: [string, string];
+  /** İsteğe bağlı: yanlış seçeneklerin neden uymadığını anlatan kısa notlar (aynı sırada). */
+  wrongNotes?: [string, string];
+  /** İsteğe bağlı: doğru cevap için kısa dil bilgisi / kullanım notu. */
+  note?: string;
 };
 
 export type ScenarioStep = SayStep | ReplyStep;
@@ -162,6 +168,565 @@ export const SCENARIOS: Scenario[] = [
     ],
   },
 
+  {
+    id: 'markette-alisveris',
+    level: 'A1',
+    title: 'Markette Alışveriş',
+    description: 'Bir ürünün yerini sor, fiyatını öğren ve kasada öde.',
+    place: 'Süpermarket',
+    steps: [
+      {
+        type: 'say',
+        speaker: 'Satış görevlisi',
+        german: 'Guten Tag! Kann ich Ihnen helfen?',
+        turkish: 'İyi günler! Size yardımcı olabilir miyim?',
+      },
+      {
+        type: 'reply',
+        prompt: 'Sütün nerede olduğunu sor.',
+        german: 'Ja, bitte. Wo finde ich die Milch?',
+        turkish: 'Evet, lütfen. Sütü nerede bulabilirim?',
+        wrongOptions: ['Ja, bitte. Ich finde die Milch nicht gut.', 'Nein, danke. Ich möchte nur schauen.'],
+        wrongTurkish: ['Evet, lütfen. Sütü pek beğenmiyorum.', 'Hayır, teşekkürler. Sadece bakmak istiyorum.'],
+        wrongNotes: [
+          'Burada "finden" "beğenmek" anlamında. Bir şeyin yerini sormak için "Wo finde ich ...?" kullanılır.',
+          'Yardımı geri çeviriyor; oysa sen sütün yerini soracaksın.',
+        ],
+        note: '"Wo finde ich ...?" = "... nerede bulabilirim?" kalıbıdır. "die Milch" dişildir.',
+      },
+      {
+        type: 'say',
+        speaker: 'Satış görevlisi',
+        german: 'Die Milch ist in Gang drei, neben dem Käse.',
+        turkish: 'Süt üçüncü koridorda, peynirin yanında.',
+      },
+      {
+        type: 'reply',
+        prompt: 'Teşekkür et ve bir litre sütün fiyatını sor.',
+        german: 'Danke schön. Was kostet ein Liter Milch?',
+        turkish: 'Çok teşekkürler. Bir litre süt ne kadar?',
+        wrongOptions: ['Bitte schön. Das kostet zu viel.', 'Danke schön. Wo wohnen Sie?'],
+        wrongTurkish: ['Rica ederim. Bu çok pahalı.', 'Çok teşekkürler. Nerede oturuyorsunuz?'],
+        wrongNotes: [
+          '"Bitte schön" teşekkür edilince verilen cevaptır; teşekkür eden sensin.',
+          'Fiyat sorman gerekiyordu; bu soru konuyla ilgisiz.',
+        ],
+        note: '"Was kostet ...?" fiyat sorar. "ein Liter Milch": ölçü sözcüğünden sonra "Milch" ek almaz.',
+      },
+      {
+        type: 'say',
+        speaker: 'Satış görevlisi',
+        german: 'Ein Liter kostet einen Euro neunzig.',
+        turkish: 'Bir litresi bir euro doksan.',
+      },
+      {
+        type: 'reply',
+        prompt: 'İki litre süt alacağını söyle.',
+        german: 'Dann nehme ich zwei Liter, bitte.',
+        turkish: 'O zaman iki litre alıyorum, lütfen.',
+        wrongOptions: ['Dann nehme ich zwei Liter Käse, bitte.', 'Das ist zu teuer. Auf Wiedersehen!'],
+        wrongTurkish: ['O zaman iki litre peynir alıyorum, lütfen.', 'Bu çok pahalı. Hoşça kalın!'],
+        wrongNotes: [
+          'Süt alacaktın; peynir litreyle ölçülmez.',
+          'Fiyatı kabul edip süt alacaktın; veda etmek görevle uyuşmuyor.',
+        ],
+        note: '"Ich nehme ..." satın alma kararını bildirir: "... alıyorum".',
+      },
+      {
+        type: 'say',
+        speaker: 'Kasiyer',
+        german: 'Das macht drei Euro achtzig. Zahlen Sie bar oder mit Karte?',
+        turkish: 'Toplam üç euro seksen. Nakit mi, kartla mı ödersiniz?',
+      },
+      {
+        type: 'reply',
+        prompt: 'Kartla ödeyeceğini söyle.',
+        german: 'Mit Karte, bitte.',
+        turkish: 'Kartla, lütfen.',
+        wrongOptions: ['Bar, bitte.', 'Nein, ich zahle morgen.'],
+        wrongTurkish: ['Nakit, lütfen.', 'Hayır, yarın ödeyeceğim.'],
+        wrongNotes: [
+          '"Bar" nakit demektir; kartla ödeyeceğini söylemen gerekiyordu.',
+          'Markette ödeme sonraya bırakılmaz.',
+        ],
+        note: '"mit Karte" = kartla ("mit" her zaman Dativ ister). "bar" = nakit.',
+      },
+      {
+        type: 'say',
+        speaker: 'Kasiyer',
+        german: 'Bitte schön. Hier ist Ihr Kassenbon.',
+        turkish: 'Buyurun. İşte fişiniz.',
+      },
+      {
+        type: 'reply',
+        prompt: 'Teşekkür et ve güzel bir gün dile.',
+        german: 'Danke schön. Einen schönen Tag noch!',
+        turkish: 'Çok teşekkürler. Size de güzel bir gün!',
+        wrongOptions: ['Guten Morgen! Bis später.', 'Entschuldigung, wo ist die Milch?'],
+        wrongTurkish: ['Günaydın! Sonra görüşürüz.', 'Afedersiniz, süt nerede?'],
+        wrongNotes: [
+          '"Guten Morgen" selamlaşmadır; vedalaşırken "Einen schönen Tag noch!" gibi bir dilek söylenir.',
+          'Sütü zaten aldın; şimdi teşekkür edip güzel bir gün dileyeceksin.',
+        ],
+        note: '"Einen schönen Tag noch!" = Güzel bir gün geçirin! Ayrılırken söylenen kibar bir dilektir.',
+      },
+      {
+        type: 'say',
+        speaker: 'Kasiyer',
+        german: 'Danke, Ihnen auch! Auf Wiedersehen!',
+        turkish: 'Teşekkürler, size de! Hoşça kalın!',
+      },
+    ],
+  },
+  {
+    id: 'yeni-tanisma',
+    level: 'A1',
+    title: 'Yeni Biriyle Tanışma',
+    description: 'Adını, nereli olduğunu ve mesleğini söyle.',
+    place: 'Dil kursu',
+    steps: [
+      {
+        type: 'say',
+        speaker: 'Anna',
+        german: 'Hallo! Ich bin Anna. Wie heißt du?',
+        turkish: 'Merhaba! Ben Anna. Senin adın ne?',
+      },
+      {
+        type: 'reply',
+        prompt: 'Adının Deniz olduğunu söyle ve memnun olduğunu belirt.',
+        german: 'Ich heiße Deniz. Freut mich!',
+        turkish: 'Adım Deniz. Memnun oldum!',
+        wrongOptions: ['Ich komme aus der Türkei. Freut mich!', 'Ich bin neunundzwanzig Jahre alt.'],
+        wrongTurkish: ['Türkiye\'denim. Memnun oldum!', 'Yirmi dokuz yaşındayım.'],
+        wrongNotes: [
+          'Adın soruldu; memleketini söylemek bu soruya cevap değil.',
+          'Adın soruldu; yaş söylemek bu soruya cevap değil.',
+        ],
+        note: '"heißen" = adı olmak: ich heiße, du heißt. "Freut mich" = memnun oldum.',
+      },
+      {
+        type: 'say',
+        speaker: 'Anna',
+        german: 'Freut mich, Deniz! Woher kommst du?',
+        turkish: 'Memnun oldum Deniz! Nerelisin?',
+      },
+      {
+        type: 'reply',
+        prompt: 'İstanbul\'dan, Türkiye\'den geldiğini söyle.',
+        german: 'Ich komme aus Istanbul, aus der Türkei.',
+        turkish: 'İstanbul\'dan, Türkiye\'den geliyorum.',
+        wrongOptions: ['Ich komme in Istanbul, in der Türkei.', 'Ich arbeite in einer Bäckerei.'],
+        wrongTurkish: ['İstanbul\'da geliyorum (hatalı kullanım).', 'Bir fırında çalışıyorum.'],
+        wrongNotes: [
+          'Nereden geldiğini söylemek için "kommen aus" kullanılır; "in" yanlış.',
+          'Nerelisin sorusunun cevabı değil; çalıştığın yeri söylüyor.',
+        ],
+        note: '"kommen aus + yer" = ...-den gelmek. "die Türkei" dişil olduğu için "aus der Türkei" denir.',
+      },
+      {
+        type: 'say',
+        speaker: 'Anna',
+        german: 'Und was bist du von Beruf?',
+        turkish: 'Peki mesleğin ne?',
+      },
+      {
+        type: 'reply',
+        prompt: 'Öğrenci olduğunu söyle.',
+        german: 'Ich bin Student.',
+        turkish: 'Ben öğrenciyim.',
+        wrongOptions: ['Ich habe Student.', 'Ich heiße Student.'],
+        wrongTurkish: ['Öğrencim var (hatalı kullanım).', 'Adım Öğrenci.'],
+        wrongNotes: [
+          'Meslek söylerken "sein" (olmak) fiili kullanılır, "haben" değil.',
+          '"heißen" ad söylemek içindir; meslek için "sein" kullan.',
+        ],
+        note: 'Kadınsan "Ich bin Studentin" dersin. Meslekte "sein" kullanılır: ich bin ...',
+      },
+      {
+        type: 'say',
+        speaker: 'Anna',
+        german: 'Das ist toll! Sprichst du schon gut Deutsch?',
+        turkish: 'Harika! Almancan şimdiden iyi mi?',
+      },
+      {
+        type: 'reply',
+        prompt: 'Biraz Almanca konuştuğunu ve hâlâ öğrendiğini söyle.',
+        german: 'Ein bisschen. Ich lerne noch.',
+        turkish: 'Biraz. Hâlâ öğreniyorum.',
+        wrongOptions: ['Nein, ich spreche kein Wort Deutsch.', 'Doch, ich habe keinen Hunger.'],
+        wrongTurkish: ['Hayır, tek kelime Almanca konuşmuyorum.', 'Aksine, acıkmadım.'],
+        wrongNotes: [
+          'Zaten Almanca konuşuyorsun; bu cevap durumu doğru anlatmıyor.',
+          'Soruyla ilgisi olmayan bir cümle.',
+        ],
+        note: '"ein bisschen" = biraz. "noch" = hâlâ.',
+      },
+      {
+        type: 'say',
+        speaker: 'Anna',
+        german: 'Das klingt gut. Wir können zusammen üben.',
+        turkish: 'Kulağa güzel geliyor. Birlikte pratik yapabiliriz.',
+      },
+      {
+        type: 'reply',
+        prompt: 'Kabul et ve sonra görüşmek üzere vedalaş.',
+        german: 'Gern! Bis später, Anna.',
+        turkish: 'Memnuniyetle! Sonra görüşürüz, Anna.',
+        wrongOptions: ['Nein, ich möchte allein bleiben.', 'Guten Morgen, Anna. Wie heißt du?'],
+        wrongTurkish: ['Hayır, yalnız kalmak istiyorum.', 'Günaydın Anna. Senin adın ne?'],
+        wrongNotes: [
+          'Teklifi kabul edecektin; bu cevap reddediyor.',
+          'Adını zaten öğrendin; tekrar sormak konuşmanın akışına uymuyor.',
+        ],
+        note: '"Gern!" = memnuniyetle. "Bis später" = sonra görüşürüz.',
+      },
+      {
+        type: 'say',
+        speaker: 'Anna',
+        german: 'Tschüss, Deniz! Bis später!',
+        turkish: 'Hoşça kal Deniz! Sonra görüşürüz!',
+      },
+    ],
+  },
+  {
+    id: 'otelde-giris',
+    level: 'A1',
+    title: 'Otelde Giriş Yapma',
+    description: 'Rezervasyonunu söyle, kahvaltı saatini ve Wi-Fi şifresini sor.',
+    place: 'Otel resepsiyonu',
+    steps: [
+      {
+        type: 'say',
+        speaker: 'Resepsiyonist',
+        german: 'Guten Abend! Willkommen im Hotel Sonne. Wie kann ich Ihnen helfen?',
+        turkish: 'İyi akşamlar! Hotel Sonne\'ye hoş geldiniz. Size nasıl yardımcı olabilirim?',
+      },
+      {
+        type: 'reply',
+        prompt: 'Rezervasyonun olduğunu ve adının Yılmaz olduğunu söyle.',
+        german: 'Guten Abend! Ich habe eine Reservierung. Mein Name ist Yılmaz.',
+        turkish: 'İyi akşamlar! Rezervasyonum var. Adım Yılmaz.',
+        wrongOptions: ['Guten Abend! Ich möchte keine Reservierung.', 'Guten Abend! Ich suche den Bahnhof.'],
+        wrongTurkish: ['İyi akşamlar! Rezervasyon istemiyorum.', 'İyi akşamlar! İstasyonu arıyorum.'],
+        wrongNotes: [
+          'Rezervasyonun var; "ich habe eine Reservierung" demen gerekiyordu.',
+          'Otelde olduğun için istasyon sormak durumla uyuşmuyor.',
+        ],
+        note: '"eine Reservierung" dişildir. "Mein Name ist ..." = adım ...',
+      },
+      {
+        type: 'say',
+        speaker: 'Resepsiyonist',
+        german: 'Ja, ich sehe es. Sie haben ein Doppelzimmer für zwei Nächte. Stimmt das?',
+        turkish: 'Evet, görüyorum. İki gece için çift kişilik odanız var. Doğru mu?',
+      },
+      {
+        type: 'reply',
+        prompt: 'Bilginin doğru olduğunu söyle.',
+        german: 'Ja, das stimmt.',
+        turkish: 'Evet, doğru.',
+        wrongOptions: ['Ja, das schmeckt gut.', 'Nein, danke. Ich bin müde.'],
+        wrongTurkish: ['Evet, lezzetli.', 'Hayır, teşekkürler. Yorgunum.'],
+        wrongNotes: [
+          '"schmecken" tadı olmak demektir; "doğru" için "stimmen" kullanılır.',
+          'Sorulan şeye (doğru mu?) cevap vermiyor.',
+        ],
+        note: '"Das stimmt." = Doğru. / Bu doğru.',
+      },
+      {
+        type: 'say',
+        speaker: 'Resepsiyonist',
+        german: 'Hier ist Ihr Schlüssel. Das Zimmer ist im zweiten Stock, Zimmer 205.',
+        turkish: 'İşte anahtarınız. Oda ikinci katta, 205 numara.',
+      },
+      {
+        type: 'reply',
+        prompt: 'Teşekkür et ve kahvaltının saat kaçta olduğunu sor.',
+        german: 'Danke. Um wie viel Uhr gibt es Frühstück?',
+        turkish: 'Teşekkürler. Kahvaltı saat kaçta?',
+        wrongOptions: ['Danke. Das Frühstück ist sehr gut.', 'Danke. Gibt es heute Abend ein Taxi?'],
+        wrongTurkish: ['Teşekkürler. Kahvaltı çok güzel.', 'Teşekkürler. Bu akşam taksi var mı?'],
+        wrongNotes: [
+          'Saat sormadın; kahvaltıyı övüyorsun.',
+          'Kahvaltı saatini soracaktın; bu soru farklı bir konuda.',
+        ],
+        note: '"Um wie viel Uhr ...?" = saat kaçta? "es gibt" = var.',
+      },
+      {
+        type: 'say',
+        speaker: 'Resepsiyonist',
+        german: 'Das Frühstück gibt es von sieben bis zehn Uhr im Restaurant.',
+        turkish: 'Kahvaltı restoranda saat yedi ile on arasında.',
+      },
+      {
+        type: 'reply',
+        prompt: 'Nazikçe Wi-Fi şifresinin ne olduğunu sor.',
+        german: 'Entschuldigung, wie ist das WLAN-Passwort?',
+        turkish: 'Afedersiniz, Wi-Fi şifresi nedir?',
+        wrongOptions: ['Entschuldigung, wer ist das WLAN-Passwort?', 'Entschuldigung, wo ist die Toilette?'],
+        wrongTurkish: ['Afedersiniz, Wi-Fi şifresi kim? (hatalı kullanım)', 'Afedersiniz, tuvalet nerede?'],
+        wrongNotes: [
+          '"wer" kişileri sorar ("kim"); bir şeyin nasıl olduğu için "wie ist ...?" kullanılır.',
+          'Şifreyi soracaktın; bu soru farklı bir konuda.',
+        ],
+        note: '"das WLAN-Passwort" nötrdür. "Entschuldigung" dikkat çekmek için kibar bir girişdir.',
+      },
+      {
+        type: 'say',
+        speaker: 'Resepsiyonist',
+        german: 'Das Passwort steht auf der Karte. Haben Sie noch eine Frage?',
+        turkish: 'Şifre kartın üzerinde yazıyor. Başka sorunuz var mı?',
+      },
+      {
+        type: 'reply',
+        prompt: 'Başka sorun olmadığını söyle ve iyi geceler dile.',
+        german: 'Nein, danke. Gute Nacht!',
+        turkish: 'Hayır, teşekkürler. İyi geceler!',
+        wrongOptions: ['Nein, danke. Guten Morgen!', 'Ja, die Rechnung, bitte.'],
+        wrongTurkish: ['Hayır, teşekkürler. Günaydın!', 'Evet, hesabı lütfen.'],
+        wrongNotes: [
+          'Akşam olduğu için "Guten Morgen" (günaydın) uygun değil.',
+          'Henüz giriş yaptın; hesap isteme zamanı değil ve başka sorun yoktu.',
+        ],
+        note: '"Gute Nacht" geceleri, yatmadan önce söylenir.',
+      },
+      {
+        type: 'say',
+        speaker: 'Resepsiyonist',
+        german: 'Gute Nacht, Herr Yılmaz!',
+        turkish: 'İyi geceler, Bay Yılmaz!',
+      },
+    ],
+  },
+  {
+    id: 'yol-tarifi',
+    level: 'A1',
+    title: 'Yol Tarifi Sorma',
+    description: 'Postanenin yerini sor, yönleri anla ve teyit et.',
+    place: 'Sokak',
+    steps: [
+      {
+        type: 'say',
+        speaker: 'Yoldan geçen',
+        german: 'Guten Tag! Kann ich Ihnen helfen?',
+        turkish: 'İyi günler! Size yardımcı olabilir miyim?',
+      },
+      {
+        type: 'reply',
+        prompt: 'Postanenin nerede olduğunu sor.',
+        german: 'Ja, bitte. Wo ist die Post?',
+        turkish: 'Evet, lütfen. Postane nerede?',
+        wrongOptions: ['Ja, bitte. Wo ist der Post?', 'Ja, bitte. Wie heißt die Post?'],
+        wrongTurkish: ['Evet, lütfen. Postane nerede? (hatalı artikel)', 'Evet, lütfen. Postanenin adı ne?'],
+        wrongNotes: [
+          '"Post" dişildir: "die Post". "der Post" yanlış.',
+          'Yer sormak gerekiyordu; bu soru adını soruyor.',
+        ],
+        note: '"Wo ist ...?" yer sorar. "die Post" = postane (dişil).',
+      },
+      {
+        type: 'say',
+        speaker: 'Yoldan geçen',
+        german: 'Gehen Sie hier geradeaus bis zur Ampel. Dann biegen Sie links ab.',
+        turkish: 'Buradan ışıklara kadar düz gidin. Sonra sola dönün.',
+      },
+      {
+        type: 'reply',
+        prompt: 'Kibarca bunu daha yavaş tekrar etmesini iste.',
+        german: 'Können Sie das bitte langsamer wiederholen?',
+        turkish: 'Bunu lütfen daha yavaş tekrar edebilir misiniz?',
+        wrongOptions: ['Können Sie das bitte schneller wiederholen?', 'Wiederholen Sie das! Sofort!'],
+        wrongTurkish: ['Bunu lütfen daha hızlı tekrar edebilir misiniz?', 'Bunu tekrar edin! Hemen!'],
+        wrongNotes: [
+          '"schneller" daha hızlı demektir; yavaş için "langsamer" kullanılır.',
+          'Çok kaba bir emir; kibar soru kalıbı ve "bitte" kullan.',
+        ],
+        note: '"langsamer" = daha yavaş, "schneller" = daha hızlı. "Können Sie ...?" kibar rica kalıbıdır.',
+      },
+      {
+        type: 'say',
+        speaker: 'Yoldan geçen',
+        german: 'Natürlich. Gehen Sie geradeaus bis zur Ampel. Dort biegen Sie links ab.',
+        turkish: 'Tabii. Işıklara kadar düz gidin. Orada sola dönün.',
+      },
+      {
+        type: 'reply',
+        prompt: 'Anladığını teyit et: ışıklara kadar düz, sonra sola.',
+        german: 'Also geradeaus bis zur Ampel und dann links?',
+        turkish: 'Yani ışıklara kadar düz, sonra sola mı?',
+        wrongOptions: ['Also geradeaus bis zur Ampel und dann rechts?', 'Also links bis zur Ampel und dann geradeaus?'],
+        wrongTurkish: ['Yani ışıklara kadar düz, sonra sağa mı?', 'Yani ışıklara kadar sola, sonra düz mü?'],
+        wrongNotes: [
+          'Duyduğun yön "links" (sol); "rechts" sağ demektir.',
+          'Sıra ters: önce düz gidilecek, sonra sola dönülecek.',
+        ],
+        note: '"geradeaus" = düz, "links" = sol, "rechts" = sağ, "abbiegen" = dönmek.',
+      },
+      {
+        type: 'say',
+        speaker: 'Yoldan geçen',
+        german: 'Genau. Die Post ist dann auf der rechten Seite, neben der Bank.',
+        turkish: 'Aynen. Postane o zaman sağ tarafta, bankanın yanında.',
+      },
+      {
+        type: 'reply',
+        prompt: 'Buradan uzak olup olmadığını sor.',
+        german: 'Ist es weit von hier?',
+        turkish: 'Buradan uzak mı?',
+        wrongOptions: ['Ist es weit zu hier?', 'Ist es heute geöffnet?'],
+        wrongTurkish: ['Buraya uzak mı? (hatalı kullanım)', 'Bugün açık mı?'],
+        wrongNotes: [
+          '"Buradan" için "von hier" denir; "zu hier" Almancada kullanılmaz.',
+          'Uzaklığı soracaktın; bu soru açılış saatiyle ilgili.',
+        ],
+        note: '"weit" = uzak. "von hier" = buradan.',
+      },
+      {
+        type: 'say',
+        speaker: 'Yoldan geçen',
+        german: 'Nein, nur fünf Minuten zu Fuß.',
+        turkish: 'Hayır, yürüyerek sadece beş dakika.',
+      },
+      {
+        type: 'reply',
+        prompt: 'Teşekkür et ve iyi günler dile.',
+        german: 'Vielen Dank! Einen schönen Tag noch!',
+        turkish: 'Çok teşekkürler! Size de güzel bir gün!',
+        wrongOptions: ['Bitte schön! Das ist weit.', 'Guten Abend! Wo ist die Post?'],
+        wrongTurkish: ['Rica ederim! Bu uzak.', 'İyi akşamlar! Postane nerede?'],
+        wrongNotes: [
+          'Teşekkür eden sensin; "Bitte schön" cevap olarak söylenir.',
+          'Yolu zaten öğrendin; aynı soruyu tekrar sormak akışa uymuyor.',
+        ],
+        note: '"Einen schönen Tag noch!" = Güzel bir gün geçirin! (veda ederken)',
+      },
+      {
+        type: 'say',
+        speaker: 'Yoldan geçen',
+        german: 'Gern geschehen! Tschüss!',
+        turkish: 'Rica ederim! Hoşça kal!',
+      },
+    ],
+  },
+  {
+    id: 'restoranda-siparis',
+    level: 'A1',
+    title: 'Restoranda Sipariş',
+    description: 'Masa iste, yemek ve içecek sipariş et, hesabı iste.',
+    place: 'Restoran',
+    steps: [
+      {
+        type: 'say',
+        speaker: 'Garson',
+        german: 'Guten Abend! Haben Sie reserviert?',
+        turkish: 'İyi akşamlar! Rezervasyonunuz var mı?',
+      },
+      {
+        type: 'reply',
+        prompt: 'Rezervasyonun olmadığını ve iki kişilik masa olup olmadığını sor.',
+        german: 'Nein, wir haben nicht reserviert. Haben Sie einen Tisch für zwei Personen?',
+        turkish: 'Hayır, rezervasyon yaptırmadık. İki kişilik masanız var mı?',
+        wrongOptions: [
+          'Ja, wir haben einen Tisch für zwei Personen reserviert.',
+          'Nein, ich habe keinen Tisch. Auf Wiedersehen!',
+        ],
+        wrongTurkish: ['Evet, iki kişilik masa ayırttık.', 'Hayır, masam yok. Hoşça kalın!'],
+        wrongNotes: [
+          'Rezervasyonunuz yok; "Ja" demek durumu yanlış anlatır.',
+          'Masa isteyecektin; vedalaşmak görevle uyuşmuyor.',
+        ],
+        note: '"Haben Sie ...?" ile bir şeyin müsait olup olmadığı sorulur. "der Tisch" eril: Akkusativ "einen Tisch".',
+      },
+      {
+        type: 'say',
+        speaker: 'Garson',
+        german: 'Ja, gern. Hier ist die Speisekarte. Was möchten Sie trinken?',
+        turkish: 'Evet, memnuniyetle. Buyurun menü. Ne içmek istersiniz?',
+      },
+      {
+        type: 'reply',
+        prompt: 'Bir su ve bir elma suyu iste.',
+        german: 'Ein Wasser und einen Apfelsaft, bitte.',
+        turkish: 'Bir su ve bir elma suyu, lütfen.',
+        wrongOptions: ['Ein Wasser und ein Apfelsaft, bitte.', 'Ein Wasser und eine Rechnung, bitte.'],
+        wrongTurkish: ['Bir su ve bir elma suyu, lütfen. (hatalı artikel)', 'Bir su ve bir hesap, lütfen.'],
+        wrongNotes: [
+          '"der Apfelsaft" erildir; sipariş verirken Akkusativ "einen Apfelsaft" denir.',
+          'Henüz hesap istemiyorsun; içecek siparişi veriyorsun.',
+        ],
+        note: 'Sipariş: "Ein/Eine/Einen ..., bitte." "der Saft" eril olduğu için "einen".',
+      },
+      {
+        type: 'say',
+        speaker: 'Garson',
+        german: 'Gern. Und was möchten Sie essen?',
+        turkish: 'Memnuniyetle. Peki ne yemek istersiniz?',
+      },
+      {
+        type: 'reply',
+        prompt: 'Pilavlı tavuk istediğini söyle.',
+        german: 'Ich möchte das Hähnchen mit Reis, bitte.',
+        turkish: 'Pilavlı tavuğu istiyorum, lütfen.',
+        wrongOptions: ['Ich möchte die Hähnchen mit Reis, bitte.', 'Ich bin das Hähnchen mit Reis.'],
+        wrongTurkish: ['Pilavlı tavuğu istiyorum, lütfen. (hatalı artikel)', 'Ben pilavlı tavuğum.'],
+        wrongNotes: [
+          '"das Hähnchen" nötrdür; "die" çoğul/dişil içindir.',
+          'Yemek siparişinde "ich möchte" kullanılır; "ich bin" "ben ...im" demektir.',
+        ],
+        note: '"Ich möchte ..." = ... istiyorum. "das Hähnchen" nötr.',
+      },
+      {
+        type: 'say',
+        speaker: 'Garson',
+        german: 'Sehr gern. Hier ist Ihr Essen. Guten Appetit!',
+        turkish: 'Memnuniyetle. İşte yemeğiniz. Afiyet olsun!',
+      },
+      {
+        type: 'say',
+        speaker: 'Garson',
+        german: 'Hat es Ihnen geschmeckt?',
+        turkish: '(Yemekten sonra) Beğendiniz mi? Lezzetli miydi?',
+      },
+      {
+        type: 'reply',
+        prompt: 'Çok lezzetli olduğunu söyle.',
+        german: 'Ja, es war sehr lecker, danke.',
+        turkish: 'Evet, çok lezzetliydi, teşekkürler.',
+        wrongOptions: ['Ja, ich schmecke sehr gut.', 'Nein, danke. Ich habe Hunger.'],
+        wrongTurkish: ['Evet, ben çok güzel tadıyorum? (hatalı kullanım)', 'Hayır, teşekkürler. Açım.'],
+        wrongNotes: [
+          '"schmecken" yemeğin tadını anlatır: "Es schmeckt gut." Kişi özne olmaz.',
+          'Yemeği yemiş olduğun için bu cevap duruma uymuyor.',
+        ],
+        note: '"lecker" = lezzetli. "es war ..." geçmişte (idi) anlatır.',
+      },
+      {
+        type: 'say',
+        speaker: 'Garson',
+        german: 'Das freut mich. Möchten Sie noch einen Nachtisch?',
+        turkish: 'Sevindim. Bir tatlı ister misiniz?',
+      },
+      {
+        type: 'reply',
+        prompt: 'Tatlı istemediğini söyle ve ödemek istediğini belirt.',
+        german: 'Nein, danke. Wir möchten bitte zahlen.',
+        turkish: 'Hayır, teşekkürler. Ödemek istiyoruz, lütfen.',
+        wrongOptions: ['Ja, ich möchte nicht zahlen.', 'Nein, danke. Wir möchten bitte bestellen.'],
+        wrongTurkish: ['Evet, ödemek istemiyorum.', 'Hayır, teşekkürler. Sipariş vermek istiyoruz, lütfen.'],
+        wrongNotes: [
+          'Tatlı istemiyorsun ve ödemek istiyorsun; "Ja" ve "nicht zahlen" bunun tersini söylüyor.',
+          '"bestellen" sipariş vermektir; ödemek için "zahlen" kullanılır.',
+        ],
+        note: '"zahlen" = ödemek. "Wir möchten bitte zahlen." restoranda hesabı istemenin kibar yoludur.',
+      },
+      {
+        type: 'say',
+        speaker: 'Garson',
+        german: 'Natürlich. Das macht zweiundzwanzig Euro.',
+        turkish: 'Tabii. Toplam yirmi iki euro.',
+      },
+    ],
+  },
   // ─── A2 ───────────────────────────────────────────────────────────────────
   {
     id: 'doktor-randevu',
@@ -929,6 +1494,134 @@ export const SCENARIOS: Scenario[] = [
     ],
   },
 
+  {
+    id: 'arkadasla-sohbet',
+    level: 'A2',
+    title: 'Arkadaşla Hafta Sonu Sohbeti',
+    description: 'Hafta sonunu anlat ve birlikte sinemaya gitmeyi planla.',
+    place: 'Kafe',
+    steps: [
+      {
+        type: 'say',
+        speaker: 'Lena',
+        german: 'Hallo, Deniz! Wie war dein Wochenende?',
+        turkish: 'Merhaba Deniz! Hafta sonun nasıldı?',
+      },
+      {
+        type: 'reply',
+        prompt: 'Hafta sonunun güzel geçtiğini ve arkadaşlarınla parkta olduğunu söyle.',
+        german: 'Es war schön. Ich war mit Freunden im Park.',
+        turkish: 'Güzeldi. Arkadaşlarımla parktaydım.',
+        wrongOptions: ['Es war schön. Ich bin mit Freunden im Park.', 'Es war schön. Ich arbeite morgen im Park.'],
+        wrongTurkish: ['Güzeldi. Arkadaşlarımla parktayım. (zaman uyumsuz)', 'Güzeldi. Yarın parkta çalışıyorum.'],
+        wrongNotes: [
+          'Hafta sonu geçti; "ich bin" şimdiki zamandır. Geçmiş için "ich war" kullanılır.',
+          'Geçmişte nerede olduğunu anlatacaktın; "morgen" (yarın) geleceği anlatır.',
+        ],
+        note: '"Wie war ...?" geçmişi sorar; cevap da geçmişte olur: "Es war ...", "Ich war ...".',
+      },
+      {
+        type: 'say',
+        speaker: 'Lena',
+        german: 'Schön! Was habt ihr dort gemacht?',
+        turkish: 'Güzel! Orada ne yaptınız?',
+      },
+      {
+        type: 'reply',
+        prompt: 'Futbol oynadığınızı ve sonra dondurma yediğinizi söyle.',
+        german: 'Wir haben Fußball gespielt und danach Eis gegessen.',
+        turkish: 'Futbol oynadık ve ardından dondurma yedik.',
+        wrongOptions: [
+          'Wir haben Fußball spielen und danach Eis gegessen.',
+          'Wir sind Fußball gespielt und danach Eis gegessen.',
+        ],
+        wrongTurkish: [
+          'Futbol oynadık ve ardından dondurma yedik. (hatalı biçim)',
+          'Futbol oynadık ve ardından dondurma yedik. (hatalı yardımcı fiil)',
+        ],
+        wrongNotes: [
+          'Perfekt\'te fiil sonda Partizip II olur: "gespielt", "spielen" değil.',
+          '"spielen" ve "essen" haben ile kurulur; "sind" yanlış yardımcı fiildir.',
+        ],
+        note: 'Perfekt: haben + Partizip II (en sonda). spielen → gespielt, essen → gegessen.',
+      },
+      {
+        type: 'say',
+        speaker: 'Lena',
+        german: 'Das klingt toll! Hast du am Samstag schon etwas vor?',
+        turkish: 'Harika! Cumartesi için bir planın var mı?',
+      },
+      {
+        type: 'reply',
+        prompt: 'Henüz planın olmadığını söyle ve sinemaya gitmek ister mi diye sor.',
+        german: 'Nein, noch nicht. Hast du Lust, ins Kino zu gehen?',
+        turkish: 'Hayır, henüz yok. Sinemaya gitmek ister misin?',
+        wrongOptions: [
+          'Nein, noch nicht. Hast du Lust, ins Kino gehen?',
+          'Ja, ich habe heute schon Kino gesehen.',
+        ],
+        wrongTurkish: [
+          'Hayır, henüz yok. Sinemaya gitmek ister misin? (hatalı kalıp)',
+          'Evet, bugün zaten sinemada bir şey izledim.',
+        ],
+        wrongNotes: [
+          '"Lust haben" kalıbından sonra "zu + mastar" gerekir: "..., ins Kino zu gehen".',
+          'Planın olmadığını söyleyecektin; "Ja" bunun tersini söylüyor.',
+        ],
+        note: '"Lust haben, ... zu + mastar" = ...-mek istemek. "ins Kino" = sinemaya (in das → ins).',
+      },
+      {
+        type: 'say',
+        speaker: 'Lena',
+        german: 'Gern! Welcher Film läuft denn?',
+        turkish: 'Memnuniyetle! Peki hangi film oynuyor?',
+      },
+      {
+        type: 'reply',
+        prompt: 'Bir komedi olduğunu ve saat 19.00\'da başladığını söyle.',
+        german: 'Es ist eine Komödie. Sie fängt um neunzehn Uhr an.',
+        turkish: 'Bir komedi. Saat 19.00\'da başlıyor.',
+        wrongOptions: [
+          'Es ist ein Komödie. Er fängt um neunzehn Uhr an.',
+          'Es ist eine Komödie. Sie fängt um neunzehn Uhr aus.',
+        ],
+        wrongTurkish: [
+          'Bir komedi. Saat 19.00\'da başlıyor. (hatalı artikel)',
+          'Bir komedi. Saat 19.00\'da başlıyor. (hatalı ayrılabilir fiil)',
+        ],
+        wrongNotes: [
+          '"Komödie" dişildir: "eine Komödie", zamir de "sie".',
+          '"anfangen" ayrılabilir fiildir; ön eki "an" cümle sonunda kalır: "fängt ... an".',
+        ],
+        note: '"anfangen" = başlamak (ayrılabilir): "Der Film fängt um 19 Uhr an."',
+      },
+      {
+        type: 'say',
+        speaker: 'Lena',
+        german: 'Perfekt! Treffen wir uns um halb sieben vor dem Kino?',
+        turkish: 'Mükemmel! Altı buçukta sinemanın önünde buluşalım mı?',
+      },
+      {
+        type: 'reply',
+        prompt: 'Kabul et ve sabırsızlandığını söyle.',
+        german: 'Ja, gern. Ich freue mich schon darauf!',
+        turkish: 'Evet, memnuniyetle. Şimdiden sabırsızlanıyorum!',
+        wrongOptions: ['Nein, ich habe keine Lust. Ich freue mich darauf.', 'Ja, gern. Ich freue mich auf gestern.'],
+        wrongTurkish: ['Hayır, canım istemiyor. Sabırsızlanıyorum.', 'Evet, memnuniyetle. Dünü iple çekiyorum.'],
+        wrongNotes: [
+          'İki cümle birbiriyle çelişiyor: önce reddediyor, sonra sabırsızlanıyor.',
+          '"sich freuen auf" gelecekteki şey için kullanılır; "gestern" (dün) geçmiştir.',
+        ],
+        note: '"sich freuen auf + Akkusativ" = (gelecekteki) bir şeyi iple çekmek.',
+      },
+      {
+        type: 'say',
+        speaker: 'Lena',
+        german: 'Ich auch! Bis Samstag!',
+        turkish: 'Ben de! Cumartesi görüşürüz!',
+      },
+    ],
+  },
   // ─── B1 ───────────────────────────────────────────────────────────────────
   {
     id: 'is-gorusmesi',
@@ -1811,6 +2504,64 @@ export const SCENARIOS: Scenario[] = [
     ],
   },
 ];
+
+/** Senaryo kimliklerine bağlı ek bilgiler (Almanca başlık, öğrenme hedefi). Kimlikler değişmez. */
+export interface ScenarioMeta {
+  germanTitle: string;
+  /** Kısa öğrenme hedefi. Yoksa açıklama kullanılır. */
+  goal?: string;
+}
+
+export const SCENARIO_META: Record<string, ScenarioMeta> = {
+  'kafede-siparis': { germanTitle: 'Im Café bestellen' },
+  'tren-istasyonu': { germanTitle: 'Am Bahnhof' },
+  'markette-alisveris': {
+    germanTitle: 'Im Supermarkt',
+    goal: 'Bir ürünün yerini sorup fiyatını öğrenebilir, kasada ödeme yapabilirsin.',
+  },
+  'yeni-tanisma': {
+    germanTitle: 'Sich kennenlernen',
+    goal: 'Kendini tanıtıp adını, nereli olduğunu ve mesleğini söyleyebilirsin.',
+  },
+  'otelde-giris': {
+    germanTitle: 'Im Hotel einchecken',
+    goal: 'Rezervasyonunu söyleyip kahvaltı ve Wi-Fi hakkında soru sorabilirsin.',
+  },
+  'yol-tarifi': {
+    germanTitle: 'Nach dem Weg fragen',
+    goal: 'Bir yerin nerede olduğunu sorup sağ, sol ve düz tariflerini anlayabilirsin.',
+  },
+  'restoranda-siparis': {
+    germanTitle: 'Im Restaurant bestellen',
+    goal: 'Masa isteyip yemek ve içecek sipariş edebilir, hesabı isteyebilirsin.',
+  },
+  'doktor-randevu': { germanTitle: 'Einen Arzttermin vereinbaren' },
+  'ev-gorme': { germanTitle: 'Wohnungsbesichtigung' },
+  'eczane-ilac': { germanTitle: 'In der Apotheke' },
+  'banka-hesap': { germanTitle: 'Ein Konto eröffnen' },
+  'kayip-esya': { germanTitle: 'Im Fundbüro' },
+  'tren-gecikme': { germanTitle: 'Zugverspätung' },
+  'restoran-sikayet': { germanTitle: 'Beschwerde im Restaurant' },
+  'kurs-kayit': { germanTitle: 'Kursanmeldung' },
+  'tasinma-gunu': { germanTitle: 'Der Umzugstag' },
+  'is-randevusu': { germanTitle: 'Ein Vorstellungstermin' },
+  'arkadasla-sohbet': {
+    germanTitle: 'Ein Gespräch unter Freunden',
+    goal: 'Geçmişi anlatabilir (Perfekt), buluşma planlayabilir ve davet kabul edebilirsin.',
+  },
+  'is-gorusmesi': { germanTitle: 'Das Vorstellungsgespräch' },
+  'resmi-daire': { germanTitle: 'Auf dem Amt' },
+  'isyeri-sorun': { germanTitle: 'Probleme am Arbeitsplatz lösen' },
+  'sigorta-gorusmesi': { germanTitle: 'Das Versicherungsgespräch' },
+  'kira-sozlesmesi': { germanTitle: 'Der Mietvertrag' },
+  'doktor-detay': { germanTitle: 'Das ausführliche Arztgespräch' },
+  'seyahat-degisikligi': { germanTitle: 'Eine Reise umbuchen' },
+  'oturum-izni': { germanTitle: 'Aufenthaltserlaubnis verlängern' },
+  'gorusme-sonrasi-telefon': { germanTitle: 'Telefonat nach dem Gespräch' },
+  'ekip-toplantisi': { germanTitle: 'Die Teambesprechung' },
+};
+
+export const getScenarioMeta = (id: string): ScenarioMeta | undefined => SCENARIO_META[id];
 
 export const getScenarioById = (id: string | undefined): Scenario | undefined =>
   SCENARIOS.find(scenario => scenario.id === id);

@@ -1,6 +1,7 @@
 import { useUserStore, useWordStore } from '../store';
 import { getTopicsForLevel } from '../constants/topics';
-import { getReviewState, isWordDue } from './spaced-repetition';
+import { findDueWords } from './learning-analysis';
+import { reviewRouteForDue } from './study-recommendations';
 
 // Ana ekrandaki "Tekrar Zamanı" kartıyla aynı yönlendirme mantığı.
 export function getReviewRoute(): string {
@@ -10,11 +11,6 @@ export function getReviewRoute(): string {
 
   const allWords = [...topics.flatMap(topic => topic.words), ...words.filter(word => word.isCustom)];
   const candidates = Array.from(new Map(allWords.map(word => [word.id, word])).values());
-  const firstDueWord = candidates.find(
-    word => Boolean(getReviewState(word, reviewStates).lastReviewed) && isWordDue(word, reviewStates),
-  );
-
-  if (firstDueWord?.isCustom) return '/kelime/calis';
-  if (firstDueWord?.topicId) return `/konu/${firstDueWord.topicId}/alistirma`;
-  return '/konular';
+  // Ana Sayfa planı ve Analiz önerisiyle AYNI kural: en çok geciken kelimenin türüne göre rota.
+  return reviewRouteForDue(findDueWords(candidates, reviewStates));
 }

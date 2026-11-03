@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
+import { Alert, AppState, Linking, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import {
   AudioModule,
   RecordingPresets,
@@ -19,162 +19,147 @@ import {
   moveRecordingToUniqueFile,
   pronunciationFileExists,
   readPronunciationRecordings,
-  writePronunciationRecordings,
+  updatePronunciationRecordings,
 } from '../utils/pronunciation-storage';
+import {
+  createPronunciationController,
+  ERROR_MESSAGES,
+  formatDuration,
+  MAX_RECORDING_SECONDS,
+  NOTICE_MESSAGES,
+} from '../utils/pronunciation-controller';
+import { audioFocus } from '../utils/audio-focus';
+import { createCompareFlow, MANUAL_MESSAGE, referenceTimeoutMs } from '../utils/compare-flow';
+import { getGermanSpeechText } from '../utils/german-speech';
+import { useGermanSpeech } from '../utils/use-german-speech';
 
-const MIN_RECORDING_SECONDS = 0.5;
-const TOO_SHORT_MESSAGE = 'Kayıt çok kısa, lütfen tekrar dene.';
-
-const MIC_DENIED_MESSAGE =
-  'Mikrofon izni verilmedi. Telaffuzunu kaydetmek için Ayarlar > Wortly bölümünden mikrofon iznini aç.';
-
+/**
+ * Telaffuz çalışma alanı. Wortly telaffuzu PUANLAMAZ ve doğruluk yüzdesi göstermez: kullanıcı Almanca
+ * referans sesi dinler, kendi sesini kaydeder ve ikisini karşılaştırarak çalışır.
+ * Kayıt/saklama mantığı `utils/pronunciation-controller.ts` içindedir (test edilmiş saf mantık).
+ */
 export function PronunciationRecorder({ word }: { word: Word }) {
   const wordId = word.id;
   const userId = useAuthStore(state => state.session?.user.id ?? 'guest');
-  const [recordingUri, setRecordingUri] = useState<string | null>(null);
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-  const recordingUriRef = useRef<string | null>(null);
-  const isRecordingRef = useRef(false);
   const playLockRef = useRef(false);
   const finishedRef = useRef(false);
 
   const recorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, directory: 'document' });
   const recorderState = useAudioRecorderState(recorder);
+  const { speak, speakingRate } = useGermanSpeech();
+  // Güncel değerleri döngüler arasında taşıyan referanslar (karşılaştırma akışı bir kez kurulur).
+  const speakRef = useRef(speak);
+  speakRef.current = speak;
+  const speakingRef = useRef(speakingRate);
+  speakingRef.current = speakingRate;
+  const playRecordingRef = useRef<() => Promise<void>>(async () => undefined);
+  const referenceTextRef = useRef(getGermanSpeechText(word));
+  referenceTextRef.current = getGermanSpeechText(word);
+  const compareFlow = useMemo(() => createCompareFlow({
+    speakReference: (callbacks) => speakRef.current(referenceTextRef.current, 'normal', callbacks),
+    playRecording: () => playRecordingRef.current(),
+    timeoutMs: () => referenceTimeoutMs(referenceTextRef.current),
+    isReferenceSpeaking: () => speakingRef.current !== null,
+    setTimer: (callback, ms) => setTimeout(callback, ms),
+    clearTimer: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+  }), []);
+  const compareStatus = useSyncExternalStore(compareFlow.subscribe, compareFlow.getStatus, compareFlow.getStatus);
+
+  const controller = useMemo(() => createPronunciationController({
+    wordId,
+    focus: audioFocus,
+    requestPermission: async () => {
+      // İzin yalnızca kullanıcı kaydı başlatmak istediğinde istenir.
+      const permission = await AudioModule.requestRecordingPermissionsAsync();
+      return { granted: permission.granted, canAskAgain: permission.canAskAgain };
+    },
+    startRecording: async () => {
+      await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+    },
+    stopRecording: async () => {
+      // Kaydedicinin kendi süresi; durdurulunca sıfırlandığı için önce okunur.
+      const seconds = recorder.getStatus().durationMillis / 1000;
+      await recorder.stop();
+      return { uri: recorder.uri, seconds };
+    },
+    restorePlaybackMode: () => setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false }),
+    moveToUniqueFile: moveRecordingToUniqueFile,
+    measureDuration: (uri) => measureRecordingDuration(uri),
+    fileExists: pronunciationFileExists,
+    deleteFile: deletePronunciationFile,
+    loadMap: () => readPronunciationRecordings(userId),
+    updateMap: (mutate) => updatePronunciationRecordings(userId, mutate),
+  }), [userId, wordId, recorder]);
+
+  const state = useSyncExternalStore(controller.subscribe, controller.getState, controller.getState);
   // pause() sonrası native tarafın oturumu geciktirilmiş şekilde kapatması,
   // hemen ardından başlayan kaydı kesiyordu; oturumu açık tutarak bu yarış önlenir.
-  const player = useAudioPlayer(recordingUri ?? undefined, { keepAudioSessionActive: true });
+  const player = useAudioPlayer(state.uri ?? undefined, { keepAudioSessionActive: true });
   const playerStatus = useAudioPlayerStatus(player);
-
-  const isRecording = recorderState.isRecording;
+  const isRecording = state.status === 'recording';
+  const isStopping = state.status === 'stopping';
+  const isStarting = state.status === 'starting';
   const isPlaying = playerStatus.playing;
-
-  useEffect(() => {
-    isRecordingRef.current = isRecording;
-  }, [isRecording]);
+  const controlsBusy = isStarting || isStopping;
 
   useEffect(() => {
     finishedRef.current = false;
-  }, [recordingUri]);
+  }, [state.uri]);
 
   useEffect(() => {
     if (playerStatus.didJustFinish) finishedRef.current = true;
   }, [playerStatus.didJustFinish]);
 
+  // Kayıtlı telaffuzu yükle; ekran kapanınca/kelime-kullanıcı değişince kaydı güvenle durdur.
   useEffect(() => {
-    let active = true;
-    setRecordingUri(null);
-    recordingUriRef.current = null;
-    setError('');
-    if (Platform.OS === 'web') return;
+    if (Platform.OS !== 'web') void controller.load();
+    return () => { void controller.dispose(); };
+  }, [controller]);
 
-    void readPronunciationRecordings(userId).then((recordings) => {
-      if (!active) return;
-      const stored = recordings[wordId] ?? null;
-      // Dosyası artık olmayan eski eşlemeler temizlenir.
-      const uri = stored && pronunciationFileExists(stored) ? stored : null;
-      if (stored && !uri) {
-        delete recordings[wordId];
-        void writePronunciationRecordings(userId, recordings);
-      }
-      recordingUriRef.current = uri;
-      setRecordingUri(uri);
+  // Ekran kapanınca/kelime değişince çalışan karşılaştırma iptal edilir (sesler hook'lar tarafından da durdurulur).
+  useEffect(() => () => compareFlow.cancel(), [compareFlow]);
+  useEffect(() => { compareFlow.cancel(); }, [wordId, userId, compareFlow]);
+
+  // Oynatma durdurma işlevi ses odağına kaydedilir (seslendirme/kayıt başlayınca oynatma durur).
+  useEffect(() => audioFocus.register('playback', () => {
+    try { player.pause(); } catch { /* player serbest bırakılmış olabilir */ }
+  }), [player]);
+
+  // Uygulama arka plana geçince mikrofon açık kalmasın: kayıt durdurulup kaydedilir, oynatma duraklatılır.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next === 'active') return;
+      compareFlow.cancel();
+      if (controller.getState().status === 'recording') void controller.stop('background');
+      try { player.pause(); } catch { /* sessizce geç */ }
     });
+    return () => subscription.remove();
+  }, [controller, player, compareFlow]);
 
-    return () => {
-      active = false;
-    };
-  }, [userId, wordId]);
+  // İşletim sistemi kaydı kesti (arama, ses odağı kaybı...): kaydedici durduğu hâlde arayüz "kaydediyor"
+  // göstermesin. Kısa bir tolerans sonrası kaydedici hâlâ kapalıysa o ana kadarki kısım kaydedilir.
+  useEffect(() => {
+    if (!isRecording || recorderState.isRecording) return;
+    const timer = setTimeout(() => {
+      if (controller.getState().status === 'recording') void controller.stop('interrupted');
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [isRecording, recorderState.isRecording, controller]);
 
-  useEffect(() => () => {
-    if (isRecordingRef.current) void recorder.stop().catch(() => undefined);
-  }, [recorder]);
-
-  const persist = useCallback(async (uri: string | null) => {
-    recordingUriRef.current = uri;
-    setRecordingUri(uri);
-    if (Platform.OS === 'web') return;
-    const recordings = await readPronunciationRecordings(userId);
-    if (uri) recordings[wordId] = uri;
-    else delete recordings[wordId];
-    await writePronunciationRecordings(userId, recordings);
-  }, [userId, wordId]);
-
-  const startRecording = async () => {
-    if (busy) return;
-    setBusy(true);
-    setError('');
-    try {
-      const permission = await AudioModule.requestRecordingPermissionsAsync();
-      if (!permission.granted) {
-        setError(MIC_DENIED_MESSAGE);
-        return;
-      }
-      if (player.playing) player.pause();
-      await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
-      await recorder.prepareToRecordAsync();
-      recorder.record();
-    } catch {
-      setError('Kayıt başlatılamadı. iOS simülatöründe mikrofon desteği sınırlı olabilir; gerçek cihazda dene.');
-    } finally {
-      setBusy(false);
+  // Çok uzun kayıt depolamayı şişirmesin.
+  useEffect(() => {
+    if (isRecording && recorderState.durationMillis / 1000 >= MAX_RECORDING_SECONDS) {
+      void controller.stop('max-length');
     }
-  };
+  }, [isRecording, recorderState.durationMillis, controller]);
 
-  const stopRecording = async () => {
-    if (busy) return;
-    setBusy(true);
-    let newUri: string | null = null;
-    try {
-      // Kaydedicinin kendi süresi; durdurulunca sıfırlandığı için önce okunur.
-      const recordedSeconds = recorder.getStatus().durationMillis / 1000;
-      await recorder.stop();
-      await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false });
-      const recordedUri = recorder.uri;
-      if (!recordedUri) {
-        setError('Kayıt kaydedilemedi. Lütfen tekrar dene.');
-        return;
-      }
-
-      // Her kayıt benzersiz bir dosyaya taşınır ve yeni, ayrı bir player ile ölçülür.
-      newUri = await moveRecordingToUniqueFile(recordedUri);
-      if (recordedSeconds < MIN_RECORDING_SECONDS) {
-        deletePronunciationFile(newUri);
-        setError(TOO_SHORT_MESSAGE);
-        return;
-      }
-      const fileSeconds = await measureRecordingDuration(newUri);
-      if (fileSeconds === null) {
-        deletePronunciationFile(newUri);
-        setError('Kayıt kaydedilemedi. Lütfen tekrar dene.');
-        return;
-      }
-      if (fileSeconds < MIN_RECORDING_SECONDS) {
-        deletePronunciationFile(newUri);
-        setError(TOO_SHORT_MESSAGE);
-        return;
-      }
-
-      // Doğrulama bitmeden yeni kayıt geçerli kayıt olarak gösterilmez.
-      const previous = recordingUriRef.current;
-      await persist(newUri);
-      if (previous && previous !== newUri) deletePronunciationFile(previous);
-    } catch {
-      if (newUri) deletePronunciationFile(newUri);
-      setError('Kayıt durdurulurken bir sorun oluştu. Lütfen tekrar dene.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const togglePlayback = async () => {
-    if (!recordingUri || playLockRef.current || busy) return;
-    if (player.playing) {
-      player.pause();
-      return;
-    }
+  const playRecording = async () => {
+    if (!state.uri || playLockRef.current) return;
+    // Kayıt oynatılmadan önce çalan her referans ses durdurulur; kayıt sürüyorsa oynatma başlamaz.
+    if (!audioFocus.request('playback')) return;
     playLockRef.current = true;
-    setError('');
     try {
       await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false });
       // Bitmiş kayıtta play() başa sarma tamamlanmadan çağrılırsa anında durur.
@@ -184,35 +169,88 @@ export function PronunciationRecorder({ word }: { word: Word }) {
       finishedRef.current = false;
       player.play();
     } catch {
-      setError('Kayıt oynatılamadı. Lütfen tekrar dene.');
+      // Dosya açılamadıysa kullanıcıya bildir; uygulama çökmez.
+      Alert.alert('Kayıt oynatılamadı', 'Kayıt dosyası açılamadı. Yeniden kaydetmeyi dene.');
     } finally {
       playLockRef.current = false;
     }
   };
 
-  const deleteRecording = async () => {
-    if (busy) return;
-    const uri = recordingUriRef.current;
-    if (player.playing) player.pause();
-    await persist(null);
-    deletePronunciationFile(uri);
-    setError('');
+  playRecordingRef.current = playRecording;
+
+  const togglePlayback = async () => {
+    if (!state.uri || controlsBusy || isRecording) return;
+    compareFlow.cancel();
+    if (player.playing) {
+      player.pause();
+      return;
+    }
+    controller.clearMessages();
+    await playRecording();
   };
 
+  // Karşılaştırma: önce Almanca referans, bitince kendi kaydın. Bitiş geri çağrısı gelmezse zaman aşımıyla
+  // "manuel" duruma geçilir (takılı kalmaz); bitiş iki kez gelse bile kayıt bir kez çalar.
+  const compare = () => {
+    if (!state.uri || controlsBusy || isRecording) return;
+    controller.clearMessages();
+    if (player.playing) player.pause();
+    void compareFlow.start();
+  };
+
+  const confirmDelete = () => {
+    if (!state.uri || controlsBusy || isRecording) return;
+    Alert.alert(
+      'Kaydı sil',
+      'Bu kelimenin telaffuz kaydı cihazından silinecek. Bu işlem geri alınamaz.',
+      [
+        { text: 'İptal', style: 'cancel' },
+        {
+          text: 'Sil',
+          style: 'destructive',
+          onPress: () => {
+            compareFlow.cancel();
+            if (player.playing) player.pause();
+            void controller.remove();
+          },
+        },
+      ],
+    );
+  };
+
+  const seconds = Math.floor(recorderState.durationMillis / 1000);
+  const message = state.error
+    ? ERROR_MESSAGES[state.error.code]
+    : state.notice
+      ? NOTICE_MESSAGES[state.notice]
+      : compareStatus === 'manual'
+        ? MANUAL_MESSAGE
+        : '';
+
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, isRecording && styles.cardRecording]}>
       <View style={styles.titleRow}>
         <AppIcon name="mic.fill" size={16} color={Colors.secondary} />
-        <Text style={styles.title}>Telaffuzum</Text>
+        <Text style={styles.title}>Telaffuz çalışması</Text>
       </View>
+
+      {!isRecording && (
+        <Text style={styles.guide}>
+          1. Kelimeyi dinle  ·  2. Yavaş dinle  ·  3. Kendi sesini kaydet  ·  4. Karşılaştır
+        </Text>
+      )}
 
       {isRecording ? (
         <>
-          <Text style={styles.status}>Kaydediliyor… {Math.floor(recorderState.durationMillis / 1000)} sn</Text>
+          <View style={styles.recordingRow} accessible accessibilityLabel={`Kayıt sürüyor, ${seconds} saniye`}>
+            <View style={styles.recDot} />
+            <Text style={styles.recText} maxFontSizeMultiplier={1.5}>
+              Kaydediliyor  {formatDuration(seconds)} / {formatDuration(MAX_RECORDING_SECONDS)}
+            </Text>
+          </View>
           <TouchableOpacity
             style={[styles.primaryBtn, styles.stopBtn]}
-            onPress={stopRecording}
-            disabled={busy}
+            onPress={() => { void controller.stop('user'); }}
             activeOpacity={0.85}
             accessibilityRole="button"
             accessibilityLabel="Kaydı durdur"
@@ -223,73 +261,118 @@ export function PronunciationRecorder({ word }: { word: Word }) {
         </>
       ) : (
         <>
-          {!recordingUri && (
-            <Text style={styles.empty}>Henüz telaffuz kaydın yok. Kelimeyi söyle, kendi sesini dinle.</Text>
+          {!state.uri && (
+            <Text style={styles.empty}>
+              Henüz telaffuz kaydın yok. Kelimeyi dinle, sonra kendi sesini kaydedip karşılaştır.
+            </Text>
           )}
           <TouchableOpacity
-            style={[styles.primaryBtn, busy && styles.disabled]}
-            onPress={startRecording}
-            disabled={busy}
+            style={[styles.primaryBtn, (controlsBusy || speakingRate !== null) && styles.disabled]}
+            onPress={() => { compareFlow.cancel(); controller.clearMessages(); void controller.start(); }}
+            disabled={controlsBusy}
             activeOpacity={0.85}
             accessibilityRole="button"
-            accessibilityLabel="Telaffuzumu kaydet"
+            accessibilityState={{ disabled: controlsBusy }}
+            accessibilityLabel={state.uri ? 'Telaffuzumu yeniden kaydet' : 'Telaffuzumu kaydet'}
           >
-            <AppIcon name="mic.fill" size={16} color={Colors.primary} />
-            <Text style={styles.primaryBtnText}>
-              {recordingUri ? 'Yeniden Kaydet' : 'Telaffuzumu Kaydet'}
-            </Text>
+            <AppIcon name="mic.fill" size={18} color={Colors.primary} />
+            <Text style={styles.primaryBtnText}>{state.uri ? 'Yeniden Kaydet' : 'Telaffuzumu Kaydet'}</Text>
           </TouchableOpacity>
 
-          {!!recordingUri && (
-            <View style={styles.row}>
-              <TouchableOpacity
-                style={[styles.secondaryBtn, isPlaying && styles.secondaryBtnActive]}
-                onPress={togglePlayback}
-                activeOpacity={0.8}
-                accessibilityRole="button"
-                accessibilityLabel={isPlaying ? 'Kaydı duraklat' : 'Kaydımı dinle'}
-              >
-                <AppIcon name={isPlaying ? 'pause.fill' : 'play.fill'} size={16} color={Colors.primary} />
-                <Text style={styles.secondaryBtnText}>{isPlaying ? 'Duraklat' : 'Kaydımı Dinle'}</Text>
-              </TouchableOpacity>
+          {!!state.uri && (
+            <>
+              <View style={styles.row}>
+                <TouchableOpacity
+                  style={[styles.secondaryBtn, isPlaying && styles.secondaryBtnActive]}
+                  onPress={togglePlayback}
+                  disabled={controlsBusy}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel={isPlaying ? 'Kaydı duraklat' : 'Kaydımı dinle'}
+                >
+                  <AppIcon name={isPlaying ? 'pause.fill' : 'play.fill'} size={16} color={Colors.primary} />
+                  <Text style={styles.secondaryBtnText} maxFontSizeMultiplier={1.4}>
+                    {isPlaying ? 'Duraklat' : 'Kaydımı Dinle'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.secondaryBtn, compareStatus === 'reference' && styles.secondaryBtnActive]}
+                  onPress={compare}
+                  disabled={controlsBusy}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Önce Almanca sesi, sonra kaydımı dinle"
+                >
+                  <AppIcon name="speaker.wave.2.fill" size={16} color={Colors.primary} />
+                  <Text style={styles.secondaryBtnText} maxFontSizeMultiplier={1.4}>
+                    {compareStatus === 'reference' ? 'Referans çalıyor…' : 'Karşılaştır'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
               <TouchableOpacity
                 style={styles.deleteBtn}
-                onPress={deleteRecording}
+                onPress={confirmDelete}
+                disabled={controlsBusy}
                 activeOpacity={0.8}
                 accessibilityRole="button"
                 accessibilityLabel="Kaydı sil"
               >
                 <AppIcon name="trash" size={16} color={Colors.error} />
-                <Text style={styles.deleteBtnText}>Sil</Text>
+                <Text style={styles.deleteBtnText} maxFontSizeMultiplier={1.4}>Kaydı Sil</Text>
               </TouchableOpacity>
-            </View>
+            </>
           )}
-
         </>
       )}
 
-      {!!error && (
-        <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text>
+      {!!message && (
+        <View accessibilityLiveRegion="polite" style={styles.messageBox}>
+          <Text style={state.error ? styles.error : styles.notice}>{message}</Text>
+          {state.error?.needsSettings && (
+            <TouchableOpacity
+              style={styles.settingsBtn}
+              onPress={() => { void Linking.openSettings(); }}
+              accessibilityRole="button"
+              accessibilityLabel="Cihaz ayarlarını aç"
+            >
+              <Text style={styles.settingsBtnText}>Ayarları aç</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       )}
+
+      <Text style={styles.footnote}>
+        Wortly telaffuzunu puanlamaz; referans sesle kendi kaydını karşılaştırarak çalışırsın. Kayıtların yalnızca
+        bu cihazda saklanır ve buluta gönderilmez.
+      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: { backgroundColor: Colors.surfaceContainerLowest, borderRadius: 20, padding: Spacing.md, ...Shadows.level1, gap: Spacing.sm },
+  cardRecording: { borderWidth: 1.5, borderColor: Colors.error },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   title: { fontSize: 14, fontWeight: '700', color: Colors.primary },
+  guide: { fontSize: 12, color: Colors.onSurfaceVariant, lineHeight: 18 },
   empty: { fontSize: 13, color: Colors.onSurfaceVariant, lineHeight: 19 },
-  status: { fontSize: 14, fontWeight: '600', color: Colors.error },
-  primaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, backgroundColor: Colors.golden, borderRadius: BorderRadius.lg },
+  recordingRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  recDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: Colors.error },
+  recText: { fontSize: 15, fontWeight: '700', color: Colors.error, flexShrink: 1 },
+  primaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 52, paddingHorizontal: Spacing.md, backgroundColor: Colors.golden, borderRadius: BorderRadius.lg },
   stopBtn: { backgroundColor: Colors.errorContainer },
-  primaryBtnText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
+  primaryBtnText: { fontSize: 15, fontWeight: '700', color: Colors.primary, flexShrink: 1 },
   disabled: { opacity: 0.55 },
-  row: { flexDirection: 'row', gap: Spacing.sm },
-  secondaryBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, height: 44, backgroundColor: Colors.surfaceContainer, borderRadius: BorderRadius.lg, borderWidth: 1.5, borderColor: 'transparent' },
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  secondaryBtn: { flex: 1, minWidth: 130, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, minHeight: Spacing.touchTargetMin, paddingHorizontal: Spacing.sm, backgroundColor: Colors.surfaceContainer, borderRadius: BorderRadius.lg, borderWidth: 1.5, borderColor: 'transparent' },
   secondaryBtnActive: { backgroundColor: Colors.secondaryContainer, borderColor: Colors.golden },
-  secondaryBtnText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
-  deleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 44, paddingHorizontal: Spacing.md, borderRadius: BorderRadius.lg, borderWidth: 1.5, borderColor: Colors.errorContainer },
+  secondaryBtnText: { fontSize: 14, fontWeight: '700', color: Colors.primary, flexShrink: 1 },
+  deleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: Spacing.touchTargetMin, paddingHorizontal: Spacing.md, borderRadius: BorderRadius.lg, borderWidth: 1.5, borderColor: Colors.errorContainer },
   deleteBtnText: { fontSize: 14, fontWeight: '600', color: Colors.error },
-  error: { fontSize: 12, color: Colors.error, fontWeight: '600', lineHeight: 17 },
+  messageBox: { gap: Spacing.sm },
+  error: { fontSize: 13, color: Colors.error, fontWeight: '600', lineHeight: 18 },
+  notice: { fontSize: 13, color: Colors.onSurfaceVariant, fontWeight: '600', lineHeight: 18 },
+  settingsBtn: { alignSelf: 'flex-start', minHeight: Spacing.touchTargetMin, paddingHorizontal: 16, borderRadius: 999, backgroundColor: Colors.golden, alignItems: 'center', justifyContent: 'center' },
+  settingsBtnText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
+  footnote: { fontSize: 11, color: Colors.onSurfaceVariant, lineHeight: 16 },
 });

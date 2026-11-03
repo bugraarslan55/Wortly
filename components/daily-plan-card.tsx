@@ -5,8 +5,10 @@ import { useSessionStore, useUserStore, useWordStore } from '../store';
 import { getTopicsForLevel } from '../constants/topics';
 import { BorderRadius, Colors, Spacing } from '../constants/theme';
 import { AnalysisCategory, analyzeLearning, DailyPlan } from '../utils/learning-analysis';
+import { reviewRouteForDue } from '../utils/study-recommendations';
 import { AppIcon } from './app-icon';
 import { Card, IconTile, PrimaryButton } from './ui';
+import { useOwnScenarioResults, useOwnSessions } from './use-achievements';
 
 export const CATEGORY_LABELS: Record<AnalysisCategory, string> = {
   dinleme: 'Dinleme',
@@ -30,8 +32,8 @@ export function useLearningAnalysis() {
   const profile = useUserStore(state => state.profile);
   const words = useWordStore(state => state.words);
   const reviewStates = useWordStore(state => state.reviewStates);
-  const sessions = useSessionStore(state => state.sessions);
-  const scenarioResults = useSessionStore(state => state.scenarioResults);
+  const sessions = useOwnSessions();
+  const scenarioResults = useOwnScenarioResults();
 
   const level = profile?.level || 'A1';
   const dailyGoal = profile?.dailyGoal;
@@ -56,14 +58,7 @@ export function DailyPlanCard() {
   const dueCount = dueWords.length;
 
   const handleStart = () => {
-    const firstDueWord = dueWords[0];
-    if (firstDueWord?.isCustom) {
-      router.push('/kelime/calis' as any);
-    } else if (firstDueWord?.topicId) {
-      router.push(`/konu/${firstDueWord.topicId}/alistirma` as any);
-    } else {
-      router.push('/konular' as any);
-    }
+    router.push(reviewRouteForDue(dueWords) as any);
   };
 
   const planLabel = `${dailyPlan.wordCount} kelime · ${dailyPlan.exerciseCount} alıştırma`;

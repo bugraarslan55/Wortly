@@ -1,5 +1,5 @@
 import React, { useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, AlertButton, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -9,12 +9,21 @@ import { useAuthStore } from '../store/auth';
 import { Colors, Spacing, BorderRadius, Cards } from '../constants/theme';
 import { AppIcon } from '../components/app-icon';
 import { Card, IconTile, SecondaryButton, SectionTitle, SegmentedControl } from '../components/ui';
+import { useAchievementViews, useOwnScenarioResults, useOwnSessions } from '../components/use-achievements';
+import { makeIsKnownWordId } from '../utils/known-words';
+import { isStaticWordId } from '../utils/static-word-ids';
+import { buildSignOutPlan, countUnverifiedProgress } from '../utils/signout-plan';
+import { replanReminders } from '../utils/reminder-sync';
+import { readPronunciationRecordings } from '../utils/pronunciation-storage';
 import { ReviewReminderCard } from '../components/review-reminder-card';
+import { RecordingStorageCard } from '../components/recording-storage-card';
+import { LegacyRecordsCard } from '../components/legacy-records-card';
 import { isReminderSupported } from '../utils/review-reminder';
 import { Level } from '../types';
 import {
   countLearnedWords, DAILY_GOAL_OPTIONS, getActiveStreak, normalizeDailyGoal, summarizeCompletedExercises,
 } from '../utils/progress-stats';
+import { goBack } from '../utils/safe-back';
 
 const LEVELS: Level[] = ['A1', 'A2', 'B1'];
 const LEVEL_DESCRIPTIONS: Record<Level, string> = {
@@ -35,10 +44,11 @@ export default function ProfileScreen() {
   const { session, signOut } = useAuthStore();
   const words = useWordStore(state => state.words);
   const reviewStates = useWordStore(state => state.reviewStates);
-  const sessions = useSessionStore(state => state.sessions);
-  const scenarioResults = useSessionStore(state => state.scenarioResults);
+  const sessions = useOwnSessions();
+  const scenarioResults = useOwnScenarioResults();
   const sessionTotal = useSessionStore(state => state.sessionTotal);
 
+  const { badges, earnedCount } = useAchievementViews();
   const email = session?.user?.email ?? '';
   const level: Level = profile?.level ?? 'A1';
   const displayName = profile?.name?.trim() || email.split('@')[0] || 'Öğrenci';
@@ -48,7 +58,11 @@ export default function ProfileScreen() {
     : [...DAILY_GOAL_OPTIONS, dailyGoal].sort((a, b) => a - b);
 
   // Tüm sayılar yerel gerçek veriden hesaplanır; veri yoksa 0 görünür.
-  const learnedCount = useMemo(() => countLearnedWords(reviewStates, words), [reviewStates, words]);
+  // Silinmiş kelimelerin kalıntı ilerleme kayıtları sayıya girmez.
+  const learnedCount = useMemo(
+    () => countLearnedWords(reviewStates, words, makeIsKnownWordId(words, isStaticWordId)),
+    [reviewStates, words],
+  );
   // Gerçek toplam buluttan sayılır; bilinmiyorsa (çevrimdışı/ilk açılış) yerel sayı "N+" olarak gösterilir.
   const currentUserId = session?.user?.id;
   const exercises = useMemo(
@@ -81,15 +95,58 @@ export default function ProfileScreen() {
   const signingOutRef = useRef(false);
 
   const performSignOut = async () => {
-    await signOut();
+    const userId = session?.user?.id;
+    const result = await signOut();
+    if (!result.ok) {
+      // Oturum açık kaldı: bildirim planını yeniden kur ve kullanıcıyı bilgilendir (veri silinmedi).
+      if (userId) void replanReminders(userId);
+      Alert.alert('Çıkış yapılamadı', result.message);
+      return;
+    }
     router.replace('/auth' as any);
   };
 
-  // Çıkışta yerel veri silinir. Buluta ulaşmamış değişiklik varsa kullanıcıyı uyar,
-  // önce senkronize etmeyi öner; senkronize edilemezse çıkış yapma.
+  // Konu kelimelerinin çalışma geçmişi bu sürümde buluta kaydedilmiyor (öğrenme senkronu kapalı) ve
+  // çıkışta cihazdan silinir. Bu yüzden "senkronize edildi" gibi gösterilmez; veri varken kullanıcı
+  // açıkça onay vermeden çıkış yapılmaz. Senaryo sonuçları çıkışta SİLİNMEZ (kullanıcıya özel yerel
+  // anahtarda kalır), ancak buluta da gitmez; bu yüzden uyarıya dahil edilmez.
+  const getLocalOnlyProgress = () => {
+    const { reviewStates: states, words: allWords } = useWordStore.getState();
+    return countUnverifiedProgress({
+      syncEnabled: false,
+      syncedForUser: false,
+      reviewStates: states,
+      words: allWords,
+    });
+  };
+
+  // Yerel telaffuz kayıtları da çıkışta silinir ve hiçbir yere senkronize edilmez.
+  const withRecordingNote = async (message: string, userId?: string) => {
+    if (!userId) return message;
+    const count = Object.keys(await readPronunciationRecordings(userId).catch(() => ({}))).length;
+    return count > 0
+      ? `${message}\n\nAyrıca bu cihazdaki ${count} telaffuz kaydın da silinir. Kayıtlar yalnızca bu cihazda saklandığı için başka cihaza aktarılamaz ve geri getirilemez.`
+      : message;
+  };
+
+  const confirmDeleteProgressAndSignOut = async (userId?: string) => {
+    const plan = buildSignOutPlan(0, getLocalOnlyProgress());
+    const message = await withRecordingNote(plan.message, userId);
+    Alert.alert(plan.title, message, [
+      { text: 'İptal', style: 'cancel' },
+      { text: 'İlerlemeyi silip çık', style: 'destructive', onPress: () => { void performSignOut(); } },
+    ]);
+  };
+
+  // Buluta ulaşmamış değişiklik varsa önce senkronize etmeyi öner; senkronize edilemezse çıkış yapma.
+  // Senkron başarılı olsa bile konu ilerlemesi hâlâ yalnızca bu cihazdadır; yeniden onay istenir.
   const syncThenSignOut = async (userId: string) => {
     const remaining = await flushPendingChanges(userId).catch(() => -1);
     if (remaining === 0) {
+      if (getLocalOnlyProgress() > 0) {
+        await confirmDeleteProgressAndSignOut(userId);
+        return;
+      }
       await performSignOut();
       return;
     }
@@ -109,28 +166,30 @@ export default function ProfileScreen() {
     try {
       const userId = session?.user?.id;
       const pending = userId ? await getPendingChangeCount(userId).catch(() => 0) : 0;
+      const plan = buildSignOutPlan(pending, getLocalOnlyProgress());
+      const message = await withRecordingNote(plan.message, userId);
 
-      if (!userId || pending === 0) {
-        Alert.alert(
-          'Çıkış Yap',
-          'Hesabından çıkış yapmak istiyor musun?',
-          [
-            { text: 'İptal', style: 'cancel' },
-            { text: 'Çıkış Yap', style: 'destructive', onPress: () => { void performSignOut(); } },
-          ]
-        );
+      if (plan.kind === 'plain') {
+        Alert.alert(plan.title, message, [
+          { text: 'İptal', style: 'cancel' },
+          { text: 'Çıkış Yap', style: 'destructive', onPress: () => { void performSignOut(); } },
+        ]);
         return;
       }
 
-      Alert.alert(
-        'Senkronize edilmemiş değişiklikler',
-        `${pending} değişiklik henüz buluta gönderilmedi. Şimdi çıkış yaparsan bu değişiklikler kaybolur.`,
-        [
-          { text: 'İptal', style: 'cancel' },
-          { text: 'Senkronize et ve çık', onPress: () => { void syncThenSignOut(userId); } },
-          { text: 'Yine de çık', style: 'destructive', onPress: () => { void performSignOut(); } },
-        ]
-      );
+      const buttons: AlertButton[] = [{ text: 'İptal', style: 'cancel' }];
+      if (plan.offerSync && userId) {
+        buttons.push({
+          text: plan.kind === 'both' ? 'Önce senkronize et' : 'Senkronize et ve çık',
+          onPress: () => { void syncThenSignOut(userId); },
+        });
+      }
+      buttons.push({
+        text: plan.kind === 'pending' ? 'Yine de çık' : 'İlerlemeyi silip çık',
+        style: 'destructive',
+        onPress: () => { void performSignOut(); },
+      });
+      Alert.alert(plan.title, message, buttons);
     } finally {
       signingOutRef.current = false;
     }
@@ -140,7 +199,7 @@ export default function ProfileScreen() {
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => goBack(router)}
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel="Geri"
@@ -179,6 +238,23 @@ export default function ProfileScreen() {
           <StatBox icon="flame.fill" value={streak} label="Günlük seri" />
           <StatBox icon="chart.bar.fill" value={exercises.exact ? exercises.count : `${exercises.count}+`} label="Tamamlanan alıştırma" />
         </View>
+
+        {/* Başarılarım */}
+        <TouchableOpacity
+          style={[Cards.surface, styles.achievementsRow]}
+          onPress={() => router.push('/basarilarim' as any)}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel={`Başarılarım, ${badges.length} rozetten ${earnedCount} tanesi kazanıldı`}
+          accessibilityHint="Rozetlerini ve ilerlemeni gösterir"
+        >
+          <IconTile name="medal" size={40} tone="gold" />
+          <View style={styles.achievementsText}>
+            <Text style={styles.prefLabel}>Başarılarım</Text>
+            <Text style={styles.prefHint}>{earnedCount} / {badges.length} rozet kazanıldı</Text>
+          </View>
+          <AppIcon name="chevron.right" size={14} color={Colors.outline} />
+        </TouchableOpacity>
 
         {/* Öğrenme tercihleri */}
         <SectionTitle>Öğrenme tercihleri</SectionTitle>
@@ -220,7 +296,7 @@ export default function ProfileScreen() {
             <View style={styles.infoRow}>
               <IconTile name="bell.fill" size={40} />
               <View style={styles.infoText}>
-                <Text style={styles.prefLabel}>Günlük tekrar bildirimi</Text>
+                <Text style={styles.prefLabel}>Çalışma hatırlatıcıları</Text>
                 <Text style={styles.prefHint}>
                   Bu ortamda (Android Expo Go) bildirimler desteklenmiyor. Development build veya mağaza sürümünde kullanılabilir.
                 </Text>
@@ -228,6 +304,12 @@ export default function ProfileScreen() {
             </View>
           </Card>
         )}
+
+        {/* Kullanılmayan telaffuz kayıtları varsa görünür; silme yalnızca onayla */}
+        <RecordingStorageCard userId={session?.user?.id ?? null} />
+
+        {/* Sahibi doğrulanamayan eski kayıtlar: yalnızca onayınla hesabına eklenir */}
+        <LegacyRecordsCard userId={session?.user?.id ?? null} email={session?.user?.email ?? null} />
 
         {/* Hesap */}
         <SectionTitle>Hesap</SectionTitle>
@@ -292,6 +374,8 @@ const styles = StyleSheet.create({
   prefLabel: { fontSize: 15, fontWeight: '700', color: Colors.primary },
   prefHint: { fontSize: 12, color: Colors.onSurfaceVariant, lineHeight: 17, marginBottom: 4 },
   divider: { height: 1, backgroundColor: Cards.borderColor, marginVertical: Spacing.sm },
+  achievementsRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, padding: Spacing.md, minHeight: 64 },
+  achievementsText: { flex: 1 },
   infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.md },
   infoText: { flex: 1, gap: 2 },
   signedInAs: { fontSize: 12, color: Colors.onSurfaceVariant, textAlign: 'center' },

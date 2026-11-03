@@ -461,3 +461,33 @@ const styles = StyleSheet.create({
   emptyDesc: { fontSize: 14, color: Colors.onSurfaceVariant, textAlign: 'center', lineHeight: 21, maxWidth: 300 },
   emptyAction: { alignSelf: 'stretch', marginTop: Spacing.sm },
 });
+
+// ─── İlerleme çubuğu ────────────────────────────────────────────────────────
+
+/** Gerçek ilerleme çubuğu (değer/hedef). Hedef geçersizse boş çizilir, sahte yüzde üretmez. */
+export function ProgressBar({
+  value, max, label, tone = 'gold',
+}: { value: number; max: number; label?: string; tone?: 'gold' | 'success' }) {
+  const ratio = max > 0 && Number.isFinite(value) ? Math.max(0, Math.min(1, value / max)) : 0;
+  return (
+    <View
+      style={progressStyles.track}
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityLabel={label}
+      accessibilityValue={{ min: 0, max: Math.max(max, 0), now: Math.max(0, Math.min(value, max)) }}
+    >
+      <View
+        style={[
+          progressStyles.fill,
+          { width: `${ratio * 100}%`, backgroundColor: tone === 'success' ? Colors.success : Colors.golden },
+        ]}
+      />
+    </View>
+  );
+}
+
+const progressStyles = StyleSheet.create({
+  track: { height: 8, borderRadius: BorderRadius.full, backgroundColor: Colors.surfaceContainer, overflow: 'hidden' },
+  fill: { height: 8, borderRadius: BorderRadius.full },
+});

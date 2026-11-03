@@ -10,6 +10,8 @@ import { topicSymbol } from '../../constants/symbols';
 import { Colors, Spacing, BorderRadius, Cards } from '../../constants/theme';
 import { AppIcon } from '../../components/app-icon';
 import { DailyPlanCard } from '../../components/daily-plan-card';
+import { DailyTasksCard } from '../../components/daily-tasks-card';
+import { useDayTick } from '../../components/use-achievements';
 import { ProgressRing } from '../../components/progress-ring';
 import { Card, IconTile, SectionTitle } from '../../components/ui';
 import { countReviewedToday, getActiveStreak, normalizeDailyGoal } from '../../utils/progress-stats';
@@ -25,16 +27,22 @@ export default function HomeScreen() {
   const router = useRouter();
   const { profile } = useUserStore();
   const { words, reviewStates } = useWordStore();
+  // Günlük Görevler ile aynı gün sınırı ve aynı "şimdi" kaynağı: gece yarısında ve arka plandan dönünce
+  // halka, seri ve görevler birlikte yeni güne geçer.
+  const now = useDayTick();
 
   const level = profile?.level || 'A1';
   const topics = useMemo(() => getTopicsForLevel(level), [level]);
 
   // Günlük ilerleme: bugün tekrar edilen benzersiz kelime (konu + kişisel kelimeler).
-  const todayCount = useMemo(() => countReviewedToday(reviewStates, words), [reviewStates, words]);
+  const todayCount = useMemo(
+    () => countReviewedToday(reviewStates, words, new Date(now)),
+    [reviewStates, words, now],
+  );
   const dailyGoal = normalizeDailyGoal(profile?.dailyGoal);
   const progress = Math.min(todayCount / dailyGoal, 1);
   const goalReached = todayCount >= dailyGoal;
-  const streak = getActiveStreak(profile?.streak, profile?.lastStudyDate);
+  const streak = getActiveStreak(profile?.streak, profile?.lastStudyDate, new Date(now));
 
   const customWordCount = words.filter(w => w.isCustom).length;
   const firstName = profile?.name?.trim().split(/\s+/)[0] || 'Öğrenci';
@@ -103,6 +111,9 @@ export default function HomeScreen() {
             </View>
           </TouchableOpacity>
         </Card>
+
+        {/* Günlük görevler: gerçek öğrenme verisinden, Türkiye gününe göre */}
+        <DailyTasksCard />
 
         {/* Bugünkü plan: tek ana "Çalışmaya Başla" eylemi burada */}
         <DailyPlanCard />

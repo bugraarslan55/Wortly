@@ -14,6 +14,7 @@ import { selectWordsForReview } from '../../utils/spaced-repetition';
 import { checkGermanAnswer, describeAnswerNote } from '../../utils/answer-check';
 import { KeyboardSafeView } from '../../components/keyboard-safe-view';
 import { ExerciseHeader, ExerciseProgress, confirmLeaveExercise, useActionLock } from '../../components/exercise-ui';
+import { goBack } from '../../utils/safe-back';
 
 const GERMAN_CHARS = ['ä', 'ö', 'ü', 'ß', 'Ä', 'Ö', 'Ü'];
 const SESSION_SIZE = 10;
@@ -160,7 +161,7 @@ export default function YazmaScreen() {
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
           <Text style={styles.emptyText}>Kelime bulunamadı</Text>
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => goBack(router)}>
             <Text style={styles.backBtnText}>Geri</Text>
           </TouchableOpacity>
         </View>
@@ -174,7 +175,7 @@ export default function YazmaScreen() {
         title="Yazarak Tekrar"
         current={currentIndex + 1}
         total={sessionWords.length}
-        onClose={() => confirmLeaveExercise(currentIndex > 0 || phase === 'result', () => router.back())}
+        onClose={() => confirmLeaveExercise(currentIndex > 0 || phase === 'result', () => goBack(router))}
       />
       <ExerciseProgress current={currentIndex + 1} total={sessionWords.length} />
 

@@ -12,6 +12,7 @@ import { ExerciseHeader, ExerciseProgress, confirmLeaveExercise, useActionLock }
 import { Card, EmptyState, IconTile, PrimaryButton, SecondaryButton } from '../../../components/ui';
 import { selectWordsForReview } from '../../../utils/spaced-repetition';
 import { SELF_REPORTED_MAX_MASTERY } from '../../../utils/mastery';
+import { goBack } from '../../../utils/safe-back';
 
 const SESSION_SIZE = 20;
 // Özel pseudo-topic ID: "Kelimelerim" ekranından gelen, topicId filtresine
@@ -169,7 +170,7 @@ export default function FlashcardScreen() {
     setSessionVersion(version => version + 1);
   };
 
-  const close = () => confirmLeaveExercise(results.length > 0 && !finished, () => router.back());
+  const close = () => confirmLeaveExercise(results.length > 0 && !finished, () => goBack(router));
 
   if (!words.length) {
     return (
@@ -179,7 +180,7 @@ export default function FlashcardScreen() {
             icon="tray"
             title="Bu konuda kelime bulunamadı"
             actionLabel="Geri Dön"
-            onAction={() => router.back()}
+            onAction={() => goBack(router)}
           />
         </View>
       </SafeAreaView>
@@ -219,7 +220,7 @@ export default function FlashcardScreen() {
           </Card>
           <View style={styles.resultActions}>
             <PrimaryButton label="Tekrar Çalış" onPress={restart} />
-            <SecondaryButton label="Konuya Dön" onPress={() => router.back()} />
+            <SecondaryButton label="Konuya Dön" onPress={() => goBack(router)} />
           </View>
         </View>
       </SafeAreaView>

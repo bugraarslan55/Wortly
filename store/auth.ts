@@ -5,8 +5,10 @@ import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
 import { supabase } from '../utils/supabase';
 import { clearPronunciationRecordings } from '../utils/pronunciation-storage';
-import { cancelReviewReminders } from '../utils/review-reminder';
+import { cancelReviewReminders, revokeReminderOwner, setReminderOwner } from '../utils/review-reminder';
+import { runSignOut, type SignOutResult } from '../utils/sign-out-flow';
 import { useWordStore, useUserStore, useSessionStore } from './index';
+import { useAchievementStore } from './achievements';
 
 type AuthResult =
   | { ok: true; session: Session | null }
@@ -25,7 +27,7 @@ interface AuthStore {
   signUp: (email: string, password: string) => Promise<AuthResult>;
   resetPasswordForEmail: (email: string) => Promise<PasswordResetResult>;
   handleAuthUrl: (url: string) => Promise<boolean>;
-  signOut: () => Promise<void>;
+  signOut: () => Promise<SignOutResult>;
 }
 
 let listenerStarted = false;
@@ -147,18 +149,24 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   signOut: async () => {
     const previousUserId = get().session?.user.id;
-    await supabase.auth.signOut();
-    // Önce önceki kullanıcıya ait yerel state/AsyncStorage'ı temizle, sonra
-    // session'ı sıfırla — böylece oturum kapanıp auth ekranına geçildiğinde
-    // artık hiçbir ekran eski kullanıcının profil/kelime/geçmiş verisini
-    // bellekte tutmuyor olur.
-    await Promise.all([
-      useWordStore.getState().resetLocal(),
-      useUserStore.getState().resetLocal(),
-      useSessionStore.getState().resetLocal(),
-      clearPronunciationRecordings(previousUserId),
-      cancelReviewReminders(),
-    ]);
-    set({ session: null });
+    // Çıkış başarısız olursa (ağ hatası vb.) oturum açık kalır: yerel veri silinmez ve bildirim
+    // sahipliği geri yüklenir. Başarılıysa yerel state/AsyncStorage temizlenir, sonra session sıfırlanır
+    // (auth ekranına geçildiğinde hiçbir ekran eski kullanıcının verisini bellekte tutmaz).
+    return runSignOut(previousUserId, {
+      revokeOwner: revokeReminderOwner,
+      restoreOwner: setReminderOwner,
+      remoteSignOut: () => supabase.auth.signOut(),
+      wipeLocal: async () => {
+        await Promise.all([
+          useWordStore.getState().resetLocal(),
+          useUserStore.getState().resetLocal(),
+          useSessionStore.getState().resetLocal(),
+          Promise.resolve(useAchievementStore.getState().reset()),
+          clearPronunciationRecordings(previousUserId),
+          cancelReviewReminders(),
+        ]);
+      },
+      clearSession: () => set({ session: null }),
+    });
   },
 }));

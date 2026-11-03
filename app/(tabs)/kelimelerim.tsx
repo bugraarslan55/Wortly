@@ -1,10 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useWordStore } from '../../store';
+import { useAuthStore } from '../../store/auth';
+import { confirmDeleteWord } from '../../utils/confirm-word-delete';
 import { Colors, Spacing, BorderRadius, Cards } from '../../constants/theme';
 import { Word, MasteryLevel } from '../../types';
 import { AppIcon } from '../../components/app-icon';
@@ -22,6 +24,7 @@ const FILTERS: ('all' | MasteryLevel)[] = ['all', 0, 1, 2, 3];
 export default function KelimelerimScreen() {
   const router = useRouter();
   const { words, deleteWord } = useWordStore();
+  const sessionUserId = useAuthStore(state => state.session?.user.id);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | MasteryLevel>('all');
 
@@ -38,14 +41,13 @@ export default function KelimelerimScreen() {
   }), [customWords, search, filter]);
 
   const handleDelete = (word: Word) => {
-    Alert.alert(
-      'Kelimeyi Sil',
-      `"${word.article ? word.article + ' ' : ''}${word.german}" kelimesini silmek istiyor musun?`,
-      [
-        { text: 'İptal', style: 'cancel' },
-        { text: 'Sil', style: 'destructive', onPress: () => deleteWord(word.id) },
-      ]
-    );
+    // Telaffuz kaydı varsa kullanıcıya ayrıca sorulur; onay olmadan ses dosyası silinmez.
+    void confirmDeleteWord({
+      userId: sessionUserId,
+      wordId: word.id,
+      label: `${word.article ? word.article + ' ' : ''}${word.german}`,
+      onDeleteWord: () => deleteWord(word.id),
+    });
   };
 
   return (
@@ -95,13 +97,20 @@ export default function KelimelerimScreen() {
         })}
       </ScrollView>
 
-      <ScrollView
+      {/* Büyük listelerde yalnızca ekrandaki kartlar çizilir (ScrollView + map tüm kelimeleri çizerdi). */}
+      <FlatList
         style={styles.scroll}
         contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        {customWords.length >= 1 && (
+        data={filteredWords}
+        keyExtractor={(word) => word.id}
+        renderItem={({ item: word }) => (
+          <WordCard
+            word={word}
+            onPress={() => router.push(`/kelime/${word.id}` as any)}
+            onDelete={() => handleDelete(word)}
+          />
+        )}
+        ListHeaderComponent={customWords.length >= 1 ? (
           <TouchableOpacity
             style={styles.quizBanner}
             onPress={() => router.push('/kelime/calis' as any)}
@@ -113,9 +122,8 @@ export default function KelimelerimScreen() {
             <Text style={styles.quizBannerText}>Kelimelerimle Çalış</Text>
             <AppIcon name="chevron.right" size={14} color={Colors.golden} />
           </TouchableOpacity>
-        )}
-
-        {customWords.length === 0 ? (
+        ) : null}
+        ListEmptyComponent={customWords.length === 0 ? (
           <EmptyState
             icon="square.and.pencil"
             eyebrow="KENDİ LİSTENİ OLUŞTUR"
@@ -124,23 +132,20 @@ export default function KelimelerimScreen() {
             actionLabel="İlk Kelimeni Ekle"
             onAction={() => router.push('/kelime/ekle' as any)}
           />
-        ) : filteredWords.length === 0 ? (
+        ) : (
           <EmptyState
             icon="magnifyingglass"
             title="Kelime bulunamadı"
             description="Arama veya filtreyi değiştirmeyi dene."
           />
-        ) : (
-          filteredWords.map((word) => (
-            <WordCard
-              key={word.id}
-              word={word}
-              onPress={() => router.push(`/kelime/${word.id}` as any)}
-              onDelete={() => handleDelete(word)}
-            />
-          ))
         )}
-      </ScrollView>
+        initialNumToRender={12}
+        maxToRenderPerBatch={16}
+        windowSize={7}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      />
     </SafeAreaView>
   );
 }

@@ -6,9 +6,18 @@ import { supabase } from '../utils/supabase';
 import { ReviewStateMap } from '../utils/spaced-repetition';
 import { ScenarioResult } from '../utils/learning-analysis';
 import {
-  LOCAL_SCENARIO_LIMIT, LOCAL_SESSION_LIMIT, previousLocalDateKey, toLocalDateKey,
+  LOCAL_SCENARIO_LIMIT, LOCAL_SESSION_LIMIT, nextStreakState, previousLocalDateKey, toLocalDateKey,
 } from '../utils/progress-stats';
 import { nextMasteryLevel } from '../utils/mastery';
+import { withoutReviewState } from '../utils/known-words';
+import { createLatestGuard } from '../utils/latest-guard';
+import { Dataset, mergeParkedById, mergeReviewStates, UNKNOWN_OWNER } from '../utils/data-ownership';
+import {
+  addDeviceAccount, LegacyOffer, legacyOfferState, planReviewRestore, planSessionRestore, planWordRestore,
+} from '../utils/legacy-restore';
+import {
+  backupCorrupt, createDataIsolation, KeyValueStorage, OWNER_KEYS, selectPendingForUser,
+} from '../utils/data-isolation';
 
 // ─── STORAGE KEYS ───────────────────────────────────────────────────────────
 const KEYS = {
@@ -94,6 +103,7 @@ function safeGetItem(key: string): Promise<string | null> {
 }
 
 function safeSetItem(key: string, value: string): Promise<void> {
+  if (writeBlockedKeys.has(key)) return Promise.resolve(); // yedeği alınamayan bozuk veri korunur
   return withTimeout(AsyncStorage.setItem(key, value), undefined, STORAGE_TIMEOUT_MS);
 }
 
@@ -146,11 +156,8 @@ const getPendingChangesForUser = async (
   userId: string,
   ownerId: string | null,
 ): Promise<PendingChange[]> => {
-  const changes = await readPendingChanges();
-  return changes.filter((item) => (
-    item.entity === entity &&
-    (item.userId === userId || (item.userId === null && ownerId === userId))
-  ));
+  // Yalnızca bu kullanıcının kendi kuyruk kayıtları; başka kullanıcıya ait kayıtlar ASLA uygulanmaz.
+  return selectPendingForUser(await readPendingChanges(), entity, userId, ownerId);
 };
 
 const OWNER_KEY_BY_ENTITY: Record<PendingChange['entity'], string> = {
@@ -202,8 +209,170 @@ const getMutationUserId = async (ownerKey: string): Promise<string | null> => (
   (await getCurrentUserId()) ?? await safeGetItem(ownerKey)
 );
 
+// Gerçek AsyncStorage'a zaman aşımı korumalı adaptör: yazma/silme zaman aşımına uğrarsa HATA fırlatır (sessizce
+// başarılı sayılmaz), böylece park/sahip yazımı doğrulanamazsa veri yerinde bırakılır.
+const asyncStorageAdapter: KeyValueStorage = {
+  // Okuma HATASI/zaman aşımı "değer yok" (null) gibi görünmemeli: aksi halde sahip anahtarı okunamayınca kullanıcının
+  // kendi verisi "sahibi bilinmiyor" sanılıp park edilirdi. Bu yüzden başarısız okuma HATA fırlatır.
+  getItem: async (key) => {
+    const result = await withTimeout(
+      AsyncStorage.getItem(key).then(
+        (value) => ({ ok: true as const, value }),
+        () => ({ ok: false as const, value: null }),
+      ),
+      { ok: false as const, value: null },
+      STORAGE_TIMEOUT_MS,
+    );
+    if (!result.ok) throw new Error('Depolama okuması başarısız');
+    return result.value;
+  },
+  setItem: async (key, value) => {
+    const result = await withTimeout(AsyncStorage.setItem(key, value).then(() => 'ok' as const), 'timeout' as const, STORAGE_TIMEOUT_MS);
+    if (result !== 'ok') throw new Error('Depolama yazımı zaman aşımına uğradı');
+  },
+  removeItem: async (key) => {
+    const result = await withTimeout(AsyncStorage.removeItem(key).then(() => 'ok' as const), 'timeout' as const, STORAGE_TIMEOUT_MS);
+    if (result !== 'ok') throw new Error('Depolama silimi zaman aşımına uğradı');
+  },
+  getAllKeys: async () => {
+    const keys = await withTimeout<readonly string[] | null>(AsyncStorage.getAllKeys(), null, STORAGE_TIMEOUT_MS);
+    if (!keys) throw new Error('Anahtar listesi zaman aşımına uğradı');
+    return keys;
+  },
+};
+const isolation = createDataIsolation(asyncStorageAdapter);
+
+// Bozuk (ayrıştırılamayan) yerel veri üzerine yazılıp kaybolmasın: ham metin ÖNCE ayrı bir anahtara yedeklenir ve
+// doğrulanır. Yedek doğrulanamazsa o anahtara yazma reddedilir (bozuk ama kurtarılabilir veri korunur).
+const writeBlockedKeys = new Set<string>();
+async function parseStored<T>(raw: string | null, key: string, fallback: T): Promise<T> {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    if (!(await backupCorrupt(asyncStorageAdapter, key, raw))) writeBlockedKeys.add(key);
+    return fallback;
+  }
+}
+
+// Devam eden yerel yazmalar izlenir: çıkış (resetLocal) bunları bekler, böylece çıkıştan sonra geç biten bir yazma
+// silinmiş veriyi sahipsiz olarak geri getirmez.
+const activeWrites = new Set<Promise<unknown>>();
+function withWrite<T>(task: () => Promise<T>): Promise<T> {
+  const run = task();
+  activeWrites.add(run);
+  const release = () => { activeWrites.delete(run); };
+  run.then(release, release);
+  return run;
+}
+async function drainWrites(maxWaitMs = 3000): Promise<void> {
+  if (activeWrites.size === 0) return;
+  await Promise.race([
+    Promise.allSettled([...activeWrites]),
+    new Promise<void>((resolve) => setTimeout(resolve, maxWaitMs)),
+  ]);
+}
+
+const OWNER_KEY_BY_DATASET: Record<Dataset, string> = OWNER_KEYS;
+const OWNER_STATE_BY_DATASET: Record<Dataset, string> = {
+  profile: 'profileOwner', words: 'wordsOwner', review: 'reviewOwner', sessions: 'sessionsOwner',
+};
+
+// Yerel veriyi oluşturan kullanıcı biliniyorsa (oturum açık) sahip anahtarı HEMEN yazılır; böylece çevrimdışı
+// oluşturulan veri yeniden başlatmada "sahibi bilinmeyen" sayılıp gizlenmez.
+async function stampOwner(dataset: Dataset, userId: string | null, set: (partial: any) => void): Promise<void> {
+  if (!userId) return;
+  set({ [OWNER_STATE_BY_DATASET[dataset]]: userId });
+  await safeSetItem(OWNER_KEY_BY_DATASET[dataset], userId);
+}
+
+// Kelime + tekrar durumu uzlaştırması (utils/data-isolation.ts): başka kullanıcıya ait / sahibi bilinmeyen veri silinmez ve
+// bağlanmaz, DOĞRULANARAK park edilir; sahibi dönen kullanıcının park edilmiş verisi idempotent birleştirmeyle geri yüklenir.
+// Bu cihazda (güncellemeden beri) hangi hesapların kullanıldığı. Sahibi bilinmeyen eski kayıtlar yalnızca TEK hesap
+// kullanıldıysa o hesaba sunulur; birden fazla hesap varsa sahiplik belirsizdir ve kayıtlar güvenle bekletilir.
+const DEVICE_ACCOUNTS_KEY = '@wortly:device-accounts';
+
+async function readDeviceAccounts(): Promise<string[] | null> {
+  try {
+    const raw = await asyncStorageAdapter.getItem(DEVICE_ACCOUNTS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string' && !!item) : null;
+  } catch {
+    return null; // okunamadı/bozuk: hesap geçmişi doğrulanamaz
+  }
+}
+
+async function recordDeviceAccount(userId: string): Promise<void> {
+  try {
+    const current = await readDeviceAccounts();
+    if (current === null) return; // bozuk geçmişin üzerine yazma
+    const next = addDeviceAccount(current, userId);
+    if (next.length !== current.length) await asyncStorageAdapter.setItem(DEVICE_ACCOUNTS_KEY, JSON.stringify(next));
+  } catch {
+    // Yazılamazsa teklif "bekletme" durumunda kalır (güvenli taraf).
+  }
+}
+
+async function reconcileWordData(userId: string, set: (partial: any) => void, get: () => WordStore): Promise<boolean> {
+  await recordDeviceAccount(userId);
+  const pending = await readPendingChanges();
+  const hasOwnWordPending = pending.some(change => change.entity === 'word' && change.userId === userId);
+  const { words, reviewStates } = get();
+
+  const wordsResult = await isolation.reconcile({
+    dataset: 'words',
+    userId,
+    rawData: JSON.stringify(words),
+    hasData: words.length > 0,
+    hasOwnPendingChange: hasOwnWordPending,
+    clearLocal: async () => {
+      set({ words: [] });
+      await asyncStorageAdapter.removeItem(KEYS.WORDS);
+    },
+    applyParked: async (parsed) => {
+      if (!Array.isArray(parsed)) return false;
+      const merged = mergeParkedById(get().words, parsed as Word[]);
+      const text = JSON.stringify(merged);
+      await asyncStorageAdapter.setItem(KEYS.WORDS, text);
+      if ((await safeGetItem(KEYS.WORDS)) !== text) return false;
+      set({ words: merged });
+      return true;
+    },
+  });
+  if (wordsResult === 'failed') return false;
+
+  const reviewResult = await isolation.reconcile({
+    dataset: 'review',
+    userId,
+    rawData: JSON.stringify(reviewStates),
+    hasData: Object.keys(reviewStates).length > 0,
+    hasOwnPendingChange: false,
+    clearLocal: async () => {
+      set({ reviewStates: {} });
+      await asyncStorageAdapter.removeItem(KEYS.REVIEW_STATES);
+    },
+    applyParked: async (parsed) => {
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+      const merged = mergeReviewStates(get().reviewStates, parsed as ReviewStateMap);
+      const text = JSON.stringify(merged);
+      await asyncStorageAdapter.setItem(KEYS.REVIEW_STATES, text);
+      if ((await safeGetItem(KEYS.REVIEW_STATES)) !== text) return false;
+      set({ reviewStates: merged });
+      return true;
+    },
+  });
+  if (reviewResult === 'failed') return false;
+
+  set({ wordsOwner: userId, reviewOwner: userId });
+  return true;
+}
+
 // ─── WORD STORE ─────────────────────────────────────────────────────────────
 interface WordStore {
+  /** Bellekteki kişisel kelimelerin / tekrar durumlarının sahibi (kayıtlı sahip anahtarından). */
+  wordsOwner: string | null;
+  reviewOwner: string | null;
   words: Word[];
   reviewStates: ReviewStateMap;
   isLoaded: boolean;
@@ -355,6 +524,8 @@ const saveCloudSession = async (userId: string, session: QuizSession) => {
 };
 
 export const useWordStore = create<WordStore>((set, get) => ({
+  wordsOwner: null,
+  reviewOwner: null,
   words: [],
   reviewStates: {},
   isLoaded: false,
@@ -367,9 +538,19 @@ export const useWordStore = create<WordStore>((set, get) => ({
         safeGetItem(KEYS.WORDS),
         safeGetItem(KEYS.REVIEW_STATES),
       ]);
-      const words: Word[] = raw ? JSON.parse(raw) : [];
-      const reviewStates: ReviewStateMap = rawReviewStates ? JSON.parse(rawReviewStates) : {};
-      set({ words, reviewStates, isLoaded: true });
+      const [wordsOwner, reviewOwner] = await Promise.all([
+        safeGetItem(KEYS.WORDS_OWNER),
+        safeGetItem(KEYS.REVIEW_OWNER),
+      ]);
+      const words: Word[] = await parseStored<Word[]>(raw, KEYS.WORDS, []);
+      const reviewStates: ReviewStateMap = await parseStored<ReviewStateMap>(rawReviewStates, KEYS.REVIEW_STATES, {});
+      set({
+        words: Array.isArray(words) ? words : [],
+        reviewStates: reviewStates && typeof reviewStates === 'object' && !Array.isArray(reviewStates) ? reviewStates : {},
+        wordsOwner: wordsOwner || null,
+        reviewOwner: reviewOwner || null,
+        isLoaded: true,
+      });
     } catch {
       set({ isLoaded: true });
     } finally {
@@ -387,18 +568,13 @@ export const useWordStore = create<WordStore>((set, get) => ({
     devLog('[Wortly][sync] syncWords başladı');
     const wordsAtStart = get().words;
     try {
+      // Sahiplik uzlaştırması: başka kullanıcıya ait / sahibi bilinmeyen veri (tekrar geçmişi dahil) silinmez ve
+      // bu kullanıcıya bağlanmaz, park edilir. Park edilemezse veri gizli kalır ve eşitleme güvenli şekilde durur.
+      if (!(await reconcileWordData(userId, set, get))) return;
       const localOwner = await safeGetItem(KEYS.WORDS_OWNER);
-      const reviewOwner = await safeGetItem(KEYS.REVIEW_OWNER);
 
-      // Statik kelimelerin tekrar geçmişi cihazda tutulur. Kullanıcı değişince
-      // önceki hesabın geçmişi yeni hesaba görünür şekilde taşınmasın.
-      if (reviewOwner && reviewOwner !== userId) {
-        const emptyReviewStates: ReviewStateMap = {};
-        set({ reviewStates: emptyReviewStates });
-        await safeSetItem(KEYS.REVIEW_STATES, JSON.stringify(emptyReviewStates));
-      }
-      await safeSetItem(KEYS.REVIEW_OWNER, userId);
-
+      const wordsAtStartSync = get().words;
+      void wordsAtStartSync;
       const localWords = get().words;
       const localCustomWords = localWords.filter(word => word.isCustom);
       const pendingChanges = await getPendingChangesForUser('word', userId, localOwner);
@@ -488,7 +664,8 @@ export const useWordStore = create<WordStore>((set, get) => ({
   }),
 
   resetLocal: async () => {
-    set({ words: [], reviewStates: {}, syncedUserId: null });
+    set({ words: [], reviewStates: {}, wordsOwner: null, reviewOwner: null, syncedUserId: null });
+    await drainWrites(); // devam eden yerel yazmalar bitmeden silme: geç yazma silinen veriyi geri getirmesin
     await safeMultiRemove([
       KEYS.WORDS,
       KEYS.WORDS_OWNER,
@@ -497,7 +674,7 @@ export const useWordStore = create<WordStore>((set, get) => ({
     ]);
   },
 
-  addWord: async (wordData) => {
+  addWord: (wordData) => withWrite(async () => {
     const duplicate = findDuplicateCustomWord(get().words, wordData.german, wordData.article);
     if (duplicate) return { ok: false, reason: 'duplicate', existing: duplicate };
 
@@ -511,15 +688,16 @@ export const useWordStore = create<WordStore>((set, get) => ({
     set({ words: updated });
     await safeSetItem(KEYS.WORDS, JSON.stringify(updated));
     const userId = await getMutationUserId(KEYS.WORDS_OWNER);
+    await stampOwner('words', userId, set);
     await queuePendingChange({ entity: 'word', id: newWord.id, operation: 'upsert', userId });
     if (userId && await saveCloudWord(userId, newWord)) {
       await clearPendingChange('word', newWord.id);
       await safeSetItem(KEYS.WORDS_OWNER, userId);
     }
     return { ok: true };
-  },
+  }),
 
-  updateWord: async (id, updates) => {
+  updateWord: (id, updates) => withWrite(async () => {
     const current = get().words.find(w => w.id === id);
     if (current) {
       const nextGerman = updates.german ?? current.german;
@@ -534,6 +712,7 @@ export const useWordStore = create<WordStore>((set, get) => ({
     const updatedWord = updated.find(word => word.id === id);
     if (updatedWord) {
       const userId = await getMutationUserId(KEYS.WORDS_OWNER);
+      await stampOwner('words', userId, set);
       await queuePendingChange({ entity: 'word', id, operation: 'upsert', userId });
       if (userId && await saveCloudWord(userId, updatedWord)) {
         await clearPendingChange('word', id);
@@ -541,21 +720,27 @@ export const useWordStore = create<WordStore>((set, get) => ({
       }
     }
     return { ok: true };
-  },
+  }),
 
-  deleteWord: async (id) => {
+  deleteWord: (id) => withWrite(async () => {
     const updated = get().words.filter(w => w.id !== id);
-    set({ words: updated });
+    // Silinen kelimenin ilerleme kaydı da kaldırılır; aksi halde "öğrenilen kelime" istatistiğinde ve
+    // rozetlerde var olmayan kelime sayılmaya devam ederdi.
+    const reviewStates = withoutReviewState(get().reviewStates, id);
+    const hadReviewState = reviewStates !== get().reviewStates;
+    set(hadReviewState ? { words: updated, reviewStates } : { words: updated });
     await safeSetItem(KEYS.WORDS, JSON.stringify(updated));
+    if (hadReviewState) await safeSetItem(KEYS.REVIEW_STATES, JSON.stringify(reviewStates));
     const userId = await getMutationUserId(KEYS.WORDS_OWNER);
+    await stampOwner('words', userId, set);
     await queuePendingChange({ entity: 'word', id, operation: 'delete', userId });
     if (userId && await deleteCloudWord(userId, id)) {
       await clearPendingChange('word', id);
       await safeSetItem(KEYS.WORDS_OWNER, userId);
     }
-  },
+  }),
 
-  updateMastery: async (id, correct, options) => {
+  updateMastery: (id, correct, options) => withWrite(async () => {
     const word = get().words.find(w => w.id === id);
     const currentReview = get().reviewStates[id] ?? (word ? {
       masteryLevel: word.masteryLevel,
@@ -572,13 +757,14 @@ export const useWordStore = create<WordStore>((set, get) => ({
 
     set({ reviewStates });
     await safeSetItem(KEYS.REVIEW_STATES, JSON.stringify(reviewStates));
+    await stampOwner('review', await getMutationUserId(KEYS.REVIEW_OWNER), set);
 
     // Özel kelimeler için mevcut mastery alanını da koru. Statik Goethe
     // kelimeleri yalnızca bu yerel review haritasında tutulur.
     if (word) {
       await get().updateWord(id, { masteryLevel: newLevel, lastReviewed });
     }
-  },
+  }),
 
   getCustomWords: () => get().words.filter(w => w.isCustom),
   getWordsByTopic: (topicId) => get().words.filter(w => w.topicId === topicId),
@@ -586,6 +772,8 @@ export const useWordStore = create<WordStore>((set, get) => ({
 
 // ─── USER STORE ─────────────────────────────────────────────────────────────
 interface UserStore {
+  /** Bellekteki profilin sahibi (kayıtlı sahip anahtarından). */
+  profileOwner: string | null;
   profile: UserProfile | null;
   isLoaded: boolean;
   syncedUserId: string | null;
@@ -651,6 +839,7 @@ const saveCloudProfile = async (userId: string, profile: UserProfile) => {
 };
 
 export const useUserStore = create<UserStore>((set, get) => ({
+  profileOwner: null,
   profile: null,
   isLoaded: false,
   syncedUserId: null,
@@ -659,7 +848,8 @@ export const useUserStore = create<UserStore>((set, get) => ({
     devLog('[Wortly][load] loadProfile başladı');
     try {
       const raw = await safeGetItem(KEYS.PROFILE);
-      const profile: UserProfile = raw ? JSON.parse(raw) : DEFAULT_PROFILE;
+      const profile: UserProfile = (await parseStored<UserProfile>(raw, KEYS.PROFILE, DEFAULT_PROFILE)) ?? DEFAULT_PROFILE;
+      const profileOwner = await safeGetItem(KEYS.PROFILE_OWNER);
 
       // Migrasyon: yayın kapsamı artık A1/A2/B1. Geçersiz/tanınmayan bir
       // seviye varsa güvenli biçimde A2'ye normalize edilir ve kalıcı olarak
@@ -669,7 +859,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
         await safeSetItem(KEYS.PROFILE, JSON.stringify(profile));
       }
 
-      set({ profile, isLoaded: true });
+      set({ profile, profileOwner: profileOwner || null, isLoaded: true });
     } catch {
       set({ profile: DEFAULT_PROFILE, isLoaded: true });
     } finally {
@@ -684,8 +874,38 @@ export const useUserStore = create<UserStore>((set, get) => ({
     // aşımına uğratılır (askıda kalan bir `await`, finally'nin de hiç
     // çalışmamasına yol açar).
     devLog('[Wortly][sync] syncProfile başladı');
-    const profileAtStart = get().profile;
     try {
+      // Sahiplik uzlaştırması (profil): başka kullanıcıya ait / sahibi bilinmeyen profil park edilir, varsayılan
+      // profil kullanılır; sahibi dönen kullanıcının park edilmiş profili geri yüklenir (bekleyen kayıt gerçek
+      // profili göndersin, varsayılan olanı değil).
+      const current = get().profile ?? DEFAULT_PROFILE;
+      const profileHasData = current.onboardingCompleted || current.name.length > 0 || current.streak > 0;
+      const pendingProfile = (await readPendingChanges()).some(c => c.entity === 'profile' && c.userId === userId);
+      const profileResult = await isolation.reconcile({
+        dataset: 'profile',
+        userId,
+        rawData: JSON.stringify(current),
+        hasData: profileHasData,
+        hasOwnPendingChange: pendingProfile,
+        clearLocal: async () => {
+          set({ profile: DEFAULT_PROFILE });
+          await asyncStorageAdapter.removeItem(KEYS.PROFILE);
+        },
+        applyParked: async (parsed) => {
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+          const now = get().profile ?? DEFAULT_PROFILE;
+          const nowHasData = now.onboardingCompleted || now.name.length > 0 || now.streak > 0;
+          if (!nowHasData) {
+            const text = JSON.stringify(parsed);
+            await asyncStorageAdapter.setItem(KEYS.PROFILE, text);
+            set({ profile: parsed as UserProfile });
+          }
+          return true; // mevcut profil doluysa park edilmiş eski profil gereksizdir (bulut/yerel güncel kazanır)
+        },
+      });
+      if (profileResult === 'failed') return;
+      set({ profileOwner: userId });
+      const profileAtStart = get().profile;
       const localProfile = get().profile ?? DEFAULT_PROFILE;
       const localOwner = await safeGetItem(KEYS.PROFILE_OWNER);
       const pendingChanges = await getPendingChangesForUser('profile', userId, localOwner);
@@ -760,38 +980,41 @@ export const useUserStore = create<UserStore>((set, get) => ({
   }),
 
   resetLocal: async () => {
-    set({ profile: DEFAULT_PROFILE, syncedUserId: null });
+    set({ profile: DEFAULT_PROFILE, profileOwner: null, syncedUserId: null });
+    await drainWrites();
     await safeMultiRemove([KEYS.PROFILE, KEYS.PROFILE_OWNER]);
     // Yerel profil silindi; bekleyen profil kaydı kalırsa bir sonraki girişte
     // varsayılan profil buluttaki gerçek profilin üzerine yazılırdı.
     await clearPendingChangesForEntity('profile');
   },
 
-  setProfile: async (profile) => {
+  setProfile: (profile) => withWrite(async () => {
     set({ profile });
     await safeSetItem(KEYS.PROFILE, JSON.stringify(profile));
     const userId = await getMutationUserId(KEYS.PROFILE_OWNER);
+    await stampOwner('profile', userId, set);
     await queuePendingChange({ entity: 'profile', id: 'profile', operation: 'upsert', userId });
     if (userId && await saveCloudProfile(userId, profile)) {
       await clearPendingChange('profile', 'profile');
       await safeSetItem(KEYS.PROFILE_OWNER, userId);
     }
-  },
+  }),
 
-  updateProfile: async (updates) => {
+  updateProfile: (updates) => withWrite(async () => {
     const current = get().profile || DEFAULT_PROFILE;
     const updated = { ...current, ...updates };
     set({ profile: updated });
     await safeSetItem(KEYS.PROFILE, JSON.stringify(updated));
     const userId = await getMutationUserId(KEYS.PROFILE_OWNER);
+    await stampOwner('profile', userId, set);
     await queuePendingChange({ entity: 'profile', id: 'profile', operation: 'upsert', userId });
     if (userId && await saveCloudProfile(userId, updated)) {
       await clearPendingChange('profile', 'profile');
       await safeSetItem(KEYS.PROFILE_OWNER, userId);
     }
-  },
+  }),
 
-  completeOnboarding: async (name, level) => {
+  completeOnboarding: (name, level) => withWrite(async () => {
     const profile: UserProfile = {
       ...DEFAULT_PROFILE,
       name,
@@ -801,31 +1024,34 @@ export const useUserStore = create<UserStore>((set, get) => ({
     set({ profile });
     await safeSetItem(KEYS.PROFILE, JSON.stringify(profile));
     const userId = await getMutationUserId(KEYS.PROFILE_OWNER);
+    await stampOwner('profile', userId, set);
     await queuePendingChange({ entity: 'profile', id: 'profile', operation: 'upsert', userId });
     if (userId && await saveCloudProfile(userId, profile)) {
       await clearPendingChange('profile', 'profile');
       await safeSetItem(KEYS.PROFILE_OWNER, userId);
     }
-  },
+  }),
 
   updateStreak: async () => {
     const profile = get().profile;
     if (!profile) return;
     // Yerel takvim günü kullanılır (UTC değil): gece yarısından sonra gün doğru değişir.
-    const today = toLocalDateKey();
-    const lastDate = profile.lastStudyDate;
-    if (lastDate === today) return; // Aynı gün
-
-    const yesterday = previousLocalDateKey();
-    const newStreak = lastDate === yesterday ? profile.streak + 1 : 1;
-    await get().updateProfile({ streak: newStreak, lastStudyDate: today });
+    const next = nextStreakState(profile, toLocalDateKey(), previousLocalDateKey());
+    if (!next) return; // Aynı gün: seri tekrar artmaz
+    await get().updateProfile(next);
   },
 }));
+
+const scenarioLoads = createLatestGuard();
 
 // ─── SESSION STORE ──────────────────────────────────────────────────────────
 interface SessionStore {
   sessions: QuizSession[];
   scenarioResults: ScenarioResult[];
+  /** Bellekteki senaryo sonuçlarının sahibi; farklı kullanıcıya ait sonuçlar hiçbir ekranda kullanılmaz. */
+  scenarioResultsOwner: string | null;
+  /** Bellekteki oturumların sahibi (kayıtlı sahip anahtarından); bilinmiyorsa null. Başka kullanıcıya ait oturumlar kullanılmaz. */
+  sessionsOwner: string | null;
   /**
    * Kullanıcının bulutta kayıtlı gerçek toplam oturum sayısı (yerel liste yalnızca son 100'ü tutar).
    * Bilinmiyorsa null; sahibi (userId) uyuşmayan değer kullanılmaz.
@@ -847,6 +1073,8 @@ interface SessionStore {
 export const useSessionStore = create<SessionStore>((set, get) => ({
   sessions: [],
   scenarioResults: [],
+  scenarioResultsOwner: null,
+  sessionsOwner: null,
   sessionTotal: null,
   currentSession: null,
   isLoaded: false,
@@ -866,7 +1094,9 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       } catch {
         sessionTotal = null;
       }
-      set({ sessions: raw ? JSON.parse(raw) : [], sessionTotal, isLoaded: true });
+      const ownerRaw = await safeGetItem(KEYS.SESSIONS_OWNER);
+      const parsedSessions = await parseStored<QuizSession[]>(raw, KEYS.SESSIONS, []);
+      set({ sessions: Array.isArray(parsedSessions) ? parsedSessions : [], sessionTotal, sessionsOwner: ownerRaw || null, isLoaded: true });
     } catch {
       set({ isLoaded: true });
     } finally {
@@ -875,12 +1105,15 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   },
 
   loadScenarioResults: async (userId) => {
+    // Hesap değişiminde ESKİ hesabın geç gelen okuması yeni hesabın sonuçlarını ezmesin: yalnızca en yeni istek yazar.
+    const token = scenarioLoads.begin();
     try {
       const raw = await safeGetItem(scenarioResultsKey(userId));
       const parsed = raw ? JSON.parse(raw) : [];
-      set({ scenarioResults: Array.isArray(parsed) ? parsed : [] });
+      if (!scenarioLoads.isLatest(token)) return;
+      set({ scenarioResults: Array.isArray(parsed) ? parsed : [], scenarioResultsOwner: userId });
     } catch {
-      set({ scenarioResults: [] });
+      if (scenarioLoads.isLatest(token)) set({ scenarioResults: [], scenarioResultsOwner: userId });
     }
   },
 
@@ -891,6 +1124,32 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     // zaman aşımına uğratılır.
     devLog('[Wortly][sync] syncSessions başladı');
     try {
+      // Sahiplik uzlaştırması (oturumlar): başka kullanıcıya ait / sahibi bilinmeyen oturumlar silinmez ve bağlanmaz,
+      // park edilir; sahibi dönen kullanıcının park edilmiş oturumları geri yüklenir.
+      const pendingSessions = (await readPendingChanges()).some(c => c.entity === 'session' && c.userId === userId);
+      const sessionsNow = get().sessions;
+      const sessionsResult = await isolation.reconcile({
+        dataset: 'sessions',
+        userId,
+        rawData: JSON.stringify(sessionsNow),
+        hasData: sessionsNow.length > 0,
+        hasOwnPendingChange: pendingSessions,
+        clearLocal: async () => {
+          set({ sessions: [] });
+          await asyncStorageAdapter.removeItem(KEYS.SESSIONS);
+        },
+        applyParked: async (parsed) => {
+          if (!Array.isArray(parsed)) return false;
+          const merged = mergeParkedById(get().sessions, parsed as QuizSession[]);
+          const text = JSON.stringify(merged);
+          await asyncStorageAdapter.setItem(KEYS.SESSIONS, text);
+          if ((await safeGetItem(KEYS.SESSIONS)) !== text) return false;
+          set({ sessions: merged });
+          return true;
+        },
+      });
+      if (sessionsResult === 'failed') return;
+      set({ sessionsOwner: userId });
       const localOwner = await safeGetItem(KEYS.SESSIONS_OWNER);
       const localSessions = get().sessions;
       const pendingChanges = await getPendingChangesForUser('session', userId, localOwner);
@@ -943,7 +1202,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         devLog('[Wortly][sync] syncSessions: yerel değişiklik algılandı, birleştirme ertelendi');
         return;
       }
-      set({ sessions: nextSessions });
+      set({ sessions: nextSessions, sessionsOwner: userId });
       await safeSetItem(KEYS.SESSIONS, JSON.stringify(nextSessions));
       await safeSetItem(KEYS.SESSIONS_OWNER, userId);
 
@@ -970,20 +1229,22 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   }),
 
   resetLocal: async () => {
-    set({ sessions: [], scenarioResults: [], sessionTotal: null, currentSession: null, syncedUserId: null });
+    scenarioLoads.invalidate(); // süren senaryo okumaları çıkıştan sonra veri yazamaz
+    set({ sessions: [], scenarioResults: [], scenarioResultsOwner: null, sessionsOwner: null, sessionTotal: null, currentSession: null, syncedUserId: null });
+    await drainWrites();
     await safeMultiRemove([KEYS.SESSIONS, KEYS.SESSIONS_OWNER, KEYS.SESSION_TOTAL]);
   },
 
   startSession: (sessionData) => {
     const session: QuizSession = {
       ...sessionData,
-      id: Date.now().toString(36),
+      id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`, // aynı milisaniyede iki oturum çakışmasın
       date: Date.now(),
     };
     set({ currentSession: session });
   },
 
-  saveSession: async (session) => {
+  saveSession: (session) => withWrite(async () => {
     const updated = [session, ...get().sessions].slice(0, LOCAL_SESSION_LIMIT); // Yerelde son N oturum
     // Yerel durum hemen güncellenir (ekranlar beklemeden sonuca geçer). Bilinen gerçek toplam 1
     // artırılır; bir sonraki senkron bulut sayısıyla düzeltir.
@@ -992,6 +1253,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     set({ sessions: updated, sessionTotal: bumpedTotal, currentSession: null });
     await safeSetItem(KEYS.SESSIONS, JSON.stringify(updated));
     const userId = await getMutationUserId(KEYS.SESSIONS_OWNER);
+    await stampOwner('sessions', userId, set);
     if (bumpedTotal) {
       if (userId && bumpedTotal.userId === userId) {
         await safeSetItem(KEYS.SESSION_TOTAL, JSON.stringify(bumpedTotal));
@@ -1005,21 +1267,201 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       await clearPendingChange('session', session.id);
       await safeSetItem(KEYS.SESSIONS_OWNER, userId);
     }
-  },
+  }),
 
-  saveScenarioResult: async (userId, result) => {
+  saveScenarioResult: (userId, result) => withWrite(async () => {
     const nextResult: ScenarioResult = {
       ...result,
       id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
       date: Date.now(),
     };
-    const updated = [nextResult, ...get().scenarioResults].slice(0, LOCAL_SCENARIO_LIMIT);
-    set({ scenarioResults: updated });
+    // Bellekteki liste başka kullanıcıya aitse (veya henüz yüklenmediyse) üzerine yazarak kayıt kaybettirmemek
+    // için bu kullanıcının kayıtlı listesi depodan okunur.
+    let base = get().scenarioResults;
+    if (get().scenarioResultsOwner !== userId) {
+      try {
+        const raw = await safeGetItem(scenarioResultsKey(userId));
+        const parsed = raw ? JSON.parse(raw) : [];
+        base = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        base = [];
+      }
+    }
+    const updated = [nextResult, ...base].slice(0, LOCAL_SCENARIO_LIMIT);
+    set({ scenarioResults: updated, scenarioResultsOwner: userId });
     await safeSetItem(scenarioResultsKey(userId), JSON.stringify(updated));
-  },
+  }),
 
   clearCurrentSession: () => set({ currentSession: null }),
 }));
+
+export interface LegacyRecordsSummary {
+  /** Şimdi eklenebilecek (veya bu işlemde eklenen) kişisel kelime sayısı. */
+  words: number;
+  /** Şimdi eklenebilecek (veya bu işlemde eklenen) çalışma kaydı sayısı. */
+  sessions: number;
+  /** Şimdi eklenebilecek (veya bu işlemde eklenen) kelime ilerlemesi sayısı. */
+  reviewStates: number;
+  /** words + sessions + reviewStates. */
+  total: number;
+  /**
+   * Cihazdaki 100 kayıt sınırı nedeniyle yerel listeye sığmayan çalışma kayıtları: onaydan ÖNCE parkta (sahibi bilinmeyen),
+   * onaydan SONRA kullanıcının salt okunur arşivinde güvende bekler. Tamamlanmış yerel oturum sayılmaz.
+   */
+  waiting: number;
+  /** Bu işlem sahibi doğrulanamadığı için engellendi (cihazda birden fazla hesap kullanıldı). */
+  blocked?: boolean;
+}
+
+const emptyLegacySummary = (): LegacyRecordsSummary => ({ words: 0, sessions: 0, reviewStates: 0, total: 0, waiting: 0 });
+
+/**
+ * Sahibi doğrulanamadığı için park edilmiş eski yerel kayıtların özeti (hiçbir şey değiştirilmez, içerik gösterilmez; yalnızca
+ * sayılar). Sayılar şu anki yerel duruma göre HESAPLANIR: zaten yerelde olan kayıtlar sayılmaz; oturumlar için boş yer kadarı
+ * "eklenebilir", kalanı "bekliyor".
+ */
+export async function summarizeLegacyRecords(): Promise<LegacyRecordsSummary> {
+  const summary = emptyLegacySummary();
+  const currentWords = useWordStore.getState().words;
+  for (const key of await isolation.parkedKeys(UNKNOWN_OWNER, 'words')) {
+    const parked = await isolation.readParked<Word[]>(key);
+    if (Array.isArray(parked)) summary.words += planWordRestore(currentWords, parked).length;
+  }
+  // Oturumlar: tüm park kayıtları birlikte değerlendirilir (aynı kimlik iki kez sayılmaz, boş yer paylaşılır).
+  const allParkedSessions: QuizSession[] = [];
+  for (const key of await isolation.parkedKeys(UNKNOWN_OWNER, 'sessions')) {
+    const parked = await isolation.readParked<QuizSession[]>(key);
+    if (Array.isArray(parked)) allParkedSessions.push(...parked);
+  }
+  const sessionPlan = planSessionRestore(useSessionStore.getState().sessions, allParkedSessions, LOCAL_SESSION_LIMIT);
+  summary.sessions = sessionPlan.toAdd.length;
+  summary.waiting = sessionPlan.waiting.length;
+  const currentReview = useWordStore.getState().reviewStates;
+  for (const key of await isolation.parkedKeys(UNKNOWN_OWNER, 'review')) {
+    const parked = await isolation.readParked<ReviewStateMap>(key);
+    if (parked && typeof parked === 'object') summary.reviewStates += planReviewRestore(currentReview, parked).length;
+  }
+  summary.total = summary.words + summary.sessions + summary.reviewStates;
+  return summary;
+}
+
+/**
+ * Kullanıcının KENDİ onayıyla hesabına bağlanmış ama yerel listeye sığmayan çalışma kayıtları (salt okunur arşiv).
+ * Yalnızca bu kullanıcının arşivi okunur; başka kullanıcının kayıtları ASLA döndürülmez. İstatistik, görev, rozet ve
+ * eşitlemeye KATILMAZ (yerel oturum listesinde olmadıkları için).
+ */
+export async function loadArchivedSessions(userId: string): Promise<QuizSession[]> {
+  if (!userId) return [];
+  const localIds = new Set(useSessionStore.getState().sessions.map(session => session.id));
+  const byId = new Map<string, QuizSession>();
+  for (const key of await isolation.parkedKeys(userId, 'archive')) {
+    const parked = await isolation.readParked<QuizSession[]>(key);
+    if (!Array.isArray(parked)) continue;
+    for (const item of parked) {
+      if (
+        item && typeof item.id === 'string' && Number.isFinite(item.score) && Number.isFinite(item.total)
+        && Number.isFinite(item.date) && !localIds.has(item.id)
+      ) byId.set(item.id, item);
+    }
+  }
+  return Array.from(byId.values()).sort((a, b) => b.date - a.date);
+}
+
+export interface LegacyOfferInfo {
+  /** none: gösterilecek bir şey yok; offer: (belirsizliği açıkça belirterek) onaya sunulabilir; hold: sahiplik belirsiz, bekletilir. */
+  state: LegacyOffer;
+  summary: LegacyRecordsSummary;
+  /** Bu kullanıcının salt okunur arşivindeki kayıt sayısı. */
+  archived: number;
+}
+
+/** Kurtarma kartının kullandığı TEK kaynak: teklif durumu + sayılar + arşiv. */
+export async function getLegacyOffer(userId: string): Promise<LegacyOfferInfo> {
+  const summary = await summarizeLegacyRecords();
+  const archived = (await loadArchivedSessions(userId)).length;
+  const hasLegacy = summary.total > 0 || summary.waiting > 0;
+  const state = legacyOfferState(await readDeviceAccounts(), userId, hasLegacy);
+  return { state, summary, archived };
+}
+
+// Geri yükleme işlemleri sırayla çalışır: çift onay / çift dokunuş birbirine karışmaz. Her adım kimliğe göre birleştirme
+// olduğu için tekrar çalıştırmak veriyi ÇOĞALTMAZ; park kaydı yalnızca başarıyla uygulandıktan sonra kaldırılır
+// (uygulama arada kapansa bile sonraki çalıştırma güvenle tamamlar).
+let restoreChain: Promise<unknown> = Promise.resolve();
+
+/**
+ * Kullanıcı bu eski kayıtların KENDİSİNE ait olduğunu açıkça onayladığında çağrılır. ÖNEMLİ: kullanıcının onayı bir
+ * beyandır, sahiplik KANITI değildir; bu yüzden cihazda birden fazla hesap kullanıldıysa işlem ENGELLENİR (`blocked`) ve
+ * kayıtlar bekletilir. Onaylanırsa kayıtlar bu hesaba eklenir ve buluta gönderilmek üzere kuyruğa alınır. MEVCUT kayıtlar
+ * ezilmez: oturumlar yalnızca cihazdaki 100 kayıt sınırında BOŞ yer varsa listeye eklenir; sığmayanlar silinmeden bu hesabın
+ * salt okunur arşivine alınır (artık başka hesaba sunulamaz). Dönen sayılar bu işlemde GERÇEKTEN eklenenlerdir.
+ */
+export function restoreLegacyRecords(userId: string): Promise<LegacyRecordsSummary> {
+  const run = restoreChain.then(() => withWrite(async () => {
+    const restored = emptyLegacySummary();
+    const offer = await getLegacyOffer(userId);
+    if (offer.state !== 'offer') {
+      restored.blocked = offer.state === 'hold';
+      restored.waiting = offer.archived;
+      return restored;
+    }
+
+    await isolation.consumeParked(UNKNOWN_OWNER, 'words', async (parsed) => {
+      if (!Array.isArray(parsed)) return false;
+      const fresh = planWordRestore(useWordStore.getState().words, parsed as Word[]);
+      const merged = mergeParkedById(useWordStore.getState().words, fresh);
+      const text = JSON.stringify(merged);
+      await asyncStorageAdapter.setItem(KEYS.WORDS, text);
+      await asyncStorageAdapter.setItem(KEYS.WORDS_OWNER, userId);
+      if ((await safeGetItem(KEYS.WORDS)) !== text) return false;
+      useWordStore.setState({ words: merged, wordsOwner: userId });
+      for (const word of fresh) await queuePendingChange({ entity: 'word', id: word.id, operation: 'upsert', userId });
+      restored.words += fresh.length;
+      return true;
+    });
+
+    await isolation.consumeParked(UNKNOWN_OWNER, 'sessions', async (parsed) => {
+      if (!Array.isArray(parsed)) return false;
+      const plan = planSessionRestore(useSessionStore.getState().sessions, parsed as QuizSession[], LOCAL_SESSION_LIMIT);
+      if (plan.toAdd.length > 0) {
+        const merged = [...useSessionStore.getState().sessions, ...plan.toAdd].sort((a, b) => b.date - a.date);
+        const text = JSON.stringify(merged);
+        await asyncStorageAdapter.setItem(KEYS.SESSIONS, text);
+        await asyncStorageAdapter.setItem(KEYS.SESSIONS_OWNER, userId);
+        if ((await safeGetItem(KEYS.SESSIONS)) !== text) return false;
+        useSessionStore.setState({ sessions: merged, sessionsOwner: userId });
+        for (const session of plan.toAdd) await queuePendingChange({ entity: 'session', id: session.id, operation: 'upsert', userId });
+        restored.sessions += plan.toAdd.length;
+      }
+      if (plan.waiting.length > 0) {
+        // Sığmayanlar bu kullanıcının arşivine alınır ("archive" türü: salt okunur, istatistiğe/eşitlemeye katılmaz, otomatik
+        // geri yüklenmez). Yalnızca doğrulanırsa eski (sahibi bilinmeyen) kayıt kaldırılır; hiçbiri silinmez.
+        return (await isolation.parkInLock('archive', userId, JSON.stringify(plan.waiting))) !== 'failed';
+      }
+      return true;
+    });
+
+    await isolation.consumeParked(UNKNOWN_OWNER, 'review', async (parsed) => {
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+      const changed = planReviewRestore(useWordStore.getState().reviewStates, parsed as ReviewStateMap);
+      const merged = mergeReviewStates(useWordStore.getState().reviewStates, parsed as ReviewStateMap);
+      const text = JSON.stringify(merged);
+      await asyncStorageAdapter.setItem(KEYS.REVIEW_STATES, text);
+      await asyncStorageAdapter.setItem(KEYS.REVIEW_OWNER, userId);
+      if ((await safeGetItem(KEYS.REVIEW_STATES)) !== text) return false;
+      useWordStore.setState({ reviewStates: merged, reviewOwner: userId });
+      restored.reviewStates += changed.length;
+      return true;
+    });
+
+    restored.total = restored.words + restored.sessions + restored.reviewStates;
+    // Listeye sığmayıp arşive alınan (salt okunur) kayıt sayısı.
+    restored.waiting = (await loadArchivedSessions(userId)).length;
+    return restored;
+  }));
+  restoreChain = run.catch(() => undefined);
+  return run;
+}
 
 // Bekleyen değişiklikleri buluta göndermeyi dener ve kalan sayıyı döndürür.
 // Başarısız olan kayıtlar kuyrukta kalır; 0 dönmesi hepsinin buluta ulaştığını gösterir.
