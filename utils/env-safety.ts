@@ -39,10 +39,13 @@ export function evaluateDevEnvironment(input: { appEnv: string | null | undefine
 //
 // Ortam ayrımı iki bağımsız sinyalle yapılır (tek bir değişkene güvenilmez):
 //  1. isDev (__DEV__): Metro geliştirme paketi (Expo Go, development client).
-//  2. buildProfile (EXPO_PUBLIC_BUILD_PROFILE): derleme sırasında eas.json "env" ile verilir ('development' | 'preview').
-//     Preview derlemeleri release modundadır (isDev=false), bu yüzden onları yalnızca bu işaret ayırt eder.
-// KORUMALI = isDev VEYA profil development/preview/tanınmayan bir değer. Profil 'production' ya da hiç verilmemişse ve
-// isDev=false ise sürüm "yayın" sayılır ve her zaman izin verilir (profil verilmemesi eski/yerel yayın derlemelerini kilitlemesin diye).
+//  2. easProfile: EAS'ın KENDİSİNİN derleme ortamına koyduğu EAS_BUILD_PROFILE değeri; app.config.js bunu uygulama yapılandırmasına
+//     (extra.buildProfile) yazar. Elle ayarlanmaz, eas.json'da unutulamaz: EAS her derlemede profil adını kendisi verir.
+//  3. buildProfile (EXPO_PUBLIC_BUILD_PROFILE): eas.json "env" ile verilen ikinci, bağımsız işaret.
+// Profil, bu iki kaynaktan EN KISITLAYICI olanıdır: biri bile development/preview/tanınmayan diyorsa derleme KORUMALIDIR
+// (bir işaretin eksik olması ya da 'production' demesi diğerinin uyarısını geçersiz kılamaz).
+// KORUMALI = isDev VEYA çözülen profil development/preview/tanınmayan. İki kaynak da yoksa (EAS dışı yerel derleme) ve isDev=false
+// ise derleme "yayın" sayılır ve izin verilir: bu durumda production olup olmadığı KANITLANAMAZ — mimari sınırlama, bkz. belge.
 //
 // KORUMALI modda bağlantı şu koşulların HEPSİ sağlanırsa izinlidir (fail-closed):
 //  - Supabase adresi ve anahtar tanımlı, adres geçerli; üretim proje kimlikleri (EXPO_PUBLIC_PRODUCTION_PROJECT_REFS) tanımlı;
@@ -53,8 +56,10 @@ export function evaluateDevEnvironment(input: { appEnv: string | null | undefine
 
 export type BuildProfile = 'development' | 'preview' | 'production' | 'unspecified' | 'unknown';
 
-export function parseBuildProfile(value: string | null | undefined): BuildProfile {
-  const normalized = String(value ?? '').trim().toLowerCase();
+export function parseBuildProfile(value: unknown): BuildProfile {
+  // Metin olmayan değer (ör. bozuk yapılandırma) bilgi taşımaz: ne koruma kaldırır ne de ekler.
+  if (typeof value !== 'string') return 'unspecified';
+  const normalized = value.trim().toLowerCase();
   if (!normalized) return 'unspecified';
   if (normalized === 'development' || normalized === 'preview' || normalized === 'production') return normalized;
   return 'unknown';
@@ -70,6 +75,8 @@ export type ConnectionVerdict =
     mode: 'release' | 'protected-verified' | 'protected-local';
     /** Yalnızca yayın modunda anlamlı: bağlı proje üretim kimliklerinden biri ve işaret production ise true. Engellemez. */
     verified: boolean;
+    /** Yayın modunda: EAS/ortam profil işaretlerinden en az biri vardı (false = EAS dışı yerel derleme; production KANITLANAMAZ). */
+    profileKnown?: boolean;
     reason: string;
     userMessage: null;
   }
@@ -87,9 +94,24 @@ export function projectRefOf(url: string | null | undefined): string | null {
 export const parseProductionRefs = (value: string | null | undefined): string[] =>
   Array.from(new Set(String(value ?? '').split(',').map(item => item.trim().toLowerCase()).filter(Boolean)));
 
-export const isProtectedBuild = (input: { isDev: boolean; buildProfile: string | null | undefined }): boolean => {
+export type ResolvedProfile = { profile: BuildProfile; sources: BuildProfile[] };
+
+/** EAS profili (app.config.js) ve EXPO_PUBLIC_BUILD_PROFILE birlikte değerlendirilir; EN KISITLAYICI olan geçerlidir. */
+export function resolveBuildProfile(easProfile: unknown, envProfile: unknown): ResolvedProfile {
+  const sources = [parseBuildProfile(easProfile), parseBuildProfile(envProfile)];
+  const given = sources.filter(profile => profile !== 'unspecified');
+  if (given.length === 0) return { profile: 'unspecified', sources };
+  const restrictive = given.find(profile => profile !== 'production');
+  return { profile: restrictive ?? 'production', sources };
+}
+
+export const isProtectedBuild = (input: {
+  isDev: boolean;
+  buildProfile?: unknown;
+  easProfile?: unknown;
+}): boolean => {
   if (input.isDev) return true;
-  const profile = parseBuildProfile(input.buildProfile);
+  const { profile } = resolveBuildProfile(input.easProfile, input.buildProfile);
   return profile === 'development' || profile === 'preview' || profile === 'unknown';
 };
 
@@ -109,7 +131,9 @@ const block = (reason: BlockReason): ConnectionVerdict => ({ allow: false, mode:
 export function evaluateConnection(input: {
   isDev: boolean;
   /** EXPO_PUBLIC_BUILD_PROFILE (derleme sırasında eas.json env ile). */
-  buildProfile: string | null | undefined;
+  buildProfile: unknown;
+  /** EAS_BUILD_PROFILE değeri (app.config.js → Constants.expoConfig.extra.buildProfile); EAS dışı derlemede yok. */
+  easProfile?: unknown;
   url: string | null | undefined;
   hasKey: boolean;
   appEnv: string | null | undefined;
@@ -128,6 +152,7 @@ export function evaluateConnection(input: {
     return {
       allow: true, mode: 'release', reason: 'release-build', userMessage: null,
       verified: !!ref && production.includes(ref) && env === 'production',
+      profileKnown: resolveBuildProfile(input.easProfile, input.buildProfile).profile !== 'unspecified',
     };
   }
 

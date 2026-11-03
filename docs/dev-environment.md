@@ -27,5 +27,5 @@ Kök `.env` dosyası **production** projeyi gösterir ve git'e girmez. Bu klasö
 | `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | evet | yalnızca publishable (anon) |
 | `EXPO_PUBLIC_PRODUCTION_PROJECT_REFS` | geliştirme/preview için zorunlu | production proje kimlikleri (sır değil); yoksa bağlantı kurulmaz |
 | `EXPO_PUBLIC_APP_ENV` | geliştirme/preview için zorunlu | `staging` / `local` (test); `production` işareti geliştirmede engeller |
-| `EXPO_PUBLIC_BUILD_PROFILE` | otomatik | `eas.json` development/preview profillerinde verilir; elle ayarlama |
+| `EXPO_PUBLIC_BUILD_PROFILE` | otomatik | `eas.json` development/preview profillerinde verilir; elle ayarlama. Ayrıca `app.config.js` EAS'ın `EAS_BUILD_PROFILE` değerini yapılandırmaya yazar (ikinci, bağımsız işaret) |
 | `EXPO_PUBLIC_LEARNING_SYNC` | hayır | varsayılan kapalı; yalnızca test projesinde `true` |

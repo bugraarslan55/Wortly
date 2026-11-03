@@ -19,10 +19,12 @@ const STAGE_URL = 'https://fakestageref2.supabase.co';
 const PROD_URL = `https://${PROD}.supabase.co`;
 // Varsayılan: geliştirme (Metro) + geçerli staging.
 const dev = (extra = {}) => ({ isDev: true, buildProfile: undefined, url: STAGE_URL, hasKey: true, appEnv: 'staging', productionRefs: PROD, ...extra });
-// Preview: release modunda derlenir (isDev=false); yalnızca derleme profili ayırt eder.
-const preview = (extra = {}) => dev({ isDev: false, buildProfile: 'preview', ...extra });
+// Preview: release modunda derlenir (isDev=false). EAS profil adını KENDİSİ verir (easProfile); EXPO_PUBLIC_BUILD_PROFILE EKSİK olsa bile korunur.
+const preview = (extra = {}) => dev({ isDev: false, easProfile: 'preview', buildProfile: undefined, ...extra });
+// Her iki işaret de var.
+const previewBoth = (extra = {}) => dev({ isDev: false, easProfile: 'preview', buildProfile: 'preview', ...extra });
 // Yayın: production profili, isDev=false.
-const release = (extra = {}) => dev({ isDev: false, buildProfile: 'production', url: PROD_URL, appEnv: 'production', ...extra });
+const release = (extra = {}) => dev({ isDev: false, easProfile: 'production', buildProfile: 'production', url: PROD_URL, appEnv: 'production', ...extra });
 
 // ─── İstenen senaryo matrisi ──────────────────────────────────────────────────────────────────
 test('Development + production bağlantısı → ENGEL (ortam işareti staging yazsa bile)', () => {
@@ -78,7 +80,9 @@ test('Production sürümü + doğrulanmış production yapılandırması → İZ
 // ─── Yayın sürümü ASLA kilitlenmez ─────────────────────────────────────────────────────────────
 test('YAYIN: profil verilmemiş eski/yerel release derlemesi, özel alan adı, eksik production kimliği, farklı işaret → hepsi İZİN', () => {
   const cases = [
-    release({ buildProfile: undefined }),                         // profil değişkeni olmayan mevcut yayın
+    release({ buildProfile: undefined }),                         // yalnızca EAS profili 'production'
+    release({ easProfile: undefined }),                           // yalnızca EXPO_PUBLIC_BUILD_PROFILE 'production'
+    release({ easProfile: undefined, buildProfile: undefined }),  // EAS dışı yerel/eski yayın: hiçbir profil işareti yok
     release({ buildProfile: '' }),
     release({ url: 'https://api.wortly.example', productionRefs: undefined }), // özel alan adı
     release({ productionRefs: undefined, appEnv: undefined }),    // üretim kimliği/işaret tanımsız
@@ -108,9 +112,9 @@ test('geliştirme modu, profil "production" iddia etse bile korumalıdır (__DEV
 });
 
 test('tanınmayan derleme profili (ör. "staging") release modunda bile korumalıdır; profil büyük/küçük harf duyarsız', () => {
-  assert.equal(E.evaluateConnection(preview({ buildProfile: 'staging', url: PROD_URL })).allow, false);
-  assert.equal(E.evaluateConnection(preview({ buildProfile: 'PREVIEW', url: PROD_URL })).allow, false);
-  assert.equal(E.evaluateConnection(release({ buildProfile: 'Production' })).allow, true);
+  assert.equal(E.evaluateConnection(preview({ easProfile: 'staging', url: PROD_URL })).allow, false);
+  assert.equal(E.evaluateConnection(preview({ easProfile: 'PREVIEW', url: PROD_URL })).allow, false);
+  assert.equal(E.evaluateConnection(release({ buildProfile: 'Production', easProfile: 'PRODUCTION' })).allow, true);
   assert.equal(E.parseBuildProfile('x'), 'unknown');
   assert.equal(E.parseBuildProfile(undefined), 'unspecified');
 });
@@ -194,7 +198,7 @@ test('gerçek istemci yalnızca bağlantı kararı "izin" ise oluşturulur; kara
 
 test('değerlendirme hatası: korumalı derlemede engel, yayın derlemesinde izin (kilitlenme yok)', () => {
   const source = fs.readFileSync(path.join(ROOT, 'utils', 'supabase.ts'), 'utf8');
-  assert.match(source, /catch \{[\s\S]*isProtectedBuild\(\{ isDev, buildProfile \}\)[\s\S]*guard-error[\s\S]*guard-error-release/);
+  assert.match(source, /catch \{[\s\S]*isProtectedBuild\(\{ isDev, buildProfile, easProfile \}\)[\s\S]*guard-error[\s\S]*guard-error-release/);
 });
 
 test('kök yerleşim: engelliyse yalnızca hata ekranı; oturum/veri/bildirim/senkron başlatan AppRoot oluşturulmaz', () => {
@@ -229,4 +233,73 @@ test('projectRefOf / parseProductionRefs', () => {
   assert.equal(E.projectRefOf('http://localhost:54321'), 'local');
   assert.equal(E.projectRefOf('https://supabase.co'), null);
   assert.deepEqual(E.parseProductionRefs('A1b2c3d4e5f6, a1b2c3d4e5f6 ,x'), ['a1b2c3d4e5f6', 'x']);
+});
+
+// ─── Preview + EKSİK profil işareti (asıl risk) ───────────────────────────────────────────────
+test('Preview derlemesinde EXPO_PUBLIC_BUILD_PROFILE EKSİK olsa bile EAS profili (easProfile) korumayı sürdürür: production → ENGEL', () => {
+  const verdict = E.evaluateConnection(preview({ buildProfile: undefined, url: PROD_URL, appEnv: 'production' }));
+  assert.equal(verdict.allow, false);
+  assert.equal(verdict.reason, 'is-production');
+  assert.equal(E.evaluateConnection(preview({ buildProfile: undefined })).allow, true, 'staging izinli');
+  assert.equal(E.evaluateConnection(previewBoth({ url: PROD_URL })).allow, false);
+});
+
+test('iki profil kaynağı çelişirse EN KISITLAYICI olan geçerlidir (production işareti uyarıyı geçersiz kılamaz)', () => {
+  const a = E.evaluateConnection(release({ easProfile: 'preview', buildProfile: 'production' }));
+  assert.equal(a.allow, false);
+  assert.equal(a.reason, 'is-production');
+  const b = E.evaluateConnection(release({ easProfile: 'production', buildProfile: 'preview' }));
+  assert.equal(b.allow, false);
+});
+
+test('profil çözümü: kısıtlayıcı kazanır; eksik/geçersiz tür bilgi taşımaz', () => {
+  assert.equal(E.resolveBuildProfile('production', 'production').profile, 'production');
+  assert.equal(E.resolveBuildProfile('preview', 'production').profile, 'preview');
+  assert.equal(E.resolveBuildProfile('production', 'preview').profile, 'preview');
+  assert.equal(E.resolveBuildProfile(undefined, 'production').profile, 'production');
+  assert.equal(E.resolveBuildProfile(undefined, undefined).profile, 'unspecified');
+  assert.equal(E.resolveBuildProfile({}, 5).profile, 'unspecified');
+  assert.equal(E.resolveBuildProfile('qa', 'production').profile, 'unknown');
+  assert.equal(E.isProtectedBuild({ isDev: false, easProfile: {}, buildProfile: [] }), false, 'bozuk tür koruma EKLEMEZ (yayın kilitlenmez)');
+  assert.equal(E.isProtectedBuild({ isDev: true }), true);
+});
+
+test('MİMARİ SINIR: hiçbir profil işareti yoksa (EAS dışı yerel release) production olup olmadığı kanıtlanamaz — izin verilir, profileKnown=false ile işaretlenir', () => {
+  const verdict = E.evaluateConnection(release({ easProfile: undefined, buildProfile: undefined, url: PROD_URL }));
+  assert.equal(verdict.allow, true);
+  assert.equal(verdict.profileKnown, false);
+  assert.equal(E.evaluateConnection(release()).profileKnown, true);
+  // Ortam işareti (APP_ENV) ASLA production kanıtı sayılmaz: yalnızca bilgi (verified) bayrağını etkiler, korumayı kaldırmaz.
+  const claimsProduction = E.evaluateConnection(preview({ url: PROD_URL, appEnv: 'production' }));
+  assert.equal(claimsProduction.allow, false);
+});
+
+// ─── app.config.js: EAS profil adını yapılandırmaya taşır ─────────────────────────────────────
+test('app.config.js: app.json içeriğini aynen korur ve yalnızca EAS profil adını extra.buildProfile olarak ekler (EAS dışında anahtar yok)', () => {
+  const factory = require(path.join(ROOT, 'app.config.js'));
+  const base = { name: 'Wortly', slug: 'wortly', extra: { router: {}, eas: { projectId: 'p' } }, plugins: ['a'] };
+  const before = JSON.stringify(base);
+  const original = process.env.EAS_BUILD_PROFILE;
+  try {
+    delete process.env.EAS_BUILD_PROFILE;
+    const local = factory({ config: base });
+    assert.equal('buildProfile' in local.extra, false);
+    assert.deepEqual({ ...local, extra: { ...local.extra } }, { ...base, extra: { ...base.extra } });
+    process.env.EAS_BUILD_PROFILE = 'preview';
+    const preview = factory({ config: base });
+    assert.equal(preview.extra.buildProfile, 'preview');
+    assert.deepEqual(preview.extra.eas, { projectId: 'p' });
+    assert.deepEqual(preview.plugins, ['a']);
+    assert.equal(factory({ config: { name: 'x' } }).extra.buildProfile, 'preview', 'extra olmayan yapılandırma da çalışır');
+    assert.equal(JSON.stringify(base), before, 'girdi değiştirilmez');
+  } finally {
+    if (original === undefined) delete process.env.EAS_BUILD_PROFILE; else process.env.EAS_BUILD_PROFILE = original;
+  }
+});
+
+test('istemci, EAS profilini yapılandırmadan okur ve karara verir', () => {
+  const source = fs.readFileSync(path.join(ROOT, 'utils', 'supabase.ts'), 'utf8');
+  assert.match(source, /Constants\.expoConfig\?\.extra/);
+  assert.match(source, /evaluateConnection\(\{ isDev, buildProfile, easProfile,/);
+  assert.match(source, /isProtectedBuild\(\{ isDev, buildProfile, easProfile \}\)/);
 });

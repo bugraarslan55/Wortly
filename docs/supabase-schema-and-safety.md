@@ -46,9 +46,12 @@ istemciye gereksiz yetki (silme/güncelleme) verilmemiş; `SECURITY DEFINER` iş
 ## 5. Production bağlantı güvenliği (uygulandı: `utils/env-safety.ts` + `utils/supabase.ts`)
 Amaç production'a erişimi yasaklamak değil, **yanlış ortamdan** (geliştirme/preview) production'a bağlanmayı önlemektir.
 
-**Ortam ayrımı (iki bağımsız sinyal):** `__DEV__` (Metro: Expo Go, development client) ve derleme profili
-`EXPO_PUBLIC_BUILD_PROFILE` (`eas.json` `development` ve `preview` profillerinde `env` ile verilir). Preview derlemeleri release
-modundadır; onları yalnızca profil işareti ayırt eder. KORUMALI = `__DEV__` veya profil development/preview/tanınmayan.
+**Ortam ayrımı (üç sinyal; EN KISITLAYICI olan geçerlidir):** (1) `__DEV__` (Metro: Expo Go, development client); (2) **EAS'ın kendi
+verdiği profil adı** — `app.config.js` derleme sırasında `EAS_BUILD_PROFILE` değerini `extra.buildProfile`'a yazar, uygulama bunu
+`expo-constants` ile okur (elle ayarlanmaz, `eas.json`'da unutulamaz); (3) `EXPO_PUBLIC_BUILD_PROFILE` (`eas.json` development/preview
+`env`). Biri bile development/preview/tanınmayan diyorsa derleme KORUMALIDIR; bir işaretin eksik olması ya da "production" demesi
+diğerinin uyarısını geçersiz kılamaz. Böylece **preview derlemesinde `EXPO_PUBLIC_BUILD_PROFILE` eksik olsa bile** EAS profili korumayı sürdürür.
+Ortam işareti (`EXPO_PUBLIC_APP_ENV`) **hiçbir zaman production kanıtı sayılmaz**; korumalı modda yalnızca ek koşuldur.
 
 **Korumalı derlemede bağlantı yalnızca şu koşulların HEPSİ varsa kurulur (fail-closed):** adres ve anahtar tanımlı ve adres geçerli;
 `EXPO_PUBLIC_PRODUCTION_PROJECT_REFS` tanımlı; bağlı proje kimliği bunlardan biri **değil**; `EXPO_PUBLIC_APP_ENV` staging/local.
@@ -65,10 +68,17 @@ yayında engellenmez.
 yerine ağ yapmayan boş istemci (`utils/blocked-client.ts`) konur. Kök yerleşim (`app/_layout.tsx`) yalnızca `ConnectionBlockedScreen`
 gösterir; oturum başlatma, veri yükleme, bildirim abonelikleri ve senkronizasyon (`AppRoot`) hiç başlamaz. Ekran adres/anahtar/kimlik göstermez.
 
-**Kalan riskler:** (1) EAS `env` değerinin gerçek derlemede paketlendiği henüz bir EAS derlemesiyle doğrulanmadı; verilmezse preview
-derlemesi "profil yok + release" sayılıp korumasız kalır (kilitlenmez). (2) `expo start --no-dev` ve yerel release derlemeleri korunmaz.
-(3) `EXPO_PUBLIC_PRODUCTION_PROJECT_REFS` boşsa geliştirme/preview bağlanmaz (bilinçli fail-closed). (4) `EXPO_PUBLIC_*` değerleri pakete
-gömülür; kimlikler gizli değildir, anahtarlar yine yalnızca publishable olmalıdır.
+**Mimari sınırlama (güvenceli ayrım yapılamayan durum):** profil işaretlerinin HİÇBİRİ yoksa ve `__DEV__` kapalıysa (EAS dışı yerel
+release derlemesi: Xcode archive, yerel Gradle release, `expo start --no-dev`), derlemenin production mı preview mi olduğu **kanıtlanamaz**.
+Gerçek yayını kilitlememek için bu derleme "yayın" sayılır ve izin verilir (`profileKnown=false` ile işaretlenir). Yani yerel release
+derlemesiyle production'a bağlanmak ENGELLENMEZ; bu bilinçli bir ödünleşimdir. EAS ile alınan her derleme (development/preview/production)
+profil adını EAS'tan aldığı için güvence altındadır — ancak bu henüz **gerçek bir EAS derlemesiyle doğrulanmadı** (`EAS_BUILD_PROFILE`'ın
+`app.config.js`'e ulaştığı yerelde `EAS_BUILD_PROFILE=preview npx expo config` ile taklit edilerek doğrulandı).
+
+**Diğer riskler:** (1) `EXPO_PUBLIC_PRODUCTION_PROJECT_REFS` boşsa geliştirme/preview hiç bağlanmaz (bilinçli fail-closed). (2) Güvenlik
+`EXPO_PUBLIC_*` değerlerinin gizliliğine dayanmaz (kimlikler gizli değil, pakete gömülür); koruma, üretim kimliği listesi ile bağlı
+projenin kimliğinin KARŞILAŞTIRILMASINA dayanır. Listeye yanlış/eksik kimlik yazılırsa koruma o proje için çalışmaz. (3) Anahtarlar
+yalnızca publishable olmalıdır. (4) Hata ekranı cihazda görsel olarak denenmedi.
 
 ## 6. Gerçek veritabanında değişiklik yapmadan önce gerekenler
 1. Production şemasının **yalnızca okuma** ile çıkarılması (dashboard → Table Editor / Database → Migrations; SQL Editor'da yazma yok) ve 7 migration ile karşılaştırılması.
