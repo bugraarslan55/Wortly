@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useRouter } from '../../hooks/use-guarded-router';
 import { useUserStore, useWordStore } from '../../store';
 import { useOwnSessions } from '../../components/use-achievements';
 import { Spacing, BorderRadius } from '../../constants/theme';
@@ -13,6 +14,7 @@ import { getReviewState } from '../../utils/spaced-repetition';
 import { ALL_TOPICS } from '../../constants/topics';
 import { useAchievementStore } from '../../store/achievements';
 import { ACHIEVEMENTS } from '../../utils/achievements';
+import { useShallow } from 'zustand/react/shallow';
 
 const TYPE_LABELS: Record<string, string> = {
   flashcard: 'Flashcard',
@@ -52,8 +54,8 @@ export default function SonucScreen() {
     topicId?: string;
     wrongIds?: string;
   }>();
-  const { profile, updateStreak } = useUserStore();
-  const { reviewStates, words } = useWordStore();
+  const { profile, updateStreak } = useUserStore(useShallow(state => ({ profile: state.profile, updateStreak: state.updateStreak })));
+  const { reviewStates, words } = useWordStore(useShallow(state => ({ reviewStates: state.reviewStates, words: state.words })));
   const sessions = useOwnSessions();
 
   const totalNum = Math.max(0, parseInt(total || '0', 10) || 0);

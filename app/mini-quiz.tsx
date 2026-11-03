@@ -1,7 +1,8 @@
 import React, { useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useRouter } from '../hooks/use-guarded-router';
 import { AppIcon } from '../components/app-icon';
 import { ColoredGermanWord } from '../components/colored-german-word';
 import { Spacing, BorderRadius, Shadows } from '../constants/theme';

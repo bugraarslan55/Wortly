@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
+import { useRouter } from '../hooks/use-guarded-router';
 import { IconTile } from './ui';
 import { Spacing, getCards } from '../constants/theme';
 import { makeStyles } from '../hooks/use-theme';

@@ -1,7 +1,8 @@
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
+import { useRouter } from '../hooks/use-guarded-router';
 import { Card } from '../components/ui';
 import { Spacing } from '../constants/theme';
 import { makeStyles, useColors } from '../hooks/use-theme';

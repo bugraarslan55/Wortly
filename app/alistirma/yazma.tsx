@@ -2,7 +2,8 @@ import React, { useState, useRef, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Keyboard, type TextInputInstance } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useRouter } from '../../hooks/use-guarded-router';
 import { ALL_TOPICS, getTopicById } from '../../constants/topics';
 import { useWordStore, useSessionStore } from '../../store';
 import { Spacing, BorderRadius, Shadows } from '../../constants/theme';
@@ -15,6 +16,7 @@ import { checkGermanAnswer, describeAnswerNote } from '../../utils/answer-check'
 import { KeyboardSafeView } from '../../components/keyboard-safe-view';
 import { ExerciseHeader, ExerciseProgress, confirmLeaveExercise, useActionLock } from '../../components/exercise-ui';
 import { goBack } from '../../utils/safe-back';
+import { useShallow } from 'zustand/react/shallow';
 
 const GERMAN_CHARS = ['ä', 'ö', 'ü', 'ß', 'Ä', 'Ö', 'Ü'];
 const SESSION_SIZE = 10;
@@ -26,8 +28,8 @@ export default function YazmaScreen() {
   const colors = useColors();
   const router = useRouter();
   const { wordIds, topicId } = useLocalSearchParams<{ wordIds: string; topicId?: string }>();
-  const { words: customWords, reviewStates, updateMastery } = useWordStore();
-  const { startSession, saveSession, sessions } = useSessionStore();
+  const { customWords, reviewStates, updateMastery } = useWordStore(useShallow(state => ({ customWords: state.words, reviewStates: state.reviewStates, updateMastery: state.updateMastery })));
+  const { startSession, saveSession, sessions } = useSessionStore(useShallow(state => ({ startSession: state.startSession, saveSession: state.saveSession, sessions: state.sessions })));
 
   const allBuiltIn = ALL_TOPICS.flatMap(t => t.words);
   const ids = wordIds?.split(',').filter(Boolean) || [];
@@ -113,7 +115,7 @@ export default function YazmaScreen() {
         score: nextScore,
         total: sessionWords.length,
         topicId,
-      });
+      }, { deferCloud: true }).catch(() => undefined); // yerel kayıt hatası düğmeyi kilitlemesin: sonuç ekranına yine geçilir
       router.replace({
         pathname: '/alistirma/sonuc',
         params: {

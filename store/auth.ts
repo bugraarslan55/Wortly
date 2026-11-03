@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
 import { isSharedBackendMode, supabase } from '../utils/supabase';
+import { getAuthMessage, UNEXPECTED_AUTH_ERROR_MESSAGE } from '../utils/auth-messages';
 import { SHARED_BACKEND_RESET_MESSAGE, SHARED_BACKEND_SIGN_UP_MESSAGE } from '../utils/shared-backend';
 import { clearPronunciationRecordings } from '../utils/pronunciation-storage';
 import { cancelReviewReminders, revokeReminderOwner, setReminderOwner } from '../utils/review-reminder';
@@ -32,16 +33,6 @@ interface AuthStore {
 }
 
 let listenerStarted = false;
-
-const getAuthMessage = (message: string) => {
-  const normalized = message.toLowerCase();
-  if (normalized.includes('invalid login credentials')) return 'E-posta veya şifre hatalı.';
-  if (normalized.includes('user already registered')) return 'Bu e-posta zaten kayıtlı.';
-  if (normalized.includes('password should be at least')) return 'Şifre en az 6 karakter olmalı.';
-  if (normalized.includes('email not confirmed')) return 'Önce e-posta adresini doğrulamalısın.';
-  if (normalized.includes('rate limit')) return 'Çok fazla deneme yapıldı. Biraz sonra tekrar dene.';
-  return 'İşlem sırasında bir hata oluştu. Lütfen tekrar dene.';
-};
 
 export const useAuthStore = create<AuthStore>((set, get) => ({
   session: null,
@@ -73,44 +64,57 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   signIn: async (email, password) => {
     set({ isBusy: true });
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    set({ isBusy: false });
-
-    if (error) return { ok: false, message: getAuthMessage(error.message) };
-    set({ session: data.session });
-    return { ok: true, session: data.session };
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) return { ok: false, message: getAuthMessage(error.message) };
+      set({ session: data.session });
+      return { ok: true, session: data.session };
+    } catch {
+      // Beklenmedik (ağ) istisnası düğmeyi sonsuza dek "yükleniyor" bırakmasın: busy her durumda kapanır.
+      return { ok: false, message: UNEXPECTED_AUTH_ERROR_MESSAGE };
+    } finally {
+      set({ isBusy: false });
+    }
   },
 
   signUp: async (email, password) => {
     // Ortak (production) veritabanında TEST MODU: yeni gerçek hesap oluşturulmaz; Supabase'e hiç istek gitmez.
     if (isSharedBackendMode) return { ok: false, message: SHARED_BACKEND_SIGN_UP_MESSAGE };
     set({ isBusy: true });
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: Linking.createURL('auth/callback'),
-      },
-    });
-    set({ isBusy: false });
-
-    if (error) return { ok: false, message: getAuthMessage(error.message) };
-    set({ session: data.session });
-    return { ok: true, session: data.session };
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: Linking.createURL('auth/callback'),
+        },
+      });
+      if (error) return { ok: false, message: getAuthMessage(error.message) };
+      set({ session: data.session });
+      return { ok: true, session: data.session };
+    } catch {
+      return { ok: false, message: UNEXPECTED_AUTH_ERROR_MESSAGE };
+    } finally {
+      set({ isBusy: false });
+    }
   },
 
   resetPasswordForEmail: async (email) => {
     // Ortak veritabanında rastgele adreslere e-posta gönderilmez.
     if (isSharedBackendMode) return { ok: false, message: SHARED_BACKEND_RESET_MESSAGE };
     set({ isBusy: true });
-    const redirectTo = Platform.OS === 'web'
-      ? `${window.location.origin}/auth/reset`
-      : Linking.createURL('auth/reset');
-    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
-    set({ isBusy: false });
-
-    if (error) return { ok: false, message: getAuthMessage(error.message) };
-    return { ok: true, message: 'Şifre sıfırlama bağlantısı e-posta adresine gönderildi.' };
+    try {
+      const redirectTo = Platform.OS === 'web'
+        ? `${window.location.origin}/auth/reset`
+        : Linking.createURL('auth/reset');
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+      if (error) return { ok: false, message: getAuthMessage(error.message) };
+      return { ok: true, message: 'Şifre sıfırlama bağlantısı e-posta adresine gönderildi.' };
+    } catch {
+      return { ok: false, message: UNEXPECTED_AUTH_ERROR_MESSAGE };
+    } finally {
+      set({ isBusy: false });
+    }
   },
 
   handleAuthUrl: async (url) => {

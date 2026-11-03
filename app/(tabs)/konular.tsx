@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter } from '../../hooks/use-guarded-router';
 import { useUserStore } from '../../store';
 import { getTopicsForLevel } from '../../constants/topics';
 import { topicSymbol } from '../../constants/symbols';
@@ -12,13 +12,14 @@ import { makeStyles, useColors } from '../../hooks/use-theme';
 import { Level, Topic } from '../../types';
 import { AppIcon } from '../../components/app-icon';
 import { EmptyState, IconTile, ScreenHeader, SearchField, SegmentedControl } from '../../components/ui';
+import { useShallow } from 'zustand/react/shallow';
 
 const LEVEL_TABS: Level[] = ['A1', 'A2', 'B1'];
 
 export default function KonularScreen() {
   const styles = useStyles();
   const router = useRouter();
-  const { profile } = useUserStore();
+  const { profile } = useUserStore(useShallow(state => ({ profile: state.profile })));
   // Güvenlik: profile.level her ne olursa olsun (eski/geçersiz veri dahil),
   // yayın kapsamındaki sekmelerden biri değilse A1'e düş.
   const safeInitialLevel: Level = LEVEL_TABS.includes(profile?.level as Level)

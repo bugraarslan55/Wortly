@@ -28,9 +28,11 @@ import { getNotificationRoute, getReviewRoute } from '../utils/review-route';
 import { getMiniQuizReminderContent } from '../utils/mini-quiz';
 import { isLearningSyncEnabled } from '../utils/feature-flags';
 import { createSplashLifecycle } from '../utils/splash-lifecycle';
+import { createStartupTimer, startJsStallMonitor } from '../utils/perf-monitor';
 import { connectionVerdict, isSharedBackendMode } from '../utils/supabase';
 import { SharedBackendFrame, SharedBackendGate } from '../components/shared-backend-gate';
 import { ConnectionBlockedScreen } from '../components/connection-blocked-screen';
+import { useShallow } from 'zustand/react/shallow';
 
 // Açılış ekranı: tema, yerel veri ve oturum hazır olana kadar açık kalır (boş/açık renkli ekran görünmesin); hazırlık
 // takılırsa güvenlik süresi dolunca yine kapanır. Global kapsamda başlatılır (SDK 57: preventAutoHideAsync ilk render'dan önce).
@@ -39,6 +41,9 @@ const splash = createSplashLifecycle({
   hide: () => SplashScreen.hide(),
 });
 splash.start();
+
+// YALNIZCA geliştirmede: açılış aşamalarının süresi ve JS iş parçacığı takılmaları konsola yazılır (kullanıcı verisi içermez).
+const startupTimer = createStartupTimer(Date.now, (label, ms) => { if (__DEV__) console.debug(`[Wortly][perf] ${label}: ${ms} ms`); });
 
 // Günlük bildirim metni için mini quiz kelimesi (modül yüklenirken, ilk planlamadan önce kaydedilir).
 setReminderContentProvider(getMiniQuizReminderContent);
@@ -60,18 +65,9 @@ function AppRoot() {
   const handledTapsRef = useRef<Set<string>>(new Set());
   const firstSeenTapRef = useRef<Map<string, number>>(new Map());
   const [handledTapsLoaded, setHandledTapsLoaded] = useState(false);
-  const {
-    profile, loadProfile, syncProfile, isLoaded,
-    syncedUserId: profileSyncedUserId,
-  } = useUserStore();
-  const {
-    loadWords, syncWords, syncProgress, isLoaded: areWordsLoaded,
-    syncedUserId: wordsSyncedUserId,
-  } = useWordStore();
-  const {
-    loadSessions, loadScenarioResults, syncScenarioResults, scenarioResultsOwner, syncSessions, isLoaded: areSessionsLoaded,
-    syncedUserId: sessionsSyncedUserId,
-  } = useSessionStore();
+  const { profile, loadProfile, syncProfile, isLoaded, profileSyncedUserId } = useUserStore(useShallow(state => ({ profile: state.profile, loadProfile: state.loadProfile, syncProfile: state.syncProfile, isLoaded: state.isLoaded, profileSyncedUserId: state.syncedUserId })));
+  const { loadWords, syncWords, syncProgress, areWordsLoaded, wordsSyncedUserId } = useWordStore(useShallow(state => ({ loadWords: state.loadWords, syncWords: state.syncWords, syncProgress: state.syncProgress, areWordsLoaded: state.isLoaded, wordsSyncedUserId: state.syncedUserId })));
+  const { loadSessions, loadScenarioResults, syncScenarioResults, scenarioResultsOwner, syncSessions, areSessionsLoaded, sessionsSyncedUserId } = useSessionStore(useShallow(state => ({ loadSessions: state.loadSessions, loadScenarioResults: state.loadScenarioResults, syncScenarioResults: state.syncScenarioResults, scenarioResultsOwner: state.scenarioResultsOwner, syncSessions: state.syncSessions, areSessionsLoaded: state.isLoaded, sessionsSyncedUserId: state.syncedUserId })));
   const { isDark, colors } = useTheme();
   const { loadTheme, isLoaded: isThemeLoaded } = useThemeStore();
   // Ekran geçişlerinde ve modallarda navigasyon katmanı da seçilen temanın zeminini kullanır.
@@ -96,12 +92,7 @@ function AppRoot() {
     document.documentElement.style.backgroundColor = colors.warmWhite;
     document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
   }, [isDark, colors]);
-  const {
-    initialize: initializeAuth,
-    handleAuthUrl,
-    isLoaded: isAuthLoaded,
-    session,
-  } = useAuthStore();
+  const { initializeAuth, handleAuthUrl, isAuthLoaded, session } = useAuthStore(useShallow(state => ({ initializeAuth: state.initialize, handleAuthUrl: state.handleAuthUrl, isAuthLoaded: state.isLoaded, session: state.session })));
 
   useEffect(() => {
     initializeAuth();
@@ -295,10 +286,21 @@ function AppRoot() {
     void syncScenarioResults(session.user.id, { full: true });
   }, [scenarioResultsOwner, session?.user.id, syncScenarioResults]);
 
+  // Geliştirme ölçümü: JS iş parçacığı 150 ms'den uzun takılırsa süre raporlanır (dokunma gecikmesi şüphesinde ipucu).
+  useEffect(() => {
+    if (!__DEV__) return undefined;
+    return startJsStallMonitor((event) => {
+      console.debug(`[Wortly][perf] JS iş parçacığı ${event.lagMs} ms meşguldü (toplam ${event.count}, en uzun ${event.maxMs} ms)`);
+    });
+  }, []);
+
   // Açılış ekranı yalnızca tema, yerel veri ve oturum başlatması hazır olduğunda kapanır (güvenlik süresiyle sınırlı).
   useEffect(() => {
+    if (isThemeLoaded) startupTimer.mark('tema hazır');
+    if (isLoaded && isAuthLoaded) startupTimer.mark('yerel veri + oturum hazır');
+    if (isUserDataSynced) startupTimer.mark('veri eşitleme kapısı açıldı');
     splash.update({ themeLoaded: isThemeLoaded, localDataLoaded: isLoaded, authLoaded: isAuthLoaded });
-  }, [isThemeLoaded, isLoaded, isAuthLoaded]);
+  }, [isThemeLoaded, isLoaded, isAuthLoaded, isUserDataSynced]);
 
   // Bildirime dokunma (uygulama kapalıyken, arka plandayken ya da açıkken) yakalanır ve bekletilir.
   useEffect(() => subscribeToNotificationResponses(setPendingResponse), []);

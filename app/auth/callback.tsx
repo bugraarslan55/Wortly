@@ -2,16 +2,17 @@ import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Linking from 'expo-linking';
-import { useRouter } from 'expo-router';
+import { useRouter } from '../../hooks/use-guarded-router';
 import { Typography } from '../../constants/theme';
 import { makeStyles, useColors } from '../../hooks/use-theme';
 import { useAuthStore } from '../../store/auth';
+import { useShallow } from 'zustand/react/shallow';
 
 export default function AuthCallbackScreen() {
   const styles = useStyles();
   const colors = useColors();
   const router = useRouter();
-  const { handleAuthUrl } = useAuthStore();
+  const { handleAuthUrl } = useAuthStore(useShallow(state => ({ handleAuthUrl: state.handleAuthUrl })));
 
   useEffect(() => {
     let active = true;

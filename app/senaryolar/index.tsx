@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter } from '../../hooks/use-guarded-router';
 import { useUserStore } from '../../store';
 import { useOwnScenarioResults } from '../../components/use-achievements';
 import {
@@ -12,12 +12,13 @@ import { Spacing, BorderRadius, Shadows } from '../../constants/theme';
 import { makeStyles, useColors } from '../../hooks/use-theme';
 import { Level } from '../../types';
 import { AppIcon } from '../../components/app-icon';
+import { useShallow } from 'zustand/react/shallow';
 
 export default function ScenariosScreen() {
   const styles = useStyles();
   const colors = useColors();
   const router = useRouter();
-  const { profile } = useUserStore();
+  const { profile } = useUserStore(useShallow(state => ({ profile: state.profile })));
   const scenarioResults = useOwnScenarioResults();
   const userLevel: Level = SCENARIO_LEVELS.includes(profile?.level as Level) ? (profile!.level as Level) : 'A1';
   const [activeLevel, setActiveLevel] = useState<Level>(userLevel);

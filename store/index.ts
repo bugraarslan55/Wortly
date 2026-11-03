@@ -280,11 +280,34 @@ function withWrite<T>(task: () => Promise<T>): Promise<T> {
   return run;
 }
 async function drainWrites(maxWaitMs = 3000): Promise<void> {
-  if (activeWrites.size === 0) return;
-  await Promise.race([
-    Promise.allSettled([...activeWrites]),
-    new Promise<void>((resolve) => setTimeout(resolve, maxWaitMs)),
-  ]);
+  // Bekleme sırasında yeni eklenen yazmalar (ör. arka plan bulut gönderimi) da beklenir; toplam süre sınırlıdır.
+  const deadline = Date.now() + maxWaitMs;
+  while (activeWrites.size > 0) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      Promise.allSettled([...activeWrites]),
+      new Promise<void>((resolve) => { timer = setTimeout(resolve, remaining); }),
+    ]);
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+export interface WriteOptions {
+  /**
+   * true: yerel kayıt ve bekleyen-değişiklik kuyruğu girdisi tamamlanınca çağıran BEKLETİLMEZ; bulut gönderimi arka planda
+   * sürer. Kuyruk girdisi zaten yazıldığı için uygulama kapansa/ağ kopsa kayıt kaybolmaz (sonraki eşitleme gönderir).
+   * Arka plan işi çıkış/hesap değişiminde (resetLocal → drainWrites) beklenir. Ekranların ağ yavaşken düğmede takılmaması içindir.
+   */
+  deferCloud?: boolean;
+}
+
+/** Bulut gönderimini ya beklenerek ya da arka planda (yine de yazma kaydında izlenerek) çalıştırır. */
+function runCloud(options: WriteOptions | undefined, task: () => Promise<void>): Promise<void> {
+  if (!options?.deferCloud) return task();
+  void withWrite(task).catch(() => undefined);
+  return Promise.resolve();
 }
 
 const OWNER_KEY_BY_DATASET: Record<Dataset, string> = OWNER_KEYS;
@@ -398,9 +421,9 @@ interface WordStore {
   /** Özellik bayrağı kapalıyken hiçbir şey yapmaz. */
   syncProgress: (userId: string, options?: { full?: boolean }) => Promise<void>;
   resetLocal: () => Promise<void>;
-  addWord: (word: Omit<Word, 'id' | 'addedAt' | 'masteryLevel'>) => Promise<WordSaveResult>;
-  updateWord: (id: string, updates: Partial<Word>) => Promise<WordSaveResult>;
-  deleteWord: (id: string) => Promise<void>;
+  addWord: (word: Omit<Word, 'id' | 'addedAt' | 'masteryLevel'>, options?: WriteOptions) => Promise<WordSaveResult>;
+  updateWord: (id: string, updates: Partial<Word>, options?: WriteOptions) => Promise<WordSaveResult>;
+  deleteWord: (id: string, options?: WriteOptions) => Promise<void>;
   updateMastery: (id: string, correct: boolean, options?: { maxLevel?: MasteryLevel }) => Promise<void>;
   getCustomWords: () => Word[];
   getWordsByTopic: (topicId: string) => Word[];
@@ -826,7 +849,7 @@ export const useWordStore = create<WordStore>((set, get) => ({
     ]);
   },
 
-  addWord: (wordData) => withWrite(async () => {
+  addWord: (wordData, options) => withWrite(async () => {
     const duplicate = findDuplicateCustomWord(get().words, wordData.german, wordData.article);
     if (duplicate) return { ok: false, reason: 'duplicate', existing: duplicate };
 
@@ -842,14 +865,16 @@ export const useWordStore = create<WordStore>((set, get) => ({
     const userId = await getMutationUserId(KEYS.WORDS_OWNER);
     await stampOwner('words', userId, set);
     await queuePendingChange({ entity: 'word', id: newWord.id, operation: 'upsert', userId });
-    if (userId && await saveCloudWord(userId, newWord)) {
-      await clearPendingChange('word', newWord.id);
-      await safeSetItem(KEYS.WORDS_OWNER, userId);
-    }
+    await runCloud(options, async () => {
+      if (userId && await saveCloudWord(userId, newWord)) {
+        await clearPendingChange('word', newWord.id);
+        await safeSetItem(KEYS.WORDS_OWNER, userId);
+      }
+    });
     return { ok: true };
   }),
 
-  updateWord: (id, updates) => withWrite(async () => {
+  updateWord: (id, updates, options) => withWrite(async () => {
     const current = get().words.find(w => w.id === id);
     if (current) {
       const nextGerman = updates.german ?? current.german;
@@ -866,15 +891,17 @@ export const useWordStore = create<WordStore>((set, get) => ({
       const userId = await getMutationUserId(KEYS.WORDS_OWNER);
       await stampOwner('words', userId, set);
       await queuePendingChange({ entity: 'word', id, operation: 'upsert', userId });
-      if (userId && await saveCloudWord(userId, updatedWord)) {
-        await clearPendingChange('word', id);
-        await safeSetItem(KEYS.WORDS_OWNER, userId);
-      }
+      await runCloud(options, async () => {
+        if (userId && await saveCloudWord(userId, updatedWord)) {
+          await clearPendingChange('word', id);
+          await safeSetItem(KEYS.WORDS_OWNER, userId);
+        }
+      });
     }
     return { ok: true };
   }),
 
-  deleteWord: (id) => withWrite(async () => {
+  deleteWord: (id, options) => withWrite(async () => {
     const updated = get().words.filter(w => w.id !== id);
     // Silinen kelimenin ilerleme kaydı da kaldırılır; aksi halde "öğrenilen kelime" istatistiğinde ve
     // rozetlerde var olmayan kelime sayılmaya devam ederdi.
@@ -886,10 +913,12 @@ export const useWordStore = create<WordStore>((set, get) => ({
     const userId = await getMutationUserId(KEYS.WORDS_OWNER);
     await stampOwner('words', userId, set);
     await queuePendingChange({ entity: 'word', id, operation: 'delete', userId });
-    if (userId && await deleteCloudWord(userId, id)) {
-      await clearPendingChange('word', id);
-      await safeSetItem(KEYS.WORDS_OWNER, userId);
-    }
+    await runCloud(options, async () => {
+      if (userId && await deleteCloudWord(userId, id)) {
+        await clearPendingChange('word', id);
+        await safeSetItem(KEYS.WORDS_OWNER, userId);
+      }
+    });
   }),
 
   updateMastery: (id, correct, options) => withWrite(async () => {
@@ -939,7 +968,7 @@ interface UserStore {
   resetLocal: () => Promise<void>;
   setProfile: (profile: UserProfile) => Promise<void>;
   updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
-  completeOnboarding: (name: string, level: Level) => Promise<void>;
+  completeOnboarding: (name: string, level: Level, options?: WriteOptions) => Promise<void>;
   updateStreak: () => Promise<void>;
 }
 
@@ -1171,7 +1200,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
     }
   }),
 
-  completeOnboarding: (name, level) => withWrite(async () => {
+  completeOnboarding: (name, level, options) => withWrite(async () => {
     const profile: UserProfile = {
       ...DEFAULT_PROFILE,
       name,
@@ -1183,10 +1212,12 @@ export const useUserStore = create<UserStore>((set, get) => ({
     const userId = await getMutationUserId(KEYS.PROFILE_OWNER);
     await stampOwner('profile', userId, set);
     await queuePendingChange({ entity: 'profile', id: 'profile', operation: 'upsert', userId });
-    if (userId && await saveCloudProfile(userId, profile)) {
-      await clearPendingChange('profile', 'profile');
-      await safeSetItem(KEYS.PROFILE_OWNER, userId);
-    }
+    await runCloud(options, async () => {
+      if (userId && await saveCloudProfile(userId, profile)) {
+        await clearPendingChange('profile', 'profile');
+        await safeSetItem(KEYS.PROFILE_OWNER, userId);
+      }
+    });
   }),
 
   updateStreak: async () => {
@@ -1226,7 +1257,7 @@ interface SessionStore {
   syncSessions: (userId: string) => Promise<void>;
   resetLocal: () => Promise<void>;
   startSession: (session: Omit<QuizSession, 'id' | 'date'>) => void;
-  saveSession: (session: QuizSession) => Promise<void>;
+  saveSession: (session: QuizSession, options?: WriteOptions) => Promise<void>;
   saveScenarioResult: (userId: string, result: Omit<ScenarioResult, 'id' | 'date'>) => Promise<void>;
   clearCurrentSession: () => void;
 }
@@ -1461,7 +1492,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     set({ currentSession: session });
   },
 
-  saveSession: (session) => withWrite(async () => {
+  saveSession: (session, options) => withWrite(async () => {
     const updated = [session, ...get().sessions].slice(0, LOCAL_SESSION_LIMIT); // Yerelde son N oturum
     // Yerel durum hemen güncellenir (ekranlar beklemeden sonuca geçer). Bilinen gerçek toplam 1
     // artırılır; bir sonraki senkron bulut sayısıyla düzeltir.
@@ -1480,10 +1511,12 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       }
     }
     await queuePendingChange({ entity: 'session', id: session.id, operation: 'upsert', userId });
-    if (userId && await saveCloudSession(userId, session)) {
-      await clearPendingChange('session', session.id);
-      await safeSetItem(KEYS.SESSIONS_OWNER, userId);
-    }
+    await runCloud(options, async () => {
+      if (userId && await saveCloudSession(userId, session)) {
+        await clearPendingChange('session', session.id);
+        await safeSetItem(KEYS.SESSIONS_OWNER, userId);
+      }
+    });
   }),
 
   saveScenarioResult: (userId, result) => withWrite(async () => {

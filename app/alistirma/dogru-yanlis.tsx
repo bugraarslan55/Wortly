@@ -3,7 +3,8 @@ import {
   View, Text, StyleSheet, TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useRouter } from '../../hooks/use-guarded-router';
 import { ALL_TOPICS, getTopicById } from '../../constants/topics';
 import { useWordStore, useSessionStore } from '../../store';
 import { Spacing, BorderRadius, Shadows } from '../../constants/theme';
@@ -13,6 +14,7 @@ import { ColoredGermanWord } from '../../components/colored-german-word';
 import { selectWordsForReview } from '../../utils/spaced-repetition';
 import { ExerciseHeader, ExerciseProgress, confirmLeaveExercise, useActionLock } from '../../components/exercise-ui';
 import { goBack } from '../../utils/safe-back';
+import { useShallow } from 'zustand/react/shallow';
 
 type Phase = 'show' | 'reveal';
 
@@ -29,8 +31,8 @@ export default function DogruYanlisScreen() {
   const styles = useStyles();
   const router = useRouter();
   const { wordIds, topicId } = useLocalSearchParams<{ wordIds: string; topicId?: string }>();
-  const { words: customWords, reviewStates, updateMastery } = useWordStore();
-  const { startSession, saveSession } = useSessionStore();
+  const { customWords, reviewStates, updateMastery } = useWordStore(useShallow(state => ({ customWords: state.words, reviewStates: state.reviewStates, updateMastery: state.updateMastery })));
+  const { startSession, saveSession } = useSessionStore(useShallow(state => ({ startSession: state.startSession, saveSession: state.saveSession })));
 
   // Kelime listesini cevap verildiğinde yeniden üretme; aksi halde rastgele
   // eşleşme aynı soru açıkken değişebilir.

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useRouter } from '../../hooks/use-guarded-router';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppIcon } from '../../components/app-icon';
@@ -12,6 +13,7 @@ import { Word } from '../../types';
 import { useSessionStore, useWordStore } from '../../store';
 import { selectWordsForReview } from '../../utils/spaced-repetition';
 import { ExerciseHeader, ExerciseProgress, confirmLeaveExercise, useActionLock } from '../../components/exercise-ui';
+import { useShallow } from 'zustand/react/shallow';
 
 const SESSION_SIZE = 20;
 
@@ -47,9 +49,9 @@ export default function DinleSecScreen() {
   const router = useRouter();
   const { topicId, wordIds } = useLocalSearchParams<{ topicId?: string; wordIds?: string }>();
   const topic = topicId ? getTopicById(topicId) : undefined;
-  const { words: customWords, reviewStates, updateMastery } = useWordStore();
+  const { customWords, reviewStates, updateMastery } = useWordStore(useShallow(state => ({ customWords: state.words, reviewStates: state.reviewStates, updateMastery: state.updateMastery })));
   const customWordList = useMemo(() => customWords.filter(word => word.isCustom), [customWords]);
-  const { startSession, saveSession } = useSessionStore();
+  const { startSession, saveSession } = useSessionStore(useShallow(state => ({ startSession: state.startSession, saveSession: state.saveSession })));
   const [isHintVisible, setIsHintVisible] = useState(false);
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -148,7 +150,7 @@ export default function DinleSecScreen() {
         score,
         total: totalQuestions,
         topicId,
-      });
+      }, { deferCloud: true }).catch(() => undefined); // yerel kayıt hatası düğmeyi kilitlemesin: sonuç ekranına yine geçilir
       router.replace({
         pathname: '/alistirma/sonuc',
         params: {
@@ -370,7 +372,7 @@ const useStyles = makeStyles(Colors => StyleSheet.create({
   speechButtonText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
   previewTitle: { fontSize: 17, fontWeight: '700', color: Colors.primary, textAlign: 'center' },
   previewText: { fontSize: 14, lineHeight: 20, color: Colors.onSurfaceVariant, textAlign: 'center' },
-  hintButton: { minHeight: 42, paddingHorizontal: Spacing.md, borderRadius: BorderRadius.full, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, backgroundColor: Colors.surfaceContainerLow, borderWidth: 1.5, borderColor: Colors.outlineVariant },
+  hintButton: { minHeight: Spacing.touchTargetMin, paddingHorizontal: Spacing.md, borderRadius: BorderRadius.full, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, backgroundColor: Colors.surfaceContainerLow, borderWidth: 1.5, borderColor: Colors.outlineVariant },
   hintButtonActive: { backgroundColor: Colors.secondaryContainer, borderColor: Colors.golden },
   hintButtonText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
   hintContent: { width: '100%', paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, alignItems: 'center', gap: 2, borderRadius: BorderRadius.lg, backgroundColor: Colors.surfaceContainerLow },

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useRouter } from '../../hooks/use-guarded-router';
 import { Keyboard, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppIcon } from '../../components/app-icon';
@@ -15,6 +16,7 @@ import { KeyboardSafeView } from '../../components/keyboard-safe-view';
 import { ExerciseHeader, ExerciseProgress, confirmLeaveExercise, useActionLock } from '../../components/exercise-ui';
 import { Word } from '../../types';
 import { useSessionStore, useWordStore } from '../../store';
+import { useShallow } from 'zustand/react/shallow';
 
 const SESSION_SIZE = 10;
 export default function DinleYazScreen() {
@@ -23,12 +25,12 @@ export default function DinleYazScreen() {
   const router = useRouter();
   const { topicId, wordIds } = useLocalSearchParams<{ topicId?: string; wordIds?: string }>();
   const topic = topicId ? getTopicById(topicId) : undefined;
-  const { words: customWords, reviewStates, updateMastery } = useWordStore();
+  const { customWords, reviewStates, updateMastery } = useWordStore(useShallow(state => ({ customWords: state.words, reviewStates: state.reviewStates, updateMastery: state.updateMastery })));
   const customWordList = useMemo(() => customWords.filter(word => word.isCustom), [customWords]);
   const isSupportedTopic = topic
     ? topic.level === 'A1' || topic.level === 'A2' || topic.level === 'B1'
     : customWordList.length > 0;
-  const { startSession, saveSession } = useSessionStore();
+  const { startSession, saveSession } = useSessionStore(useShallow(state => ({ startSession: state.startSession, saveSession: state.saveSession })));
   const sessionWords = useMemo(() => {
     if (!isSupportedTopic) return [];
 
@@ -122,7 +124,7 @@ export default function DinleYazScreen() {
         score,
         total: totalQuestions,
         topicId,
-      });
+      }, { deferCloud: true }).catch(() => undefined); // yerel kayıt hatası düğmeyi kilitlemesin: sonuç ekranına yine geçilir
       router.replace({
         pathname: '/alistirma/sonuc',
         params: {

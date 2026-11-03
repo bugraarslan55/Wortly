@@ -1,7 +1,7 @@
 import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter } from '../hooks/use-guarded-router';
 import { BorderRadius, Spacing } from '../constants/theme';
 import { makeStyles, useColors } from '../hooks/use-theme';
 import { AppIcon } from '../components/app-icon';

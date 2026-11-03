@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from '../hooks/use-guarded-router';
 import { useSessionStore, useUserStore, useWordStore } from '../store';
 import { getTopicsForLevel } from '../constants/topics';
 import { BorderRadius, Spacing } from '../constants/theme';

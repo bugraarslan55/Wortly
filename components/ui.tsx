@@ -422,7 +422,7 @@ const useStyles = makeStyles(Colors => StyleSheet.create({
   segmentSub: { fontSize: 11, color: Colors.onSurfaceVariant, marginTop: 1 },
 
   chip: {
-    minHeight: 40, paddingLeft: 14, paddingRight: 8, flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    minHeight: Spacing.touchTargetMin, paddingLeft: 14, paddingRight: 8, flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
     borderRadius: BorderRadius.full, backgroundColor: Colors.surfaceContainerLowest,
     borderWidth: 1, borderColor: Colors.outlineVariant,
   },

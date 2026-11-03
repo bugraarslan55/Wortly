@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useRouter } from '../../../hooks/use-guarded-router';
 import { getTopicById } from '../../../constants/topics';
 import { Spacing, BorderRadius, getCards } from '../../../constants/theme';
 import { makeStyles, useColors } from '../../../hooks/use-theme';
@@ -14,6 +15,7 @@ import { Card, EmptyState, IconTile, PrimaryButton, SecondaryButton } from '../.
 import { selectWordsForReview } from '../../../utils/spaced-repetition';
 import { SELF_REPORTED_MAX_MASTERY } from '../../../utils/mastery';
 import { goBack } from '../../../utils/safe-back';
+import { useShallow } from 'zustand/react/shallow';
 
 const SESSION_SIZE = 20;
 // Özel pseudo-topic ID: "Kelimelerim" ekranından gelen, topicId filtresine
@@ -92,8 +94,8 @@ export default function FlashcardScreen() {
   const colors = useColors();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { words: customWords, reviewStates, updateMastery } = useWordStore();
-  const { startSession, saveSession } = useSessionStore();
+  const { customWords, reviewStates, updateMastery } = useWordStore(useShallow(state => ({ customWords: state.words, reviewStates: state.reviewStates, updateMastery: state.updateMastery })));
+  const { startSession, saveSession } = useSessionStore(useShallow(state => ({ startSession: state.startSession, saveSession: state.saveSession })));
   const updateStreak = useUserStore(state => state.updateStreak);
 
   const isPersonalMode = id === PERSONAL_WORDS_ID;

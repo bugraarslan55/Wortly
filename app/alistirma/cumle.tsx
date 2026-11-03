@@ -4,7 +4,8 @@ import {
   TextInput, Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useRouter } from '../../hooks/use-guarded-router';
 import { ALL_TOPICS, getTopicById } from '../../constants/topics';
 import { useWordStore, useSessionStore } from '../../store';
 import { Spacing, BorderRadius, Shadows } from '../../constants/theme';
@@ -16,6 +17,7 @@ import { KeyboardSafeView } from '../../components/keyboard-safe-view';
 import { ExerciseHeader, ExerciseProgress, confirmLeaveExercise, useActionLock } from '../../components/exercise-ui';
 import { ColoredGermanWord } from '../../components/colored-german-word';
 import { goBack } from '../../utils/safe-back';
+import { useShallow } from 'zustand/react/shallow';
 
 type Phase = 'write' | 'checked';
 
@@ -36,8 +38,8 @@ export default function CumleScreen() {
   const colors = useColors();
   const router = useRouter();
   const { wordIds, topicId } = useLocalSearchParams<{ wordIds: string; topicId?: string }>();
-  const { words: customWords, updateMastery } = useWordStore();
-  const { startSession, saveSession } = useSessionStore();
+  const { customWords, updateMastery } = useWordStore(useShallow(state => ({ customWords: state.words, updateMastery: state.updateMastery })));
+  const { startSession, saveSession } = useSessionStore(useShallow(state => ({ startSession: state.startSession, saveSession: state.saveSession })));
 
   const allBuiltIn = ALL_TOPICS.flatMap(t => t.words);
   const ids = wordIds?.split(',').filter(Boolean) || [];

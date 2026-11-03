@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, type TextInputInstance } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useRouter } from '../../hooks/use-guarded-router';
 import { useWordStore } from '../../store';
 import { useAuthStore } from '../../store/auth';
 import { confirmDeleteWord } from '../../utils/confirm-word-delete';
@@ -23,6 +24,7 @@ import { findDuplicateCustomWord, MAX_EXAMPLE_LENGTH } from '../../utils/word-va
 import { getArticlePalette } from '../../constants/article-colors';
 import { getGermanSpeechText } from '../../utils/german-speech';
 import { goBack } from '../../utils/safe-back';
+import { useShallow } from 'zustand/react/shallow';
 
 const MASTERY_LABELS = ['Yeni', 'Öğreniliyor', 'Bilinçli', 'Öğrenildi'];
 const ARTICLES: Article[] = ['der', 'die', 'das', ''];
@@ -32,7 +34,7 @@ export default function KelimeDetayScreen() {
   const colors = useColors();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { words, reviewStates, updateWord, deleteWord } = useWordStore();
+  const { words, reviewStates, updateWord, deleteWord } = useWordStore(useShallow(state => ({ words: state.words, reviewStates: state.reviewStates, updateWord: state.updateWord, deleteWord: state.deleteWord })));
   const sessionUserId = useAuthStore(state => state.session?.user.id);
 
   const builtInTopic = ALL_TOPICS.find(topic =>
@@ -111,7 +113,7 @@ export default function KelimeDetayScreen() {
       plural: plural.trim() || undefined,
       example: example.trim() || undefined,
       exampleTurkish: exampleTurkish.trim() || undefined,
-    });
+    }, { deferCloud: true });
 
     saveLock.release();
     if (!result.ok) {
@@ -136,7 +138,7 @@ export default function KelimeDetayScreen() {
       wordId: id,
       label: word.german,
       onDeleteWord: async () => {
-        await deleteWord(id);
+        await deleteWord(id, { deferCloud: true });
         if (router.canGoBack()) router.back();
         else router.replace('/(tabs)/kelimelerim' as any);
       },
@@ -393,7 +395,7 @@ const useStyles = makeStyles(Colors => StyleSheet.create({
   editForm: { width: '100%', gap: Spacing.sm },
   editLabel: { fontSize: 13, fontWeight: '600', color: Colors.primary },
   articleRow: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.sm },
-  articleBtn: { flex: 1, height: 40, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.surfaceContainer, borderRadius: 10, borderWidth: 1.5, borderColor: 'transparent' },
+  articleBtn: { flex: 1, minHeight: Spacing.touchTargetMin, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.surfaceContainer, borderRadius: 10, borderWidth: 1.5, borderColor: 'transparent' },
   articleBtnText: { fontSize: 13, fontWeight: '600', color: Colors.onSurfaceVariant },
   editInput: { backgroundColor: Colors.surfaceContainer, borderRadius: 12, padding: Spacing.md, fontSize: 15, color: Colors.primary },
   editInputError: { borderWidth: 1.5, borderColor: Colors.error, backgroundColor: Colors.errorContainer },

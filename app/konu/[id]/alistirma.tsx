@@ -3,7 +3,8 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useRouter } from '../../../hooks/use-guarded-router';
 import { getTopicById } from '../../../constants/topics';
 import { useWordStore } from '../../../store';
 import { Spacing, BorderRadius, getCards } from '../../../constants/theme';
@@ -11,13 +12,14 @@ import { makeStyles, useColors } from '../../../hooks/use-theme';
 import { AppIcon } from '../../../components/app-icon';
 import { SecondaryButton } from '../../../components/ui';
 import { EXERCISE_SYMBOLS } from '../../../constants/symbols';
+import { useShallow } from 'zustand/react/shallow';
 
 export default function AlistirmaSecimScreen() {
   const styles = useStyles();
   const colors = useColors();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { words: customWords } = useWordStore();
+  const { customWords } = useWordStore(useShallow(state => ({ customWords: state.words })));
 
   const topic = getTopicById(id);
   const words = topic ? topic.words : customWords.filter(w => w.topicId === id);

@@ -1,11 +1,12 @@
 import React, { useRef, useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View, type TextInputInstance } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from '../hooks/use-guarded-router';
 import { useAuthStore } from '../store/auth';
 import { Spacing } from '../constants/theme';
 import { makeStyles } from '../hooks/use-theme';
 import { AuthLayout } from '../components/auth-layout';
 import { FormField, Notice, PasswordField, PrimaryButton, TextField } from '../components/ui';
+import { useShallow } from 'zustand/react/shallow';
 
 type AuthMode = 'signIn' | 'signUp';
 
@@ -14,7 +15,7 @@ const MIN_PASSWORD_LENGTH = 6;
 export default function AuthScreen() {
   const styles = useStyles();
   const router = useRouter();
-  const { signIn, signUp, resetPasswordForEmail, isBusy } = useAuthStore();
+  const { signIn, signUp, resetPasswordForEmail, isBusy } = useAuthStore(useShallow(state => ({ signIn: state.signIn, signUp: state.signUp, resetPasswordForEmail: state.resetPasswordForEmail, isBusy: state.isBusy })));
   const [mode, setMode] = useState<AuthMode>('signIn');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

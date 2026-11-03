@@ -4,7 +4,7 @@ import {
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter } from '../hooks/use-guarded-router';
 import { useUserStore } from '../store';
 import { Typography, Spacing, BorderRadius, Shadows } from '../constants/theme';
 import { makeStyles, useColors } from '../hooks/use-theme';
@@ -12,6 +12,7 @@ import { Level } from '../types';
 import { AppIcon } from '../components/app-icon';
 import { KeyboardSafeView } from '../components/keyboard-safe-view';
 import { useActionLock } from '../components/exercise-ui';
+import { useShallow } from 'zustand/react/shallow';
 
 const LEVELS: { key: Level; label: string; subtitle: string; desc: string }[] = [
   { key: 'A1', label: 'A1', subtitle: 'Başlangıç', desc: 'Temel kelime dağarcığı' },
@@ -23,7 +24,7 @@ export default function OnboardingScreen() {
   const styles = useStyles();
   const colors = useColors();
   const router = useRouter();
-  const { completeOnboarding } = useUserStore();
+  const { completeOnboarding } = useUserStore(useShallow(state => ({ completeOnboarding: state.completeOnboarding })));
   const [step, setStep] = useState<'welcome' | 'name' | 'level'>('welcome');
   const [name, setName] = useState('');
   const [selectedLevel, setSelectedLevel] = useState<Level>('A1');
@@ -34,7 +35,7 @@ export default function OnboardingScreen() {
     // Hızlı çift dokunuşta profil iki kez kaydedilmesin / iki kez yönlendirilmesin.
     if (!name.trim() || !finishLock.acquire()) return;
     try {
-      await completeOnboarding(name.trim(), selectedLevel);
+      await completeOnboarding(name.trim(), selectedLevel, { deferCloud: true });
       router.replace('/(tabs)');
     } finally {
       finishLock.release();

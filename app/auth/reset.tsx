@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { TextInput, type TextInputInstance } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from '../../hooks/use-guarded-router';
 import { supabase } from '../../utils/supabase';
 import { AuthLayout } from '../../components/auth-layout';
 import { FormField, Notice, PasswordField, PrimaryButton } from '../../components/ui';

@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter } from '../../hooks/use-guarded-router';
 import { useUserStore, useWordStore } from '../../store';
 import { getTopicsForLevel } from '../../constants/topics';
 import { topicSymbol } from '../../constants/symbols';
@@ -16,6 +16,7 @@ import { useDayTick } from '../../components/use-achievements';
 import { ProgressRing } from '../../components/progress-ring';
 import { Card, IconTile, SectionTitle } from '../../components/ui';
 import { countReviewedToday, getActiveStreak, normalizeDailyGoal } from '../../utils/progress-stats';
+import { useShallow } from 'zustand/react/shallow';
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -28,8 +29,8 @@ export default function HomeScreen() {
   const styles = useStyles();
   const colors = useColors();
   const router = useRouter();
-  const { profile } = useUserStore();
-  const { words, reviewStates } = useWordStore();
+  const { profile } = useUserStore(useShallow(state => ({ profile: state.profile })));
+  const { words, reviewStates } = useWordStore(useShallow(state => ({ words: state.words, reviewStates: state.reviewStates })));
   // Günlük Görevler ile aynı gün sınırı ve aynı "şimdi" kaynağı: gece yarısında ve arka plandan dönünce
   // halka, seri ve görevler birlikte yeni güne geçer.
   const now = useDayTick();

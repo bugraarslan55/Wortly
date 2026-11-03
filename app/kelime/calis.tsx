@@ -3,13 +3,14 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter } from '../../hooks/use-guarded-router';
 import { useWordStore } from '../../store';
 import { Spacing, BorderRadius, Shadows } from '../../constants/theme';
 import { makeStyles, useColors } from '../../hooks/use-theme';
 import { AppIcon } from '../../components/app-icon';
 import { EXERCISE_SYMBOLS } from '../../constants/symbols';
 import { goBack } from '../../utils/safe-back';
+import { useShallow } from 'zustand/react/shallow';
 
 // Kelimelerim ekranındaki tüm kişisel kelimeler tek bir çalışma seti olarak
 // kullanılır — konu (topicId) filtresine bakılmaz.
@@ -17,7 +18,7 @@ export default function KelimelerimleCalisScreen() {
   const styles = useStyles();
   const colors = useColors();
   const router = useRouter();
-  const { words } = useWordStore();
+  const { words } = useWordStore(useShallow(state => ({ words: state.words })));
 
   const customWords = useMemo(() => words.filter(w => w.isCustom), [words]);
   const wordsWithExample = useMemo(

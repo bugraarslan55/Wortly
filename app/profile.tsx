@@ -1,7 +1,7 @@
 import React, { useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, AlertButton, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter } from '../hooks/use-guarded-router';
 import {
   flushPendingChanges, getPendingChangeCount, useSessionStore, useUserStore, useWordStore,
 } from '../store';
@@ -27,6 +27,7 @@ import {
   countLearnedWords, DAILY_GOAL_OPTIONS, getActiveStreak, normalizeDailyGoal, summarizeCompletedExercises,
 } from '../utils/progress-stats';
 import { goBack } from '../utils/safe-back';
+import { useShallow } from 'zustand/react/shallow';
 
 const LEVELS: Level[] = ['A1', 'A2', 'B1'];
 const LEVEL_DESCRIPTIONS: Record<Level, string> = {
@@ -45,8 +46,8 @@ export default function ProfileScreen() {
   const styles = useStyles();
   const colors = useColors();
   const router = useRouter();
-  const { profile, updateProfile } = useUserStore();
-  const { session, signOut } = useAuthStore();
+  const { profile, updateProfile } = useUserStore(useShallow(state => ({ profile: state.profile, updateProfile: state.updateProfile })));
+  const { session, signOut } = useAuthStore(useShallow(state => ({ session: state.session, signOut: state.signOut })));
   const words = useWordStore(state => state.words);
   const reviewStates = useWordStore(state => state.reviewStates);
   const sessions = useOwnSessions();

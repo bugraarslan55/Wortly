@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from '../hooks/use-guarded-router';
 import { BorderRadius, Spacing } from '../constants/theme';
 import { makeStyles, useColors } from '../hooks/use-theme';
 import { AppIcon } from './app-icon';

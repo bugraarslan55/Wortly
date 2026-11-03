@@ -9,7 +9,8 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useRouter } from '../../../hooks/use-guarded-router';
 import { getTopicById } from '../../../constants/topics';
 import { BorderRadius, Shadows, Spacing } from '../../../constants/theme';
 import { makeStyles, useColors } from '../../../hooks/use-theme';

@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   TextInput, type TextInputInstance } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter } from '../../hooks/use-guarded-router';
 import { useWordStore } from '../../store';
 import { Spacing, BorderRadius, getCards } from '../../constants/theme';
 import { makeStyles, useColors } from '../../hooks/use-theme';
@@ -17,6 +17,7 @@ import {
 import { findDuplicateCustomWord, MAX_EXAMPLE_LENGTH } from '../../utils/word-validation';
 import { getArticlePalette } from '../../constants/article-colors';
 import { goBack } from '../../utils/safe-back';
+import { useShallow } from 'zustand/react/shallow';
 
 const ARTICLES: Article[] = ['der', 'die', 'das', ''];
 const ARTICLE_LABELS: Record<Article, string> = {
@@ -27,7 +28,7 @@ export default function KelimeEkleScreen() {
   const styles = useStyles();
   const colors = useColors();
   const router = useRouter();
-  const { addWord, words } = useWordStore();
+  const { addWord, words } = useWordStore(useShallow(state => ({ addWord: state.addWord, words: state.words })));
   const germanInputRef = useRef<TextInputInstance>(null);
   const turkishInputRef = useRef<TextInputInstance>(null);
 
@@ -86,7 +87,7 @@ export default function KelimeEkleScreen() {
         example: example.trim() || undefined,
         exampleTurkish: exampleTurkish.trim() || undefined,
         isCustom: true,
-      });
+      }, { deferCloud: true });
 
     if (!result.ok) {
       savingRef.current = false;

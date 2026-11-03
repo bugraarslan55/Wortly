@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter } from '../../hooks/use-guarded-router';
 import { useWordStore } from '../../store';
 import { useAuthStore } from '../../store/auth';
 import { confirmDeleteWord } from '../../utils/confirm-word-delete';
@@ -13,6 +13,7 @@ import { Word, MasteryLevel } from '../../types';
 import { AppIcon } from '../../components/app-icon';
 import { ColoredGermanPlural, ColoredGermanWord } from '../../components/colored-german-word';
 import { EmptyState, FilterChip, IconTile, ScreenHeader, SearchField } from '../../components/ui';
+import { useShallow } from 'zustand/react/shallow';
 
 const MASTERY_LABELS = ['Yeni', 'Öğreniliyor', 'Bilinçli', 'Öğrenildi'];
 // Rozet metinleri arka planlarına göre >= 4.5:1 kontrast verecek koyu tonlardadır.
@@ -26,7 +27,7 @@ export default function KelimelerimScreen() {
   const styles = useStyles();
   const colors = useColors();
   const router = useRouter();
-  const { words, deleteWord } = useWordStore();
+  const { words, deleteWord } = useWordStore(useShallow(state => ({ words: state.words, deleteWord: state.deleteWord })));
   const sessionUserId = useAuthStore(state => state.session?.user.id);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | MasteryLevel>('all');

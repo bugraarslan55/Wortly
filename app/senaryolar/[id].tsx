@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, usePreventRemove, useRouter } from 'expo-router';
+import { useLocalSearchParams, usePreventRemove } from 'expo-router';
+import { useRouter } from '../../hooks/use-guarded-router';
 import { useSessionStore, useUserStore } from '../../store';
 import { useGermanSpeech } from '../../utils/use-german-speech';
 import { useAuthStore } from '../../store/auth';
@@ -17,6 +18,7 @@ import { makeStyles, useColors } from '../../hooks/use-theme';
 import { Level } from '../../types';
 import { AppIcon } from '../../components/app-icon';
 import { PrimaryButton, ProgressBar, SecondaryButton } from '../../components/ui';
+import { useShallow } from 'zustand/react/shallow';
 
 /** "Devam" düğmesine art arda hızlı dokunuşlar bir adımı atlamasın. */
 const NEXT_LOCK_MS = 350;
@@ -25,7 +27,7 @@ const OPTION_LETTERS = ['A', 'B', 'C'];
 export default function ScenarioScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { profile } = useUserStore();
+  const { profile } = useUserStore(useShallow(state => ({ profile: state.profile })));
   const scenario = getScenarioById(id);
   const userLevel: Level = profile?.level ?? 'A1';
 
@@ -106,8 +108,8 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
   const savedRounds = useRef(createOnceGuard<number>());
   const nextLock = useRef(createNavigationLock(NEXT_LOCK_MS));
   const exitAlertOpenRef = useRef(false);
-  const { session } = useAuthStore();
-  const { saveScenarioResult } = useSessionStore();
+  const { session } = useAuthStore(useShallow(state => ({ session: state.session })));
+  const { saveScenarioResult } = useSessionStore(useShallow(state => ({ saveScenarioResult: state.saveScenarioResult })));
 
   const steps = scenario.steps;
   const step = steps[index];
