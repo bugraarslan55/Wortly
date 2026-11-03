@@ -1,11 +1,11 @@
 import { useMemo } from 'react';
 import { useRouter as useExpoRouter } from 'expo-router';
 import {
-  createDuplicateNavigationGuard, DUPLICATE_BACK_WINDOW_MS, DUPLICATE_NAVIGATION_WINDOW_MS, navigationKey,
+  sharedNavigationGuard, DUPLICATE_BACK_WINDOW_MS, DUPLICATE_NAVIGATION_WINDOW_MS, navigationKey,
 } from '../utils/navigation-guard';
 
 // Uygulama genelinde tek koruma: aynı hedefe kısa sürede art arda gelen push/replace/navigate ve art arda "geri" yok sayılır.
-const guard = createDuplicateNavigationGuard();
+const guard = sharedNavigationGuard;
 const GUARDED = new Set(['push', 'replace', 'navigate']);
 
 /**

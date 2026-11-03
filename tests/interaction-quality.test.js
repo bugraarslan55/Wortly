@@ -262,3 +262,122 @@ test('ölçüm yalnızca __DEV__ içinde çalışır (üretim derlemesinde konso
   assert.match(layout, /if \(__DEV__\) console\.debug\(`\[Wortly\]\[perf\]/);
   assert.match(layout, /if \(!__DEV__\) return undefined;/);
 });
+
+// ─── 74. adım: deferCloud veri güvenliği ──────────────────────────────────────
+const userWordOps = (world) => world.cloud.requests.filter((r) => r.table === 'user_words' && r.op !== 'select').map((r) => r.op);
+
+test('deferCloud: düzenle→sil art arda: buluta aynı sırayla gider, silinen kayıt geri OLUŞMAZ, kuyruk boşalır', async () => {
+  const world = createWorld();
+  const app = world.boot();
+  await app.load();
+  world.cloud.session = 'A';
+  await app.sync('A');
+  const added = await app.W.getState().addWord({ german: 'Baum', article: 'der', turkish: 'ağaç', isCustom: true });
+  assert.equal(added.ok, true);
+  const id = app.W.getState().words[0].id;
+  assert.equal(world.cloud.tables.user_words.size, 1);
+  world.cloud.requests.length = 0;
+  let release;
+  world.cloud.gate = new Promise((resolve) => { release = resolve; });
+  await app.W.getState().updateWord(id, { turkish: 'ağaç2' }, { deferCloud: true });   // yükleme kapıda bekliyor
+  await app.W.getState().deleteWord(id, { deferCloud: true });                          // kullanıcı hemen siler
+  release();
+  await tick(60);
+  assert.equal(world.cloud.tables.user_words.size, 0, 'silinen kelime buluta geri yazılmadı');
+  assert.equal(await app.store.getPendingChangeCount('A'), 0, 'silme girdisi kaybolmadı ve işlendi');
+  const ops = userWordOps(world);
+  assert.ok(!ops.includes('upsert') || ops.lastIndexOf('upsert') < ops.lastIndexOf('delete'), 'silme, eski yüklemeden SONRA gider: ' + ops.join(','));
+});
+
+test('deferCloud: iki hızlı düzenleme: son değer buluta gider, ilk bitince ikincinin kuyruk girdisi silinmez', async () => {
+  const world = createWorld();
+  const app = world.boot();
+  await app.load();
+  world.cloud.session = 'A';
+  await app.sync('A');
+  await app.W.getState().addWord({ german: 'Hund', article: 'der', turkish: 'köpek', isCustom: true });
+  const id = app.W.getState().words[0].id;
+  let release;
+  world.cloud.gate = new Promise((resolve) => { release = resolve; });
+  await app.W.getState().updateWord(id, { turkish: 'bir' }, { deferCloud: true });
+  await app.W.getState().updateWord(id, { turkish: 'iki' }, { deferCloud: true });
+  release();
+  await tick(60);
+  const row = [...world.cloud.tables.user_words.values()][0];
+  assert.equal(world.cloud.tables.user_words.size, 1, 'kopya yok');
+  assert.equal(JSON.stringify(row).includes('iki'), true, 'son değer bulutta');
+  assert.equal(await app.store.getPendingChangeCount('A'), 0);
+});
+
+test('deferCloud: bulut hiç tamamlanmadan uygulama kapanır → kuyruk diskte, yeniden açılışta gönderilir, tek kayıt', async () => {
+  const world = createWorld();
+  let app = world.boot();
+  await app.load();
+  world.cloud.session = 'A';
+  await app.sync('A');
+  world.cloud.session = null;                              // bulut reddeder (ağ yok)
+  await app.W.getState().addWord({ german: 'Katze', article: 'die', turkish: 'kedi', isCustom: true }, { deferCloud: true });
+  await tick(30);
+  const queued = JSON.parse(world.disk.get('@wortly:pending-changes'));
+  assert.equal(queued.length, 1, 'kuyruk girdisi KALICI (diskte)');
+  app = world.boot();                                      // uygulama yeniden açıldı
+  await app.load();
+  world.cloud.session = 'A';
+  await app.sync('A');
+  await app.sync('A');                                     // aynı eşitleme iki kez: çoğalma yok
+  assert.equal(world.cloud.tables.user_words.size, 1);
+  assert.equal(app.W.getState().words.length, 1);
+  assert.equal(await app.store.getPendingChangeCount('A'), 0);
+});
+
+test('deferCloud: hesap değişince önceki kullanıcının bekleyen işlemi B hesabına yazılmaz', async () => {
+  const world = createWorld();
+  const app = world.boot();
+  await app.load();
+  world.cloud.session = 'A';
+  await app.sync('A');
+  let release;
+  world.cloud.gate = new Promise((resolve) => { release = resolve; });
+  await app.W.getState().addWord({ german: 'Auto', article: 'das', turkish: 'araba', isCustom: true }, { deferCloud: true });
+  world.cloud.session = 'B';                               // oturum değişti, A'nın isteği hâlâ kapıda
+  release();
+  await tick(60);
+  for (const row of world.cloud.tables.user_words.values()) {
+    assert.notEqual(row.user_id, 'B', 'A\'nın kelimesi B adına yazılmadı');
+  }
+});
+
+test('deferCloud: arka plan hata uyarısı sessiz değil ama kullanıcı verisi içermez (kaynak)', () => {
+  const code = stripComments(read('store/index.ts'));
+  assert.match(code, /Arka plan bulut gönderimi tamamlanamadı/);
+  const block = code.slice(code.indexOf('function runCloud'), code.indexOf('function runCloud') + 1400);
+  assert.doesNotMatch(block, /devWarn\([^)]*(german|turkish|userId|error|err\b)/);
+});
+
+// ─── 74. adım: gezinme koruması durum duyarlılığı ─────────────────────────────
+test('gezinme: ekran değişince ileri kilidi sıfırlanır, geri kilidi sıfırlanmaz', () => {
+  let t = 0;
+  const guard = NAV.createDuplicateNavigationGuard(() => t);
+  assert.equal(guard.allow('push:/a', 700), true);
+  t += 100;
+  guard.resetForward();                                    // ekran değişti
+  assert.equal(guard.allow('push:/a', 700), true, 'yeni ekrandaki ilk dokunuş engellenmez');
+  assert.equal(guard.allow('back', 400), true);
+  t += 50;
+  guard.resetForward();                                    // geri sonrası ekran değişti
+  assert.equal(guard.allow('back', 400), false, 'çift geri hâlâ tek geri');
+});
+
+test('gezinme: aynı ekranda gerçek çift dokunuş engellenir (ekran değişmediği sürece)', () => {
+  let t = 0;
+  const guard = NAV.createDuplicateNavigationGuard(() => t);
+  assert.equal(guard.allow('push:/kelime/1', 700), true);
+  t += 120;
+  assert.equal(guard.allow('push:/kelime/1', 700), false);
+});
+
+test('gezinme: sıfırlama bileşeni kökte bağlı ve korumalı router paylaşılan korumayı kullanır', () => {
+  assert.match(stripComments(read('app/_layout.tsx')), /<NavigationGuardReset \/>/);
+  assert.match(stripComments(read('hooks/use-guarded-router.ts')), /sharedNavigationGuard/);
+  assert.match(stripComments(read('components/navigation-guard-reset.tsx')), /resetForward\(\)/);
+});

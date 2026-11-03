@@ -145,11 +145,21 @@ const updatePendingChanges = async (
   await task;
 };
 
-const queuePendingChange = async (change: Omit<PendingChange, 'queuedAt'>): Promise<void> => {
+let lastQueuedAt = 0;
+const queuePendingChange = async (change: Omit<PendingChange, 'queuedAt'>): Promise<number> => {
+  // Benzersiz, artan damga: aynı milisaniyedeki iki işlem de ayırt edilir (bulut görevi yalnızca KENDİ girdisini temizler).
+  lastQueuedAt = Math.max(Date.now(), lastQueuedAt + 1);
+  const queuedAt = lastQueuedAt;
   await updatePendingChanges((changes) => [
     ...changes.filter((item) => !(item.entity === change.entity && item.id === change.id)),
-    { ...change, queuedAt: Date.now() },
+    { ...change, queuedAt },
   ]);
+  return queuedAt;
+};
+
+/** Yalnızca girdi hâlâ BU işleme aitse (aynı damga) temizler; araya giren yeni işlemin girdisi korunur. */
+const clearPendingChangeIf = async (entity: PendingChange['entity'], id: string, queuedAt: number): Promise<void> => {
+  await updatePendingChanges((changes) => changes.filter((item) => !(item.entity === entity && item.id === id && item.queuedAt === queuedAt)));
 };
 
 const clearPendingChange = async (entity: PendingChange['entity'], id: string): Promise<void> => {
@@ -303,10 +313,36 @@ export interface WriteOptions {
   deferCloud?: boolean;
 }
 
-/** Bulut gönderimini ya beklenerek ya da arka planda (yine de yazma kaydında izlenerek) çalıştırır. */
-function runCloud(options: WriteOptions | undefined, task: () => Promise<void>): Promise<void> {
-  if (!options?.deferCloud) return task();
-  void withWrite(task).catch(() => undefined);
+// Aynı kayıt (varlık+kimlik) için bulut gönderimleri SIRAYLA çalışır: düzenle→sil gibi art arda işlemler buluta aynı sırayla
+// gider (geç kalan eski bir yükleme silinmiş kaydı yeniden oluşturamaz).
+const cloudChains = new Map<string, Promise<void>>();
+
+type CloudTicket = { entity: PendingChange['entity']; id: string; queuedAt: number };
+
+async function isTicketCurrent(ticket: CloudTicket): Promise<boolean> {
+  const changes = await readPendingChanges();
+  return changes.some((item) => item.entity === ticket.entity && item.id === ticket.id && item.queuedAt === ticket.queuedAt);
+}
+
+/**
+ * Bulut gönderimini ya beklenerek ya da arka planda (yine de yazma kaydında izlenerek) çalıştırır.
+ * Görev, kuyruk girdisi hâlâ bu işleme aitse çalışır; başka bir işlem girdinin yerini aldıysa o işlem kendi gönderimini yapar.
+ * Arka plan hatası sessizce yutulmaz: (kullanıcı verisi içermeyen) uyarı yazılır; girdi kuyrukta kaldığı için sonraki eşitleme dener.
+ */
+function runCloud(options: WriteOptions | undefined, ticket: CloudTicket, task: () => Promise<void>): Promise<void> {
+  const key = `${ticket.entity}:${ticket.id}`;
+  const previous = cloudChains.get(key) ?? Promise.resolve();
+  const run = previous.then(async () => {
+    if (!(await isTicketCurrent(ticket))) return;
+    await task();
+  });
+  const settled = run.then(() => undefined, () => undefined);
+  cloudChains.set(key, settled);
+  void settled.then(() => { if (cloudChains.get(key) === settled) cloudChains.delete(key); });
+  if (!options?.deferCloud) return run;
+  void withWrite(() => run).catch(() => {
+    devWarn('[Wortly] Arka plan bulut gönderimi tamamlanamadı; değişiklik kuyrukta, sonraki eşitlemede denenecek.');
+  });
   return Promise.resolve();
 }
 
@@ -864,10 +900,10 @@ export const useWordStore = create<WordStore>((set, get) => ({
     await safeSetItem(KEYS.WORDS, JSON.stringify(updated));
     const userId = await getMutationUserId(KEYS.WORDS_OWNER);
     await stampOwner('words', userId, set);
-    await queuePendingChange({ entity: 'word', id: newWord.id, operation: 'upsert', userId });
-    await runCloud(options, async () => {
+    const queuedAt = await queuePendingChange({ entity: 'word', id: newWord.id, operation: 'upsert', userId });
+    await runCloud(options, { entity: 'word', id: newWord.id, queuedAt }, async () => {
       if (userId && await saveCloudWord(userId, newWord)) {
-        await clearPendingChange('word', newWord.id);
+        await clearPendingChangeIf('word', newWord.id, queuedAt);
         await safeSetItem(KEYS.WORDS_OWNER, userId);
       }
     });
@@ -890,10 +926,10 @@ export const useWordStore = create<WordStore>((set, get) => ({
     if (updatedWord) {
       const userId = await getMutationUserId(KEYS.WORDS_OWNER);
       await stampOwner('words', userId, set);
-      await queuePendingChange({ entity: 'word', id, operation: 'upsert', userId });
-      await runCloud(options, async () => {
+      const queuedAt = await queuePendingChange({ entity: 'word', id, operation: 'upsert', userId });
+      await runCloud(options, { entity: 'word', id, queuedAt }, async () => {
         if (userId && await saveCloudWord(userId, updatedWord)) {
-          await clearPendingChange('word', id);
+          await clearPendingChangeIf('word', id, queuedAt);
           await safeSetItem(KEYS.WORDS_OWNER, userId);
         }
       });
@@ -912,10 +948,10 @@ export const useWordStore = create<WordStore>((set, get) => ({
     if (hadReviewState) await safeSetItem(KEYS.REVIEW_STATES, JSON.stringify(reviewStates));
     const userId = await getMutationUserId(KEYS.WORDS_OWNER);
     await stampOwner('words', userId, set);
-    await queuePendingChange({ entity: 'word', id, operation: 'delete', userId });
-    await runCloud(options, async () => {
+    const queuedAt = await queuePendingChange({ entity: 'word', id, operation: 'delete', userId });
+    await runCloud(options, { entity: 'word', id, queuedAt }, async () => {
       if (userId && await deleteCloudWord(userId, id)) {
-        await clearPendingChange('word', id);
+        await clearPendingChangeIf('word', id, queuedAt);
         await safeSetItem(KEYS.WORDS_OWNER, userId);
       }
     });
@@ -1211,10 +1247,10 @@ export const useUserStore = create<UserStore>((set, get) => ({
     await safeSetItem(KEYS.PROFILE, JSON.stringify(profile));
     const userId = await getMutationUserId(KEYS.PROFILE_OWNER);
     await stampOwner('profile', userId, set);
-    await queuePendingChange({ entity: 'profile', id: 'profile', operation: 'upsert', userId });
-    await runCloud(options, async () => {
+    const queuedAt = await queuePendingChange({ entity: 'profile', id: 'profile', operation: 'upsert', userId });
+    await runCloud(options, { entity: 'profile', id: 'profile', queuedAt }, async () => {
       if (userId && await saveCloudProfile(userId, profile)) {
-        await clearPendingChange('profile', 'profile');
+        await clearPendingChangeIf('profile', 'profile', queuedAt);
         await safeSetItem(KEYS.PROFILE_OWNER, userId);
       }
     });
@@ -1510,10 +1546,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         set({ sessionTotal: previousTotal });
       }
     }
-    await queuePendingChange({ entity: 'session', id: session.id, operation: 'upsert', userId });
-    await runCloud(options, async () => {
+    const queuedAt = await queuePendingChange({ entity: 'session', id: session.id, operation: 'upsert', userId });
+    await runCloud(options, { entity: 'session', id: session.id, queuedAt }, async () => {
       if (userId && await saveCloudSession(userId, session)) {
-        await clearPendingChange('session', session.id);
+        await clearPendingChangeIf('session', session.id, queuedAt);
         await safeSetItem(KEYS.SESSIONS_OWNER, userId);
       }
     });

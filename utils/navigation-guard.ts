@@ -36,5 +36,10 @@ export function createDuplicateNavigationGuard(now: () => number = Date.now) {
       return true;
     },
     reset() { lastKey = null; lastAt = 0; },
+    /** Ekran değişince çağrılır: son kilit "geri" değilse sıfırlanır (çift geri tek geri kalır). */
+    resetForward() { if (lastKey !== 'back') { lastKey = null; lastAt = 0; } },
   };
 }
+
+/** Uygulama genelinde tek paylaşılan koruma (korumalı useRouter ve ekran-değişimi sıfırlaması kullanır). */
+export const sharedNavigationGuard = createDuplicateNavigationGuard();

@@ -13,6 +13,7 @@ import {
 import { useAuthStore } from '../store/auth';
 import { useAchievementStore } from '../store/achievements';
 import { AchievementTracker } from '../components/use-achievements';
+import { NavigationGuardReset } from '../components/navigation-guard-reset';
 import { BrandMark } from '../components/ui';
 import { useThemeStore } from '../store/theme';
 import { useTheme } from '../hooks/use-theme';
@@ -370,6 +371,7 @@ function AppRoot() {
       <SafeAreaProvider>
         <StatusBar style={isDark ? 'light' : 'dark'} />
         <AchievementTracker />
+        <NavigationGuardReset />
         <ThemeProvider value={navigationTheme}>
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.warmWhite } }}>
         <Stack.Screen
