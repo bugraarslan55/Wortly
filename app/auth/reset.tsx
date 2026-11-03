@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { TextInput } from 'react-native';
+import { TextInput, type TextInputInstance } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../utils/supabase';
 import { AuthLayout } from '../../components/auth-layout';
@@ -12,7 +12,7 @@ export default function ResetPasswordScreen() {
   const [isBusy, setIsBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState<'error' | 'success' | null>(null);
-  const passwordAgainRef = useRef<TextInput>(null);
+  const passwordAgainRef = useRef<TextInputInstance>(null);
   const submittingRef = useRef(false);
 
   const handleSubmit = async () => {

@@ -1,7 +1,6 @@
 import React from 'react';
 import {
-  StyleProp, StyleSheet, Text, TextInput, TextInputProps, TouchableOpacity, View, ViewStyle,
-} from 'react-native';
+  StyleProp, StyleSheet, Text, TextInput, TextInputProps, TouchableOpacity, View, ViewStyle, type TextInputInstance } from 'react-native';
 import { BorderRadius, Shadows, Spacing, getCards } from '../constants/theme';
 import { makeStyles, useColors } from '../hooks/use-theme';
 import { AppIcon } from './app-icon';
@@ -268,7 +267,7 @@ export function FormField({
   );
 }
 
-export const TextField = React.forwardRef<TextInput, TextInputProps & { invalid?: boolean }>(
+export const TextField = React.forwardRef<TextInputInstance, TextInputProps & { invalid?: boolean }>(
   function TextField({ invalid, style, onFocus, onBlur, ...props }, ref) {
   const styles = useStyles();
   const colors = useColors();
@@ -293,7 +292,7 @@ export const TextField = React.forwardRef<TextInput, TextInputProps & { invalid?
 );
 
 /** Şifre alanı: göster/gizle düğmesiyle (44 px dokunma alanı). */
-export const PasswordField = React.forwardRef<TextInput, TextInputProps & { invalid?: boolean }>(
+export const PasswordField = React.forwardRef<TextInputInstance, TextInputProps & { invalid?: boolean }>(
   function PasswordField({ style, ...props }, ref) {
   const styles = useStyles();
   const colors = useColors();

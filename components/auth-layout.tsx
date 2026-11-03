@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Keyboard, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Keyboard, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Spacing } from '../constants/theme';
 import { makeStyles } from '../hooks/use-theme';
@@ -16,7 +16,7 @@ export function AuthLayout({
 }: { title: string; subtitle: string; children: React.ReactNode; footer?: React.ReactNode }) {
   const styles = useStyles();
   const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
 
   useEffect(() => {
     const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));

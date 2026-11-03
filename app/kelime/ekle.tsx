@@ -1,8 +1,7 @@
 import React, { useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  TextInput,
-} from 'react-native';
+  TextInput, type TextInputInstance } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useWordStore } from '../../store';
@@ -29,8 +28,8 @@ export default function KelimeEkleScreen() {
   const colors = useColors();
   const router = useRouter();
   const { addWord, words } = useWordStore();
-  const germanInputRef = useRef<TextInput>(null);
-  const turkishInputRef = useRef<TextInput>(null);
+  const germanInputRef = useRef<TextInputInstance>(null);
+  const turkishInputRef = useRef<TextInputInstance>(null);
 
   const [german, setGerman] = useState('');
   const [article, setArticle] = useState<Article>('');

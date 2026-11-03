@@ -24,6 +24,7 @@
     },
     "web": {
       "bundler": "metro",
+      "output": "single",
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
@@ -35,14 +36,7 @@
         }
       ],
       "expo-status-bar",
-      [
-        "expo-build-properties",
-        {
-          "ios": {
-            "enableSceneSupport": true
-          }
-        }
-      ],
+      "expo-build-properties",
       "expo-image",
       [
         "expo-splash-screen",

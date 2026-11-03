@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { useLocalSearchParams, usePreventRemove, useRouter } from 'expo-router';
 import { useSessionStore, useUserStore } from '../../store';
 import { useGermanSpeech } from '../../utils/use-german-speech';
 import { useAuthStore } from '../../store/auth';
@@ -96,7 +96,6 @@ function ListenButtons({
 function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () => void }) {
   const styles = useStyles();
   const colors = useColors();
-  const navigation = useNavigation();
   const [round, setRound] = useState(0);
   const [index, setIndex] = useState(0);
   const [finished, setFinished] = useState(false);
@@ -136,36 +135,31 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
   const score = scoreScenario(steps, progress);
 
   // Yarıda çıkış (geri düğmesi, kaydırma hareketi, başlık geri okları): ilerleme varsa onay iste.
-  const confirmRef = useRef(false);
-  confirmRef.current = needsExitConfirm(progress, finished);
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('beforeRemove', (event) => {
-      if (!confirmRef.current || exitAlertOpenRef.current) {
-        if (confirmRef.current) event.preventDefault();
-        return;
-      }
-      event.preventDefault();
-      exitAlertOpenRef.current = true;
-      Alert.alert(
-        'Senaryodan çıkılsın mı?',
-        'Şu ana kadarki ilerlemen kaydedilmez. Senaryoyu baştan çalışabilirsin.',
-        [
-          { text: 'Devam et', style: 'cancel', onPress: () => { exitAlertOpenRef.current = false; } },
-          {
-            text: 'Çık',
-            style: 'destructive',
-            onPress: () => {
-              exitAlertOpenRef.current = false;
-              confirmRef.current = false;
-              navigation.dispatch(event.data.action);
-            },
+  // SDK 58 (expo-router 58): 'beforeRemove' kalktı; çıkışı usePreventRemove engeller, onaylanırsa engel kapatılıp repeat() ile
+  // engellenen eylem aynen sürdürülür. Alert zaten açıkken gelen ek çıkış denemeleri sessizce engellenmeye devam eder.
+  const [exitConfirmed, setExitConfirmed] = useState(false);
+  const needsConfirm = needsExitConfirm(progress, finished);
+  usePreventRemove(needsConfirm && !exitConfirmed, ({ repeat }) => {
+    if (exitAlertOpenRef.current) return;
+    exitAlertOpenRef.current = true;
+    Alert.alert(
+      'Senaryodan çıkılsın mı?',
+      'Şu ana kadarki ilerlemen kaydedilmez. Senaryoyu baştan çalışabilirsin.',
+      [
+        { text: 'Devam et', style: 'cancel', onPress: () => { exitAlertOpenRef.current = false; } },
+        {
+          text: 'Çık',
+          style: 'destructive',
+          onPress: () => {
+            exitAlertOpenRef.current = false;
+            setExitConfirmed(true);
+            repeat();
           },
-        ],
-        { cancelable: true, onDismiss: () => { exitAlertOpenRef.current = false; } },
-      );
-    });
-    return unsubscribe;
-  }, [navigation]);
+        },
+      ],
+      { cancelable: true, onDismiss: () => { exitAlertOpenRef.current = false; } },
+    );
+  });
 
   useEffect(() => {
     if (!finished || !session?.user.id) return;

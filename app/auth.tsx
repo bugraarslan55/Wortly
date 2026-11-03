@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TextInput, TouchableOpacity, View, type TextInputInstance } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../store/auth';
 import { Spacing } from '../constants/theme';
@@ -21,8 +21,8 @@ export default function AuthScreen() {
   const [passwordAgain, setPasswordAgain] = useState('');
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState<'error' | 'success' | null>(null);
-  const passwordRef = useRef<TextInput>(null);
-  const passwordAgainRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInputInstance>(null);
+  const passwordAgainRef = useRef<TextInputInstance>(null);
   // Store'daki isBusy bir sonraki render'da görünür; hızlı çift dokunuşu burada engelle.
   const submittingRef = useRef(false);
 

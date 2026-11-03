@@ -24,7 +24,7 @@ export function useReminderSync(userId: string | null, enabled: boolean) {
   const dailyGoal = useUserStore(state => state.profile?.dailyGoal);
   const streak = useUserStore(state => state.profile?.streak);
   const lastStudyDate = useUserStore(state => state.profile?.lastStudyDate);
-  const appState = useRef<AppStateStatus>(AppState.currentState);
+  const appState = useRef<AppStateStatus>((AppState.currentState as AppStateStatus | null | undefined) ?? 'active');
 
   useEffect(() => {
     if (userId) setReminderOwner(userId);

@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput,
-} from 'react-native';
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, type TextInputInstance } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useWordStore } from '../../store';
@@ -43,8 +42,8 @@ export default function KelimeDetayScreen() {
   const word = words.find(candidate => candidate.id === id) || builtInWord;
   // Konu kelimelerinin seviyesi reviewStates'te tutulur (kelime nesnesinde hep 0'dır).
   const masteryLevel = word ? getReviewState(word, reviewStates).masteryLevel : 0;
-  const germanInputRef = useRef<TextInput>(null);
-  const turkishInputRef = useRef<TextInput>(null);
+  const germanInputRef = useRef<TextInputInstance>(null);
+  const turkishInputRef = useRef<TextInputInstance>(null);
 
   const [isEditing, setIsEditing] = useState(false);
   const [german, setGerman] = useState(word?.german || '');

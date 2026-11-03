@@ -125,7 +125,7 @@ export default function KelimelerimScreen() {
             <Text style={styles.quizBannerText}>Kelimelerimle Çalış</Text>
             <AppIcon name="chevron.right" size={14} color={colors.golden} />
           </TouchableOpacity>
-        ) : null}
+        ) : undefined}
         ListEmptyComponent={customWords.length === 0 ? (
           <EmptyState
             icon="square.and.pencil"
