@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useColorScheme } from 'react-native';
 import { DarkColors, LightColors, ThemeColors } from '../constants/theme';
 import { useThemeStore } from '../store/theme';
+import { resolveScheme } from '../utils/theme-preference';
 
 export type ThemeScheme = 'light' | 'dark';
 
@@ -9,9 +10,7 @@ export type ThemeScheme = 'light' | 'dark';
 export function useTheme() {
   const preference = useThemeStore(state => state.preference);
   const systemScheme = useColorScheme();
-  const scheme: ThemeScheme = preference === 'system'
-    ? (systemScheme === 'dark' ? 'dark' : 'light')
-    : preference;
+  const scheme: ThemeScheme = resolveScheme(preference, systemScheme);
 
   return useMemo(() => ({
     scheme,

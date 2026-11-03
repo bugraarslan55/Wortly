@@ -1,17 +1,12 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Appearance, Platform } from 'react-native';
+import { loadThemePreference, THEME_PREFERENCE_KEY, type ThemePreference } from '../utils/theme-preference';
 
 // Görünüm tercihi cihaza özeldir: yalnızca AsyncStorage'da tutulur, hesaba veya
 // Supabase'e bağlı değildir ve çıkış/hesap değişiminde silinmez.
-export type ThemePreference = 'system' | 'light' | 'dark';
-
-export const THEME_PREFERENCE_KEY = '@wortly:theme-preference';
-
-const STORAGE_TIMEOUT_MS = 3000;
-
-const isThemePreference = (value: unknown): value is ThemePreference =>
-  value === 'system' || value === 'light' || value === 'dark';
+export type { ThemePreference } from '../utils/theme-preference';
+export { THEME_PREFERENCE_KEY };
 
 // Alert, klavye ve sistem çubukları gibi native bileşenler de seçilen temayı izlesin.
 // Web'de bu API yoktur; orada yalnızca JS tarafındaki renkler kullanılır.
@@ -36,16 +31,12 @@ export const useThemeStore = create<ThemeStore>((set) => ({
   isLoaded: false,
 
   loadTheme: async () => {
+    // Saf yükleyici asla fırlatmaz ve takılmaz: okunamazsa/zaman aşımında "sistem" kullanılır, kayıtlı değer SİLİNMEZ.
+    const { preference } = await loadThemePreference(AsyncStorage);
     try {
-      const stored = await Promise.race([
-        AsyncStorage.getItem(THEME_PREFERENCE_KEY),
-        new Promise<null>(resolve => setTimeout(() => resolve(null), STORAGE_TIMEOUT_MS)),
-      ]);
-      const preference = isThemePreference(stored) ? stored : 'system';
       applyNativeColorScheme(preference);
+    } finally {
       set({ preference, isLoaded: true });
-    } catch {
-      set({ isLoaded: true });
     }
   },
 

@@ -3,6 +3,7 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRootNavigationState, 
 import * as Linking from 'expo-linking';
 import { ActivityIndicator, AppState, Platform, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
@@ -26,6 +27,15 @@ import { computeAccessGate } from '../utils/access-gate';
 import { getNotificationRoute, getReviewRoute } from '../utils/review-route';
 import { getMiniQuizReminderContent } from '../utils/mini-quiz';
 import { isLearningSyncEnabled } from '../utils/feature-flags';
+import { createSplashLifecycle } from '../utils/splash-lifecycle';
+
+// Açılış ekranı: tema, yerel veri ve oturum hazır olana kadar açık kalır (boş/açık renkli ekran görünmesin); hazırlık
+// takılırsa güvenlik süresi dolunca yine kapanır. Global kapsamda başlatılır (SDK 57: preventAutoHideAsync ilk render'dan önce).
+const splash = createSplashLifecycle({
+  prevent: () => SplashScreen.preventAutoHideAsync(),
+  hide: () => SplashScreen.hide(),
+});
+splash.start();
 
 // Günlük bildirim metni için mini quiz kelimesi (modül yüklenirken, ilk planlamadan önce kaydedilir).
 setReminderContentProvider(getMiniQuizReminderContent);
@@ -282,6 +292,11 @@ export default function RootLayout() {
     void syncScenarioResults(session.user.id, { full: true });
   }, [scenarioResultsOwner, session?.user.id, syncScenarioResults]);
 
+  // Açılış ekranı yalnızca tema, yerel veri ve oturum başlatması hazır olduğunda kapanır (güvenlik süresiyle sınırlı).
+  useEffect(() => {
+    splash.update({ themeLoaded: isThemeLoaded, localDataLoaded: isLoaded, authLoaded: isAuthLoaded });
+  }, [isThemeLoaded, isLoaded, isAuthLoaded]);
+
   // Bildirime dokunma (uygulama kapalıyken, arka plandayken ya da açıkken) yakalanır ve bekletilir.
   useEffect(() => subscribeToNotificationResponses(setPendingResponse), []);
 
@@ -324,7 +339,8 @@ export default function RootLayout() {
     else router.navigate('/(tabs)' as any);
   }, [pendingResponse, handledTapsLoaded, isAuthLoaded, isAppReady, navigationState?.key, currentUserId, router]);
 
-  if (!isThemeLoaded) return null;
+  // Tema okunmadan (splash güvenlik süresi dolduysa bile) boş/açık ekran yerine sistem temasında sade bir zemin gösterilir.
+  if (!isThemeLoaded) return <View style={{ flex: 1, backgroundColor: colors.warmWhite }} />;
 
   if (isLoaded && isAuthLoaded && syncProblem) {
     return <SyncProblemScreen onRetry={retrySync} busy={retryBusy} attempts={retryAttempts} email={session?.user.email ?? null} />;
