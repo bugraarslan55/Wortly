@@ -28,7 +28,8 @@ import { getNotificationRoute, getReviewRoute } from '../utils/review-route';
 import { getMiniQuizReminderContent } from '../utils/mini-quiz';
 import { isLearningSyncEnabled } from '../utils/feature-flags';
 import { createSplashLifecycle } from '../utils/splash-lifecycle';
-import { connectionVerdict } from '../utils/supabase';
+import { connectionVerdict, isSharedBackendMode } from '../utils/supabase';
+import { SharedBackendFrame, SharedBackendGate } from '../components/shared-backend-gate';
 import { ConnectionBlockedScreen } from '../components/connection-blocked-screen';
 
 // Açılış ekranı: tema, yerel veri ve oturum hazır olana kadar açık kalır (boş/açık renkli ekran görünmesin); hazırlık
@@ -475,6 +476,18 @@ export default function RootLayout() {
         message={connectionVerdict.userMessage}
         onShown={() => splash.forceHide()}
       />
+    );
+  }
+  // Ortak production backend (TEST MODU, yalnızca geliştirmede ve açıkça etkinleştirilmişse): görünür uyarı şeridi + hesap kapısı.
+  // Kapı, sunucunun doğruladığı kullanıcı izinli olana kadar AppRoot'u (veri yükleme, yazma, bildirim, senkron) HİÇ oluşturmaz.
+  // Karar modül yüklenirken sabitlenir; kanca sırası render'lar arasında değişmez.
+  if (isSharedBackendMode) {
+    return (
+      <SharedBackendFrame>
+        <SharedBackendGate onScreenShown={() => splash.forceHide()}>
+          <AppRoot />
+        </SharedBackendGate>
+      </SharedBackendFrame>
     );
   }
   return <AppRoot />;

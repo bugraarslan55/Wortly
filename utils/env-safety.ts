@@ -4,6 +4,8 @@
 // veya anahtar içermez/yazdırmaz. Geliştirici `.env.local` içinde test projesini gösterirken 'staging' (ya da 'local')
 // yazar; işaretsiz bir geliştirme çalıştırması bu uyarıyı verir.
 
+import { parseAllowedUserIds } from './shared-backend';
+
 export type AppEnvironment = 'production' | 'staging' | 'local' | 'unset' | 'unknown';
 
 export function parseAppEnvironment(value: string | null | undefined): AppEnvironment {
@@ -67,12 +69,18 @@ export function parseBuildProfile(value: unknown): BuildProfile {
 
 export type BlockReason =
   | 'missing-config' | 'invalid-url' | 'production-unknown' | 'is-production'
-  | 'unmarked-environment' | 'marked-production' | 'guard-error';
+  | 'unmarked-environment' | 'marked-production' | 'guard-error'
+  | 'shared-backend-invalid' | 'shared-backend-no-accounts';
+
+/** Ortak backend (TEST MODU) için tam eşleşmesi gereken izin metni (EXPO_PUBLIC_DEV_SHARED_BACKEND). */
+export const SHARED_BACKEND_PHRASE = 'I-UNDERSTAND-THIS-IS-PRODUCTION-DATA';
 
 export type ConnectionVerdict =
   | {
     allow: true;
-    mode: 'release' | 'protected-verified' | 'protected-local';
+    mode: 'release' | 'protected-verified' | 'protected-local' | 'dev-shared-production';
+    /** true: geliştirmede, açıkça izin verilen ORTAK PRODUCTION backend (TEST MODU). Hesap kapısı ve uyarı bandı zorunludur. */
+    sharedBackend?: true;
     /** Yalnızca yayın modunda anlamlı: bağlı proje üretim kimliklerinden biri ve işaret production ise true. Engellemez. */
     verified: boolean;
     /** Yayın modunda: EAS/ortam profil işaretlerinden en az biri vardı (false = EAS dışı yerel derleme; production KANITLANAMAZ). */
@@ -123,6 +131,8 @@ const MESSAGES: Record<BlockReason, string> = {
   'marked-production': 'Ortam işareti production olarak ayarlı; test sürümünde bağlantı kurulmadı.',
   'unmarked-environment': 'Ortam, test (staging/local) olarak işaretlenmediği için bağlantı kurulmadı.',
   'guard-error': 'Bağlantı güvenliği doğrulanamadığı için bağlantı kurulmadı.',
+  'shared-backend-invalid': 'Ortak veritabanı test modu yapılandırması geçersiz ya da bu derlemede izinli değil; bağlantı kurulmadı.',
+  'shared-backend-no-accounts': 'Ortak veritabanı test modu için izinli test hesabı tanımlı değil; bağlantı kurulmadı.',
 };
 export const blockMessage = (reason: BlockReason): string => MESSAGES[reason];
 
@@ -138,6 +148,10 @@ export function evaluateConnection(input: {
   hasKey: boolean;
   appEnv: string | null | undefined;
   productionRefs: string | null | undefined;
+  /** EXPO_PUBLIC_DEV_SHARED_BACKEND: ortak production backend'e geliştirmede bilinçli izin (tam eşleşme gerekir). */
+  sharedBackend?: unknown;
+  /** EXPO_PUBLIC_DEV_ALLOWED_USER_IDS: ortak backend modunda izinli auth kullanıcı kimlikleri. */
+  allowedUserIds?: string | null | undefined;
 }): ConnectionVerdict {
   const hasUrl = String(input.url ?? '').trim().length > 0;
   // Ayar yoksa istemci zaten oluşturulamaz (yayında da): çökmek yerine anlaşılır bir yapılandırma hatası gösterilir.
@@ -159,7 +173,18 @@ export function evaluateConnection(input: {
   if (!ref) return block('invalid-url');
   if (ref === 'local') return { allow: true, mode: 'protected-local', verified: false, reason: 'local-stack', userMessage: null };
   if (production.length === 0) return block('production-unknown');
-  if (production.includes(ref)) return block('is-production');
+  if (production.includes(ref)) {
+    // Varsayılan: ENGEL. Yalnızca açık, tam eşleşen izin + geliştirme (__DEV__) + dürüst işaret + izinli hesaplar varsa.
+    const phrase = typeof input.sharedBackend === 'string' ? input.sharedBackend : '';
+    if (!phrase) return block('is-production');
+    const profile = resolveBuildProfile(input.easProfile, input.buildProfile).profile;
+    const profileOk = profile === 'unspecified' || profile === 'development'; // preview/production/tanınmayan: asla
+    if (phrase !== SHARED_BACKEND_PHRASE || input.isDev !== true || !profileOk || env !== 'production') {
+      return block('shared-backend-invalid');
+    }
+    if (parseAllowedUserIds(input.allowedUserIds).length === 0) return block('shared-backend-no-accounts');
+    return { allow: true, mode: 'dev-shared-production', sharedBackend: true, verified: false, reason: 'explicit-shared-backend', userMessage: null };
+  }
   if (env === 'production') return block('marked-production');
   if (env !== 'staging' && env !== 'local') return block('unmarked-environment');
   return { allow: true, mode: 'protected-verified', verified: true, reason: 'staging-verified', userMessage: null };

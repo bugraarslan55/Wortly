@@ -4,6 +4,7 @@ import Constants from 'expo-constants';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { createBlockedClient } from './blocked-client';
 import { blockMessage, evaluateConnection, isProtectedBuild, type ConnectionVerdict } from './env-safety';
+import { parseAllowedUserIds } from './shared-backend';
 
 // Bu değişkenler Metro tarafından DERLEME SIRASINDA satır içine alınır (tam ifade olarak yazılmalıdır).
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -11,6 +12,9 @@ const supabasePublishableKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 const buildProfile = process.env.EXPO_PUBLIC_BUILD_PROFILE;
 const appEnv = process.env.EXPO_PUBLIC_APP_ENV;
 const productionRefs = process.env.EXPO_PUBLIC_PRODUCTION_PROJECT_REFS;
+// Ortak backend (TEST MODU): varsayılan KAPALI; yalnızca geliştirmede, tam eşleşen izin metniyle ve izinli hesaplarla etkinleşir.
+const sharedBackend = process.env.EXPO_PUBLIC_DEV_SHARED_BACKEND;
+const allowedUserIdsRaw = process.env.EXPO_PUBLIC_DEV_ALLOWED_USER_IDS;
 const isDev = typeof __DEV__ !== 'undefined' && __DEV__;
 // EAS'ın derleme sırasında verdiği profil adı (app.config.js → extra.buildProfile). EAS dışı yerel derlemede yoktur.
 const easProfile = (Constants.expoConfig?.extra as { buildProfile?: string | null } | undefined)?.buildProfile ?? null;
@@ -19,7 +23,7 @@ const easProfile = (Constants.expoConfig?.extra as { buildProfile?: string | nul
 // korumalı (geliştirme/preview) derlemede bağlantı engellenir; yayın derlemesinde engellenmez (kilitlenme riski yok).
 function decide(): ConnectionVerdict {
   try {
-    return evaluateConnection({ isDev, buildProfile, easProfile, url: supabaseUrl, hasKey: !!supabasePublishableKey, appEnv, productionRefs });
+    return evaluateConnection({ isDev, buildProfile, easProfile, url: supabaseUrl, hasKey: !!supabasePublishableKey, appEnv, productionRefs, sharedBackend, allowedUserIds: allowedUserIdsRaw });
   } catch {
     if (isProtectedBuild({ isDev, buildProfile, easProfile })) {
       return { allow: false, mode: 'blocked', reason: 'guard-error', userMessage: blockMessage('guard-error') };
@@ -31,6 +35,10 @@ function decide(): ConnectionVerdict {
 /** Bağlantı kararı: adres, anahtar veya proje kimliği İÇERMEZ; yalnızca neden kodu ve açıklama taşır. */
 export const connectionVerdict: ConnectionVerdict = decide();
 export const isConnectionBlocked = !connectionVerdict.allow;
+/** Geliştirmede bilinçli açılmış ORTAK PRODUCTION backend (TEST MODU). Yayın/preview derlemelerinde HİÇBİR ZAMAN true olmaz. */
+export const isSharedBackendMode = connectionVerdict.allow && connectionVerdict.sharedBackend === true;
+/** Ortak backend modunda izinli auth kullanıcı kimlikleri (mod kapalıysa boş). */
+export const allowedTestUserIds: readonly string[] = isSharedBackendMode ? parseAllowedUserIds(allowedUserIdsRaw) : [];
 
 if (__DEV__ && !connectionVerdict.allow) console.warn(`[Wortly] Supabase bağlantısı engellendi (${connectionVerdict.reason}). Ayrıntı: docs/dev-environment.md`);
 

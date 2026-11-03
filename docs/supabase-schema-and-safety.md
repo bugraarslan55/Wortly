@@ -56,7 +56,7 @@ Ortam işareti (`EXPO_PUBLIC_APP_ENV`) **hiçbir zaman production kanıtı sayı
 **Korumalı derlemede bağlantı yalnızca şu koşulların HEPSİ varsa kurulur (fail-closed):** adres ve anahtar tanımlı ve adres geçerli;
 `EXPO_PUBLIC_PRODUCTION_PROJECT_REFS` tanımlı; bağlı proje kimliği bunlardan biri **değil**; `EXPO_PUBLIC_APP_ENV` staging/local.
 Ortam işareti tek başına kanıt değildir (production adresi + `staging` işareti yine engellenir). Yerel yığın izinlidir.
-Güvenliği kapatan bir ortam değişkeni **yoktur** (eski `ALLOW_PRODUCTION_IN_DEV` kaldırıldı). Üretim kimliği kaynağa gömülü değildir.
+Güvenliği sessizce kapatan bir ortam değişkeni **yoktur**; ortak production'a geliştirmede bağlanmak yalnızca açık, görünür ve hesap kapılı "ortak backend TEST MODU" ile mümkündür (docs/dev-environment.md) (eski `ALLOW_PRODUCTION_IN_DEV` kaldırıldı). Üretim kimliği kaynağa gömülü değildir.
 
 **Yayın sürümü hiçbir koşulda engellenmez:** `__DEV__` kapalı ve profil `production` ya da hiç verilmemişse (mevcut/eski/yerel yayın
 derlemeleri dahil) bağlantı değerlendirilmeden izinlidir; özel alan adı ve eksik üretim kimliği de engellemez. Yalnızca bilgi için

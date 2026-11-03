@@ -3,7 +3,8 @@ import type { Session } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
-import { supabase } from '../utils/supabase';
+import { isSharedBackendMode, supabase } from '../utils/supabase';
+import { SHARED_BACKEND_RESET_MESSAGE, SHARED_BACKEND_SIGN_UP_MESSAGE } from '../utils/shared-backend';
 import { clearPronunciationRecordings } from '../utils/pronunciation-storage';
 import { cancelReviewReminders, revokeReminderOwner, setReminderOwner } from '../utils/review-reminder';
 import { runSignOut, type SignOutResult } from '../utils/sign-out-flow';
@@ -81,6 +82,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   signUp: async (email, password) => {
+    // Ortak (production) veritabanında TEST MODU: yeni gerçek hesap oluşturulmaz; Supabase'e hiç istek gitmez.
+    if (isSharedBackendMode) return { ok: false, message: SHARED_BACKEND_SIGN_UP_MESSAGE };
     set({ isBusy: true });
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -97,6 +100,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   resetPasswordForEmail: async (email) => {
+    // Ortak veritabanında rastgele adreslere e-posta gönderilmez.
+    if (isSharedBackendMode) return { ok: false, message: SHARED_BACKEND_RESET_MESSAGE };
     set({ isBusy: true });
     const redirectTo = Platform.OS === 'web'
       ? `${window.location.origin}/auth/reset`
