@@ -1,26 +1,44 @@
 import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createClient } from '@supabase/supabase-js';
-import { evaluateDevEnvironment } from './env-safety';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createBlockedClient } from './blocked-client';
+import { blockMessage, evaluateConnection, isProtectedBuild, type ConnectionVerdict } from './env-safety';
 
+// Bu değişkenler Metro tarafından DERLEME SIRASINDA satır içine alınır (tam ifade olarak yazılmalıdır).
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabasePublishableKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+const buildProfile = process.env.EXPO_PUBLIC_BUILD_PROFILE;
+const appEnv = process.env.EXPO_PUBLIC_APP_ENV;
+const productionRefs = process.env.EXPO_PUBLIC_PRODUCTION_PROJECT_REFS;
+const isDev = typeof __DEV__ !== 'undefined' && __DEV__;
 
-if (!supabaseUrl || !supabasePublishableKey) {
-  throw new Error(
-    'Supabase yapılandırması eksik: EXPO_PUBLIC_SUPABASE_URL ve EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY gerekli.',
-  );
+// Hiçbir ağ/depolama erişimi yapmadan, istemci OLUŞTURULMADAN ÖNCE verilir. Değerlendirme beklenmedik şekilde hata verirse:
+// korumalı (geliştirme/preview) derlemede bağlantı engellenir; yayın derlemesinde engellenmez (kilitlenme riski yok).
+function decide(): ConnectionVerdict {
+  try {
+    return evaluateConnection({ isDev, buildProfile, url: supabaseUrl, hasKey: !!supabasePublishableKey, appEnv, productionRefs });
+  } catch {
+    if (isProtectedBuild({ isDev, buildProfile })) {
+      return { allow: false, mode: 'blocked', reason: 'guard-error', userMessage: blockMessage('guard-error') };
+    }
+    return { allow: true, mode: 'release', verified: false, reason: 'guard-error-release', userMessage: null };
+  }
 }
 
-// Geliştirme çalıştırmasında bağlı projenin "test" olarak işaretlenmediği durumda bir kez uyarır (hiçbir değer yazdırılmaz).
-const devReport = evaluateDevEnvironment({ appEnv: process.env.EXPO_PUBLIC_APP_ENV, isDev: typeof __DEV__ !== 'undefined' && __DEV__ });
-if (devReport.message) console.warn(devReport.message);
+/** Bağlantı kararı: adres, anahtar veya proje kimliği İÇERMEZ; yalnızca neden kodu ve açıklama taşır. */
+export const connectionVerdict: ConnectionVerdict = decide();
+export const isConnectionBlocked = !connectionVerdict.allow;
 
-export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
-  auth: {
-    storage: AsyncStorage,
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: false,
-  },
-});
+if (__DEV__ && !connectionVerdict.allow) console.warn(`[Wortly] Supabase bağlantısı engellendi (${connectionVerdict.reason}). Ayrıntı: docs/dev-environment.md`);
+
+// Engelliyse GERÇEK istemci hiç oluşturulmaz (oturum depolaması da okunmaz).
+export const supabase: SupabaseClient = connectionVerdict.allow
+  ? createClient(supabaseUrl as string, supabasePublishableKey as string, {
+    auth: {
+      storage: AsyncStorage,
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false,
+    },
+  })
+  : (createBlockedClient() as SupabaseClient);

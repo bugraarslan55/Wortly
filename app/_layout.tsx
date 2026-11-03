@@ -28,6 +28,8 @@ import { getNotificationRoute, getReviewRoute } from '../utils/review-route';
 import { getMiniQuizReminderContent } from '../utils/mini-quiz';
 import { isLearningSyncEnabled } from '../utils/feature-flags';
 import { createSplashLifecycle } from '../utils/splash-lifecycle';
+import { connectionVerdict } from '../utils/supabase';
+import { ConnectionBlockedScreen } from '../components/connection-blocked-screen';
 
 // Açılış ekranı: tema, yerel veri ve oturum hazır olana kadar açık kalır (boş/açık renkli ekran görünmesin); hazırlık
 // takılırsa güvenlik süresi dolunca yine kapanır. Global kapsamda başlatılır (SDK 57: preventAutoHideAsync ilk render'dan önce).
@@ -48,7 +50,7 @@ const devLog = (...args: unknown[]) => {
   if (__DEV__) console.debug(...args);
 };
 
-export default function RootLayout() {
+function AppRoot() {
   const router = useRouter();
   const navigationState = useRootNavigationState();
   // Dokunulan bildirim yanıtı; uygulama (oturum, veri, navigasyon) hazır olana kadar bekletilir.
@@ -460,4 +462,20 @@ export default function RootLayout() {
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
+}
+
+// Kök bileşen: bağlantı güvenlik kararı ÖNCE verilir. Engelliyse yalnızca yapılandırma hata ekranı gösterilir;
+// AppRoot hiç oluşturulmadığı için oturum başlatma, veri yükleme, bildirim abonelikleri ve senkronizasyon BAŞLAMAZ.
+// Karar modül yüklenirken sabitlenir, bu yüzden kanca sırası render'lar arasında değişmez.
+export default function RootLayout() {
+  if (!connectionVerdict.allow) {
+    return (
+      <ConnectionBlockedScreen
+        reason={connectionVerdict.reason}
+        message={connectionVerdict.userMessage}
+        onShown={() => splash.forceHide()}
+      />
+    );
+  }
+  return <AppRoot />;
 }

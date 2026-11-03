@@ -43,22 +43,32 @@ istemciye gereksiz yetki (silme/güncelleme) verilmemiş; `SECURITY DEFINER` iş
 5. `handle_new_user_profile` `search_path = public`; diğer tetikleyiciler `''` kullanıyor. Tutarlılık için `''` önerilir (uygulanmadı).
 6. Staging projesi olmadığından RLS/tetikleyici davranışı yalnızca yerel PGlite ve sahte bulutla denendi.
 
-## 5. Production bağlantı güvenliği
-Mevcut durum: `.env` production'u gösterir; `EXPO_PUBLIC_APP_ENV` yalnızca geliştirme konsolunda **uyarı** üretir (kanıt değildir);
-staging test betikleri production adresini reddeder (`supabase/tests/staging-guard.js`).
+## 5. Production bağlantı güvenliği (uygulandı: `utils/env-safety.ts` + `utils/supabase.ts`)
+Amaç production'a erişimi yasaklamak değil, **yanlış ortamdan** (geliştirme/preview) production'a bağlanmayı önlemektir.
 
-### Önerilen fail-closed koruma (TASARIM; `utils/env-safety.ts` içinde `evaluateConnection`, testli, **uygulamaya bağlı DEĞİL**)
-- **Yalnızca geliştirme (`__DEV__`) çalıştırmalarında** devreye girer. **Yayın sürümünde her zaman izin verir** → production uygulaması ve mevcut hesaplar kilitlenemez.
-- Production kimliği kaynak koda gömülmez: `.env` içindeki `EXPO_PUBLIC_PRODUCTION_PROJECT_REFS` (virgülle ayrılmış proje kimlikleri; sır değildir) ile bağlı URL'nin kimliği karşılaştırılır.
-- Engellenir: geçersiz/eksik URL; production kimliği tanımlı değil (karşılaştırma yapılamaz); URL production kimliğiyle aynı (işaret `staging` yazsa bile); işaret `production`; işaret yok. Yerel yığın (`127.0.0.1`/`localhost`) izinli. `EXPO_PUBLIC_ALLOW_PRODUCTION_IN_DEV=yes-i-understand` açık geçersiz kılmadır.
-- Mesajlar anlaşılırdır ve adres/anahtar/kimlik içermez.
+**Ortam ayrımı (iki bağımsız sinyal):** `__DEV__` (Metro: Expo Go, development client) ve derleme profili
+`EXPO_PUBLIC_BUILD_PROFILE` (`eas.json` `development` ve `preview` profillerinde `env` ile verilir). Preview derlemeleri release
+modundadır; onları yalnızca profil işareti ayırt eder. KORUMALI = `__DEV__` veya profil development/preview/tanınmayan.
 
-**Bağlama planı ve riskler (henüz yapılmadı, onay gerekir):**
-1. `utils/supabase.ts` içinde istemciyi oluşturmadan önce `evaluateConnection` çağrılır; engel varsa istemci yerine "ağ yok" davranışlı bir kapı döner ve kök yerleşimde açıklayıcı bir ekran gösterilir (kırmızı hata kutusu yerine).
-2. **Risk:** `__DEV__` Expo Go ve development client'ta `true`; `expo start --no-dev`, EAS `preview`/`production` derlemelerinde `false` → bu derlemeler korunmaz (ama kilitlenmez).
-3. **Risk:** geliştirici bilinçli olarak production'da test edecekse açık geçersiz kılma gerekir; yanlış yapılandırılmış `.env.local` geliştiriciyi geçici olarak engeller (yayını etkilemez).
-4. **Risk:** `EXPO_PUBLIC_*` değerleri pakete gömülür; proje kimlikleri gizli değildir ama anahtarlar yine yalnızca publishable olmalıdır.
-5. Üretim derlemesinde koruma kodu çalışmaz; yine de birim testlerle "yayın asla engellenmez" sabitlenmiştir.
+**Korumalı derlemede bağlantı yalnızca şu koşulların HEPSİ varsa kurulur (fail-closed):** adres ve anahtar tanımlı ve adres geçerli;
+`EXPO_PUBLIC_PRODUCTION_PROJECT_REFS` tanımlı; bağlı proje kimliği bunlardan biri **değil**; `EXPO_PUBLIC_APP_ENV` staging/local.
+Ortam işareti tek başına kanıt değildir (production adresi + `staging` işareti yine engellenir). Yerel yığın izinlidir.
+Güvenliği kapatan bir ortam değişkeni **yoktur** (eski `ALLOW_PRODUCTION_IN_DEV` kaldırıldı). Üretim kimliği kaynağa gömülü değildir.
+
+**Yayın sürümü hiçbir koşulda engellenmez:** `__DEV__` kapalı ve profil `production` ya da hiç verilmemişse (mevcut/eski/yerel yayın
+derlemeleri dahil) bağlantı değerlendirilmeden izinlidir; özel alan adı ve eksik üretim kimliği de engellemez. Yalnızca bilgi için
+`verified` bayrağı (bağlı proje üretim kimliklerinden biri ve işaret production) hesaplanır. Tek istisna: adres/anahtar hiç yoksa istemci
+zaten kurulamaz; çökme yerine anlaşılır hata ekranı gösterilir. Değerlendirme beklenmedik hata verirse korumalı derlemede engellenir,
+yayında engellenmez.
+
+**Engel akışı:** `utils/supabase.ts` kararı istemciden ÖNCE verir; engelliyse gerçek istemci oluşturulmaz (oturum depolaması okunmaz),
+yerine ağ yapmayan boş istemci (`utils/blocked-client.ts`) konur. Kök yerleşim (`app/_layout.tsx`) yalnızca `ConnectionBlockedScreen`
+gösterir; oturum başlatma, veri yükleme, bildirim abonelikleri ve senkronizasyon (`AppRoot`) hiç başlamaz. Ekran adres/anahtar/kimlik göstermez.
+
+**Kalan riskler:** (1) EAS `env` değerinin gerçek derlemede paketlendiği henüz bir EAS derlemesiyle doğrulanmadı; verilmezse preview
+derlemesi "profil yok + release" sayılıp korumasız kalır (kilitlenmez). (2) `expo start --no-dev` ve yerel release derlemeleri korunmaz.
+(3) `EXPO_PUBLIC_PRODUCTION_PROJECT_REFS` boşsa geliştirme/preview bağlanmaz (bilinçli fail-closed). (4) `EXPO_PUBLIC_*` değerleri pakete
+gömülür; kimlikler gizli değildir, anahtarlar yine yalnızca publishable olmalıdır.
 
 ## 6. Gerçek veritabanında değişiklik yapmadan önce gerekenler
 1. Production şemasının **yalnızca okuma** ile çıkarılması (dashboard → Table Editor / Database → Migrations; SQL Editor'da yazma yok) ve 7 migration ile karşılaştırılması.
