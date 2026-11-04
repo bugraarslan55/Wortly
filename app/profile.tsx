@@ -20,6 +20,7 @@ import { ReviewReminderCard } from '../components/review-reminder-card';
 import { RecordingStorageCard } from '../components/recording-storage-card';
 import { LegacyRecordsCard } from '../components/legacy-records-card';
 import { AppearanceCard } from '../components/appearance-card';
+import { ProfileEditCard } from '../components/profile-edit-card';
 import { isReminderSupported } from '../utils/review-reminder';
 import { isLearningSyncEnabled } from '../utils/feature-flags';
 import { Level } from '../types';
@@ -222,6 +223,7 @@ export default function ProfileScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {/* Profil başlığı */}
         <View style={styles.hero}>
@@ -262,6 +264,10 @@ export default function ProfileScreen() {
           </View>
           <AppIcon name="chevron.right" size={14} color={colors.outline} />
         </TouchableOpacity>
+
+        {/* Profili düzenle */}
+        <SectionTitle>Profili Düzenle</SectionTitle>
+        <ProfileEditCard />
 
         {/* Öğrenme tercihleri */}
         <SectionTitle>Öğrenme tercihleri</SectionTitle>

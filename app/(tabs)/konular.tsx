@@ -6,10 +6,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useUserStore } from '../../store';
 import { getTopicsForLevel } from '../../constants/topics';
+import { GOETHE_A1_TOPIC } from '../../constants/goethe-a1';
 import { topicSymbol } from '../../constants/symbols';
 import { Spacing, getCards } from '../../constants/theme';
 import { makeStyles, useColors } from '../../hooks/use-theme';
 import { Level, Topic } from '../../types';
+import { moveTopicFirst } from '../../utils/topic-order';
 import { AppIcon } from '../../components/app-icon';
 import { EmptyState, IconTile, ScreenHeader, SearchField, SegmentedControl } from '../../components/ui';
 
@@ -35,8 +37,10 @@ export default function KonularScreen() {
 
   const filteredTopics = useMemo(() => {
     const levelTopics = allTopics.filter(t => t.level === activeLevel);
-    if (!search.trim()) return levelTopics;
-    return levelTopics.filter(t =>
+    // Goethe A1 resmi listesi A1 sekmesinde en üstte; A2 ve B1 sırası değişmez.
+    const ordered = activeLevel === 'A1' ? moveTopicFirst(levelTopics, GOETHE_A1_TOPIC.id) : levelTopics;
+    if (!search.trim()) return ordered;
+    return ordered.filter(t =>
       t.title.toLowerCase().includes(search.toLowerCase())
     );
   }, [allTopics, activeLevel, search]);
