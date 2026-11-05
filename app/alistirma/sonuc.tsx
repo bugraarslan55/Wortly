@@ -13,6 +13,7 @@ import { getReviewState } from '../../utils/spaced-repetition';
 import { ALL_TOPICS } from '../../constants/topics';
 import { useAchievementStore } from '../../store/achievements';
 import { ACHIEVEMENTS } from '../../utils/achievements';
+import { isPlanRunActive } from '../../utils/plan-run';
 
 const TYPE_LABELS: Record<string, string> = {
   flashcard: 'Flashcard',
@@ -64,6 +65,8 @@ export default function SonucScreen() {
   const canRetryWrongAnswers = RETRY_WRONG_TYPES.has(typeKey) && Boolean(wrongIds);
   const restartRoute = RESTART_ROUTES[typeKey];
   const hasTopic = Boolean(topicId);
+  // Günlük plan içinden gelindiyse yeniden başlatma/konuya dönme yerine plana dönülür.
+  const inPlan = isPlanRunActive();
 
   // Seri yalnızca gerçek bir sonuç varken (en az 1 soru) güncellenir; boş/bozuk bir bağlantıyla açılan sonuç ekranı seriyi artırmaz.
   useEffect(() => {
@@ -108,6 +111,17 @@ export default function SonucScreen() {
   const restart = () => {
     if (!restartRoute) return;
     router.replace({ pathname: restartRoute, params: topicId ? { topicId } : {} } as any);
+  };
+
+  const backToPlan = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/plan' as any);
+  };
+
+  const goHome = () => {
+    // Plan ekranı yığında açıksa onu da kapatarak ana sayfaya döner.
+    if (inPlan) router.dismissTo('/(tabs)' as any);
+    else router.replace('/(tabs)' as any);
   };
 
   const goBackToTopic = () => {
@@ -187,16 +201,22 @@ export default function SonucScreen() {
         )}
 
         <View style={styles.buttonGroup}>
-          {canRetryWrongAnswers && (
-            <PrimaryButton label="Yanlışları Tekrarla" onPress={retryWrongAnswers} />
+          {inPlan ? (
+            <PrimaryButton label="Plana Dön" onPress={backToPlan} />
+          ) : (
+            <>
+              {canRetryWrongAnswers && (
+                <PrimaryButton label="Yanlışları Tekrarla" onPress={retryWrongAnswers} />
+              )}
+              {restartRoute && (
+                canRetryWrongAnswers
+                  ? <SecondaryButton label="Baştan Çalış" onPress={restart} />
+                  : <PrimaryButton label="Tekrar Çalış" onPress={restart} />
+              )}
+              <SecondaryButton label={hasTopic ? 'Konuya Dön' : 'Kelimelerime Dön'} onPress={goBackToTopic} />
+            </>
           )}
-          {restartRoute && (
-            canRetryWrongAnswers
-              ? <SecondaryButton label="Baştan Çalış" onPress={restart} />
-              : <PrimaryButton label="Tekrar Çalış" onPress={restart} />
-          )}
-          <SecondaryButton label={hasTopic ? 'Konuya Dön' : 'Kelimelerime Dön'} onPress={goBackToTopic} />
-          <SecondaryButton label="Ana Sayfa" onPress={() => router.replace('/(tabs)' as any)} />
+          <SecondaryButton label="Ana Sayfa" onPress={goHome} />
         </View>
       </ScrollView>
     </SafeAreaView>

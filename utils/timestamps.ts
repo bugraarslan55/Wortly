@@ -24,3 +24,13 @@ export function strictTimestamp(value: unknown, now: number = Date.now()): numbe
   if (timestamp === undefined || timestamp > now + MAX_FUTURE_SKEW_MS) return undefined;
   return timestamp;
 }
+
+/**
+ * Sayım için kullanılacak "şimdi". Ekranlar zamanı yalnızca açılışta/öne gelişte/gece yarısında alır; bu yüzden
+ * çalışırken yazılan `Date.now()` damgaları bayat `now`un 5 dakikadan fazla ilerisinde kalıp `strictTimestamp`
+ * tarafından yok sayılabilir. Gerçek saat (`clock`) bayat değerden ileriyse o kullanılır; bayat değer gece yarısı
+ * yenilemesiyle gün sınırını yine belirler. Gerçekten ileri tarihli damgalar bu durumda da yok sayılır.
+ */
+export function freshNow(tickNow: number, clock: number = Date.now()): number {
+  return Number.isFinite(tickNow) ? Math.max(tickNow, clock) : clock;
+}

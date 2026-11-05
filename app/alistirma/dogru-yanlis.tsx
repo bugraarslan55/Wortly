@@ -13,6 +13,7 @@ import { ColoredGermanWord } from '../../components/colored-german-word';
 import { selectWordsForReview } from '../../utils/spaced-repetition';
 import { ExerciseHeader, ExerciseProgress, confirmLeaveExercise, useActionLock } from '../../components/exercise-ui';
 import { goBack } from '../../utils/safe-back';
+import { uniqueById } from '../../utils/unique';
 
 type Phase = 'show' | 'reveal';
 
@@ -68,7 +69,8 @@ export default function DogruYanlisScreen() {
   const distractorPool = useMemo<Word[]>(() => {
     if (!isRetry) return sessionWords;
     const topicWords = topicId ? getTopicById(topicId)?.words : undefined;
-    return topicWords ?? customWords;
+    // Konusuz çalışmada (ör. günlük plan) kelimeler birçok konudan gelebilir; yanlış seçenekler yine bu kelimelerden de seçilebilsin.
+    return topicWords ?? uniqueById([...customWords, ...sessionWords]);
   }, [isRetry, sessionWords, topicId, customWords]);
 
   const quizItems = useMemo(() => {

@@ -398,6 +398,10 @@ function AppRoot() {
           options={{ animation: 'slide_from_right' }}
         />
         <Stack.Screen
+          name="plan"
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
           name="senaryolar/index"
           options={{ animation: 'slide_from_right' }}
         />

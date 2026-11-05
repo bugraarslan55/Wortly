@@ -6,7 +6,7 @@ import { getTopicsForLevel } from '../constants/topics';
 import { BorderRadius, Spacing } from '../constants/theme';
 import { makeStyles, useColors } from '../hooks/use-theme';
 import { AnalysisCategory, analyzeLearning, DailyPlan } from '../utils/learning-analysis';
-import { reviewRouteForDue } from '../utils/study-recommendations';
+import { getPlanCandidates } from '../utils/study-plan';
 import { AppIcon } from './app-icon';
 import { Card, IconTile, PrimaryButton } from './ui';
 import { useOwnScenarioResults, useOwnSessions } from './use-achievements';
@@ -28,22 +28,29 @@ export function describeReason(plan: DailyPlan, dueCount: number): string {
   return 'Henüz yeterli verin yok. Günlük hedefine göre hazırlanan plana başlayabilirsin.';
 }
 
+/**
+ * Plana girebilecek kelimeler: seviye konuları (kilitli seviyeler yok) + kişisel kelimeler, tekilleştirilmiş.
+ * Kart, analiz ekranı ve plan oturumu aynı havuzu kullanır.
+ */
+export function usePlanCandidates() {
+  const profile = useUserStore(state => state.profile);
+  const words = useWordStore(state => state.words);
+  const level = profile?.level || 'A1';
+
+  return useMemo(() => {
+    const topicWords = getTopicsForLevel(level).flatMap(topic => topic.words);
+    return getPlanCandidates(topicWords, words ?? []);
+  }, [level, words]);
+}
+
 /** Ana sayfa kartı ve analiz ekranı aynı store verisinden aynı analizi kullanır. */
 export function useLearningAnalysis() {
   const profile = useUserStore(state => state.profile);
-  const words = useWordStore(state => state.words);
   const reviewStates = useWordStore(state => state.reviewStates);
   const sessions = useOwnSessions();
   const scenarioResults = useOwnScenarioResults();
-
-  const level = profile?.level || 'A1';
+  const candidates = usePlanCandidates();
   const dailyGoal = profile?.dailyGoal;
-
-  // Seviye konuları + kişisel kelimeler: tekrar adayları.
-  const candidates = useMemo(() => {
-    const topicWords = getTopicsForLevel(level).flatMap(topic => topic.words);
-    return [...topicWords, ...(words ?? []).filter(word => word.isCustom)];
-  }, [level, words]);
 
   return useMemo(
     () => analyzeLearning({ sessions, words: candidates, reviewStates, scenarioResults, dailyGoal }),
@@ -61,7 +68,7 @@ export function DailyPlanCard() {
   const dueCount = dueWords.length;
 
   const handleStart = () => {
-    router.push(reviewRouteForDue(dueWords) as any);
+    router.push('/plan' as any);
   };
 
   const planLabel = `${dailyPlan.wordCount} kelime · ${dailyPlan.exerciseCount} alıştırma`;
@@ -108,7 +115,7 @@ export function DailyPlanCard() {
       <PrimaryButton
         label={startLabel}
         onPress={handleStart}
-        accessibilityHint={dueCount > 0 ? 'Tekrar zamanı gelen kelimelerin çalışmasını açar' : 'Konular ekranını açar'}
+        accessibilityHint={dueCount > 0 ? 'Önerilen kelimelerle çalışma planını başlatır' : 'Önerilen planı başlatır'}
       />
     </Card>
   );

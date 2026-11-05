@@ -5,6 +5,7 @@ import { useAuthStore } from '../store/auth';
 import { useAchievementStore } from '../store/achievements';
 import type { ScenarioResult } from '../utils/learning-analysis';
 import { isOwnedByUser } from '../utils/ownership';
+import { freshNow } from '../utils/timestamps';
 import type { QuizSession } from '../types';
 import { makeIsKnownWordId } from '../utils/known-words';
 import { isStaticWordId } from '../utils/static-word-ids';
@@ -106,8 +107,10 @@ export function useLearningSnapshot(now: number): LearningSnapshot {
   // Silinmiş kelimelerin kalıntı ilerleme kayıtları "öğrenilen kelime" sayısına ve rozetlere girmesin.
   const isKnownWordId = useMemo(() => makeIsKnownWordId(words, isStaticWordId), [words]);
 
+  // `now` yalnızca açılış/öne geliş/gece yarısında yenilenir; cevap sonrası yazılan damgalar bayat `now`a göre
+  // "gelecek" sayılmasın diye veri değiştikçe gerçek saat kullanılır.
   return useMemo(() => ({
-    now,
+    now: freshNow(now),
     sessions,
     scenarioResults,
     reviewStates,

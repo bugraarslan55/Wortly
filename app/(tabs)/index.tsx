@@ -16,6 +16,7 @@ import { useDayTick } from '../../components/use-achievements';
 import { ProgressRing } from '../../components/progress-ring';
 import { Card, IconTile, SectionTitle } from '../../components/ui';
 import { countReviewedToday, getActiveStreak, normalizeDailyGoal } from '../../utils/progress-stats';
+import { freshNow } from '../../utils/timestamps';
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -38,8 +39,9 @@ export default function HomeScreen() {
   const topics = useMemo(() => getTopicsForLevel(level), [level]);
 
   // Günlük ilerleme: bugün tekrar edilen benzersiz kelime (konu + kişisel kelimeler).
+  // `now` açılışta/öne gelişte/gece yarısında yenilenir; cevap sonrası yazılan damgalar sayılsın diye gerçek saat.
   const todayCount = useMemo(
-    () => countReviewedToday(reviewStates, words, new Date(now)),
+    () => countReviewedToday(reviewStates, words, new Date(freshNow(now))),
     [reviewStates, words, now],
   );
   const dailyGoal = normalizeDailyGoal(profile?.dailyGoal);
