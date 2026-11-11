@@ -11,6 +11,10 @@ import {
   buildMiniQuizQuestion, findMiniQuizWord, getMiniQuizCandidates, MiniQuizQuestion, pickMiniQuizQuestion,
 } from '../utils/mini-quiz';
 import { createMiniQuizAnswerGuard, recordMiniQuizAnswer } from '../utils/mini-quiz-answer';
+import {
+  buildMiniQuizSummary, createMiniQuizProgress, isMiniQuizFinished, MINI_QUIZ_MAX_QUESTIONS, nextMiniQuizStep,
+  recordMiniQuizAnswer as countMiniQuizAnswer,
+} from '../utils/mini-quiz-session';
 
 export default function MiniQuizScreen() {
   const styles = useStyles();
@@ -48,13 +52,22 @@ export default function MiniQuizScreen() {
   const [question, setQuestion] = useState<MiniQuizQuestion | null>(() => createQuestion(wordId));
   if (question && shownIdsRef.current.length === 0) shownIdsRef.current.push(question.word.id);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  // Sayaç bu ekran örneğine aittir: quiz her açıldığında (yeni örnek) sıfırdan başlar.
+  const [progress, setProgress] = useState(createMiniQuizProgress);
+  const [finished, setFinished] = useState(false);
 
   const answered = selectedIndex !== null;
   const isCorrect = question !== null && selectedIndex === question.correctIndex;
+  const questionNumber = Math.min(MINI_QUIZ_MAX_QUESTIONS, answered ? progress.answered : progress.answered + 1);
+  const isLastQuestion = isMiniQuizFinished(progress);
 
   const handleClose = () => {
     if (router.canGoBack()) router.back();
     else router.replace('/');
+  };
+
+  const handleGoHome = () => {
+    router.dismissTo('/(tabs)' as any);
   };
 
   const handleSelect = (index: number) => {
@@ -62,6 +75,7 @@ export default function MiniQuizScreen() {
     lockedSerialRef.current = questionSerialRef.current; // aynı soruda ikinci dokunuş cevabı değiştiremez
     const correct = index === question.correctIndex;
     setSelectedIndex(index);
+    setProgress(current => countMiniQuizAnswer(current, correct));
 
     // Yalnızca kelime ilerlemesi (+ gün serisi) güncellenir; çalışma oturumu kaydedilmez, görev/rozet sayılarına girmez.
     void recordMiniQuizAnswer(
@@ -71,17 +85,25 @@ export default function MiniQuizScreen() {
     // Kelime durumu değişince bildirim planı useReminderSync tarafından yeniden kurulur (yeni kelime seçilir).
   };
 
+  // Sınır (5) dolunca ya da uygun soru kalmayınca quiz kapanmaz; tamamlanma özeti gösterilir. Görülen kelime tekrar sorulmaz.
   const handleContinue = () => {
-    const next = createQuestion();
-    if (!next) {
-      handleClose();
+    const step = nextMiniQuizStep(progress, shownIdsRef.current, excludeIds => pickMiniQuizQuestion({
+      level: profile?.level,
+      customWords: words,
+      reviewStates,
+      excludeIds,
+    }));
+    if (step.kind === 'complete') {
+      setFinished(true);
       return;
     }
-    shownIdsRef.current.push(next.word.id);
+    shownIdsRef.current.push(step.question.word.id);
     questionSerialRef.current += 1;
-    setQuestion(next);
+    setQuestion(step.question);
     setSelectedIndex(null);
   };
+
+  const summary = buildMiniQuizSummary(progress);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -95,10 +117,36 @@ export default function MiniQuizScreen() {
           <AppIcon name="xmark.circle.fill" size={26} color={colors.outline} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Mini Quiz</Text>
-        <View style={styles.closeButton} />
+        <View style={styles.progressSlot}>
+          {question && !finished ? (
+            <Text
+              style={styles.progressText}
+              maxFontSizeMultiplier={1.3}
+              accessibilityLabel={`Soru ${questionNumber} / ${MINI_QUIZ_MAX_QUESTIONS}`}
+            >
+              {questionNumber}/{MINI_QUIZ_MAX_QUESTIONS}
+            </Text>
+          ) : null}
+        </View>
       </View>
 
-      {question ? (
+      {finished ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>Mini Quiz tamamlandı</Text>
+          <Text style={styles.summaryScore} accessibilityLabel={`${summary.scoreText} doğru`}>{summary.scoreText}</Text>
+          <Text style={styles.emptyText}>doğru cevap</Text>
+          {summary.cutShort && <Text style={styles.emptyText}>Bugün için uygun başka soru kalmadı.</Text>}
+          <TouchableOpacity
+            style={styles.continueButton}
+            onPress={handleGoHome}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Ana ekrana dön"
+          >
+            <Text style={styles.continueButtonText}>Ana Ekrana Dön</Text>
+          </TouchableOpacity>
+        </View>
+      ) : question ? (
         <>
           <ScrollView
             style={styles.scroll}
@@ -163,9 +211,9 @@ export default function MiniQuizScreen() {
                 onPress={handleContinue}
                 activeOpacity={0.85}
                 accessibilityRole="button"
-                accessibilityLabel="Devam et"
+                accessibilityLabel={isLastQuestion ? 'Sonucu gör' : 'Devam et'}
               >
-                <Text style={styles.continueButtonText}>Devam Et</Text>
+                <Text style={styles.continueButtonText}>{isLastQuestion ? 'Sonucu Gör' : 'Devam Et'}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.closeAction}
@@ -211,6 +259,9 @@ const useStyles = makeStyles(Colors => StyleSheet.create({
   },
   closeButton: { width: 44, height: 44, alignItems: 'flex-start', justifyContent: 'center' },
   headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.primary },
+  progressSlot: { width: 44, height: 44, alignItems: 'flex-end', justifyContent: 'center' },
+  progressText: { fontSize: 14, fontWeight: '700', color: Colors.outline },
+  summaryScore: { fontSize: 48, fontWeight: '700', color: Colors.primary, textAlign: 'center' },
   scroll: { flex: 1 },
   content: { flexGrow: 1, padding: Spacing.marginMain, paddingBottom: Spacing.xl, alignItems: 'center' },
   wordCard: {
