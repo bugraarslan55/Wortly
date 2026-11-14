@@ -21,7 +21,32 @@ export type ReplyStep = {
   note?: string;
 };
 
-export type ScenarioStep = SayStep | ReplyStep;
+export type ChoiceOption = {
+  /** Kullanıcının söyleyebileceği doğal ve geçerli Almanca cevap. */
+  german: string;
+  turkish: string;
+  /** Karşı tarafın BU seçime verdiği yanıt (konuşan, adımın `speaker` alanıdır). */
+  responseGerman: string;
+  responseTurkish: string;
+};
+
+/**
+ * Karar noktası: karşı taraf bir soru sorar; kullanıcı iki doğal cevaptan birini seçer ve karşı tarafın yanıtı seçime göre
+ * değişir. Doğru/yanlış YOKTUR: puanlanmaz, "yanlışlarımı tekrar et" listesine ve kayda girmez. Akış sonraki (ortak) konuşma
+ * satırıyla devam eder; bu yüzden bir karar noktasını her zaman bir `say` adımı izler.
+ */
+export type ChoiceStep = {
+  type: 'choice';
+  speaker: string;
+  /** Karşı tarafın sorusu. */
+  german: string;
+  turkish: string;
+  /** Kullanıcıya görev metni (Türkçe). */
+  prompt: string;
+  options: [ChoiceOption, ChoiceOption];
+};
+
+export type ScenarioStep = SayStep | ReplyStep | ChoiceStep;
 
 export interface Scenario {
   id: string;
@@ -58,6 +83,27 @@ export const SCENARIOS: Scenario[] = [
         german: 'Ich möchte einen Kaffee und ein Wasser, bitte.',
         turkish: 'Bir kahve ve bir su istiyorum, lütfen.',
         wrongOptions: ['Ich habe einen Kaffee und ein Wasser.', 'Wo ist der Kaffee, bitte?'],
+      },
+      {
+        type: 'choice',
+        speaker: 'Garson',
+        german: 'Möchten Sie Ihren Kaffee mit Milch?',
+        turkish: 'Kahvenizi sütlü ister misiniz?',
+        prompt: 'Kahveni sütlü mü sütsüz mü istediğini seç.',
+        options: [
+          {
+            german: 'Ja, mit Milch, bitte.',
+            turkish: 'Evet, sütlü olsun, lütfen.',
+            responseGerman: 'Alles klar, ein Kaffee mit Milch.',
+            responseTurkish: 'Tamam, sütlü bir kahve.',
+          },
+          {
+            german: 'Nein, ohne Milch, bitte.',
+            turkish: 'Hayır, sütsüz olsun, lütfen.',
+            responseGerman: 'Alles klar, ein schwarzer Kaffee.',
+            responseTurkish: 'Tamam, sade bir kahve.',
+          },
+        ],
       },
       {
         type: 'say',
@@ -138,6 +184,27 @@ export const SCENARIOS: Scenario[] = [
         german: 'Und wo kaufe ich eine Fahrkarte?',
         turkish: 'Peki bileti nereden alırım?',
         wrongOptions: ['Und wo wohnen Sie?', 'Und wo ist das Hotel?'],
+      },
+      {
+        type: 'choice',
+        speaker: 'Görevli',
+        german: 'Fahren Sie einfach oder hin und zurück?',
+        turkish: 'Tek yön mü gidiyorsunuz, yoksa gidiş-dönüş mü?',
+        prompt: 'Nasıl bir bilet istediğini seç.',
+        options: [
+          {
+            german: 'Nur einfach, bitte.',
+            turkish: 'Sadece tek yön, lütfen.',
+            responseGerman: 'Gut, dann brauchen Sie eine einfache Fahrkarte.',
+            responseTurkish: 'İyi, o zaman tek yön bir bilete ihtiyacınız var.',
+          },
+          {
+            german: 'Hin und zurück, bitte.',
+            turkish: 'Gidiş-dönüş, lütfen.',
+            responseGerman: 'Gut, dann brauchen Sie eine Rückfahrkarte.',
+            responseTurkish: 'İyi, o zaman gidiş-dönüş bir bilete ihtiyacınız var.',
+          },
+        ],
       },
       {
         type: 'say',
@@ -252,6 +319,27 @@ export const SCENARIOS: Scenario[] = [
         note: '"mit Karte" = kartla ("mit" her zaman Dativ ister). "bar" = nakit.',
       },
       {
+        type: 'choice',
+        speaker: 'Kasiyer',
+        german: 'Brauchen Sie eine Tüte?',
+        turkish: 'Poşet ister misiniz?',
+        prompt: 'Poşet isteyip istemediğini seç.',
+        options: [
+          {
+            german: 'Ja, bitte. Eine Tüte.',
+            turkish: 'Evet, lütfen. Bir poşet.',
+            responseGerman: 'Gern. Die Tüte kostet zehn Cent.',
+            responseTurkish: 'Tabii. Poşet on sent.',
+          },
+          {
+            german: 'Nein, danke. Ich habe eine Tasche.',
+            turkish: 'Hayır, teşekkürler. Çantam var.',
+            responseGerman: 'Sehr gut. Das ist gut für die Umwelt.',
+            responseTurkish: 'Çok iyi. Bu çevre için iyi.',
+          },
+        ],
+      },
+      {
         type: 'say',
         speaker: 'Kasiyer',
         german: 'Bitte schön. Hier ist Ihr Kassenbon.',
@@ -341,6 +429,27 @@ export const SCENARIOS: Scenario[] = [
           '"heißen" ad söylemek içindir; meslek için "sein" kullan.',
         ],
         note: 'Kadınsan "Ich bin Studentin" dersin. Meslekte "sein" kullanılır: ich bin ...',
+      },
+      {
+        type: 'choice',
+        speaker: 'Anna',
+        german: 'Hast du ein Hobby?',
+        turkish: 'Bir hobin var mı?',
+        prompt: 'Hobini seç.',
+        options: [
+          {
+            german: 'Ja, ich spiele gern Fußball.',
+            turkish: 'Evet, futbol oynamayı severim.',
+            responseGerman: 'Cool! Ich spiele auch manchmal Fußball.',
+            responseTurkish: 'Harika! Ben de ara sıra futbol oynarım.',
+          },
+          {
+            german: 'Ja, ich lese gern Bücher.',
+            turkish: 'Evet, kitap okumayı severim.',
+            responseGerman: 'Schön! Ich lese gern Krimis.',
+            responseTurkish: 'Güzel! Ben polisiye romanları severek okurum.',
+          },
+        ],
       },
       {
         type: 'say',
@@ -434,6 +543,27 @@ export const SCENARIOS: Scenario[] = [
         note: '"Das stimmt." = Doğru. / Bu doğru.',
       },
       {
+        type: 'choice',
+        speaker: 'Resepsiyonist',
+        german: 'Brauchen Sie Hilfe mit dem Gepäck?',
+        turkish: 'Bagajınız için yardıma ihtiyacınız var mı?',
+        prompt: 'Bagaj için yardım isteyip istemediğini seç.',
+        options: [
+          {
+            german: 'Ja, gern. Vielen Dank!',
+            turkish: 'Evet, memnuniyetle. Çok teşekkürler!',
+            responseGerman: 'Gern. Mein Kollege bringt die Koffer aufs Zimmer.',
+            responseTurkish: 'Rica ederim. Meslektaşım bavulları odaya getirir.',
+          },
+          {
+            german: 'Nein, danke. Das geht schon.',
+            turkish: 'Hayır, teşekkürler. Ben hallederim.',
+            responseGerman: 'Kein Problem. Der Aufzug ist dort rechts.',
+            responseTurkish: 'Sorun değil. Asansör şurada sağda.',
+          },
+        ],
+      },
+      {
         type: 'say',
         speaker: 'Resepsiyonist',
         german: 'Hier ist Ihr Schlüssel. Das Zimmer ist im zweiten Stock, Zimmer 205.',
@@ -523,6 +653,27 @@ export const SCENARIOS: Scenario[] = [
           'Yer sormak gerekiyordu; bu soru adını soruyor.',
         ],
         note: '"Wo ist ...?" yer sorar. "die Post" = postane (dişil).',
+      },
+      {
+        type: 'choice',
+        speaker: 'Yoldan geçen',
+        german: 'Möchten Sie Briefmarken kaufen oder ein Paket abholen?',
+        turkish: 'Pul mu almak istiyorsunuz, yoksa paket mi teslim alacaksınız?',
+        prompt: 'Postaneye neden gittiğini seç.',
+        options: [
+          {
+            german: 'Ich möchte Briefmarken kaufen.',
+            turkish: 'Pul almak istiyorum.',
+            responseGerman: 'Gut. Briefmarken bekommen Sie am Schalter eins.',
+            responseTurkish: 'İyi. Pulları bir numaralı gişeden alırsınız.',
+          },
+          {
+            german: 'Ich möchte ein Paket abholen.',
+            turkish: 'Bir paket teslim almak istiyorum.',
+            responseGerman: 'Gut. Ihr Paket bekommen Sie am Schalter zwei.',
+            responseTurkish: 'İyi. Paketinizi iki numaralı gişeden alırsınız.',
+          },
+        ],
       },
       {
         type: 'say',
@@ -657,6 +808,27 @@ export const SCENARIOS: Scenario[] = [
         note: 'Sipariş: "Ein/Eine/Einen ..., bitte." "der Saft" eril olduğu için "einen".',
       },
       {
+        type: 'choice',
+        speaker: 'Garson',
+        german: 'Möchten Sie das Wasser mit oder ohne Kohlensäure?',
+        turkish: 'Suyu gazlı mı gazsız mı istersiniz?',
+        prompt: 'Suyunu gazlı mı gazsız mı istediğini seç.',
+        options: [
+          {
+            german: 'Mit Kohlensäure, bitte.',
+            turkish: 'Gazlı, lütfen.',
+            responseGerman: 'Sehr gut, ein Sprudelwasser.',
+            responseTurkish: 'Çok iyi, gazlı bir su.',
+          },
+          {
+            german: 'Ohne Kohlensäure, bitte.',
+            turkish: 'Gazsız, lütfen.',
+            responseGerman: 'Sehr gut, ein stilles Wasser.',
+            responseTurkish: 'Çok iyi, gazsız bir su.',
+          },
+        ],
+      },
+      {
         type: 'say',
         speaker: 'Garson',
         german: 'Gern. Und was möchten Sie essen?',
@@ -752,6 +924,27 @@ export const SCENARIOS: Scenario[] = [
         ],
       },
       {
+        type: 'choice',
+        speaker: 'Sekreter',
+        german: 'Waren Sie schon einmal bei uns in der Praxis?',
+        turkish: 'Daha önce muayenehanemize geldiniz mi?',
+        prompt: 'Daha önce bu muayenehaneye gelip gelmediğini seç.',
+        options: [
+          {
+            german: 'Ja, ich war letztes Jahr schon einmal bei Ihnen.',
+            turkish: 'Evet, geçen yıl bir kez size gelmiştim.',
+            responseGerman: 'Gut, dann finde ich Ihre Daten im Computer.',
+            responseTurkish: 'İyi, o zaman bilgilerinizi bilgisayarda bulurum.',
+          },
+          {
+            german: 'Nein, ich war noch nie bei Ihnen.',
+            turkish: 'Hayır, daha önce hiç gelmedim.',
+            responseGerman: 'Dann brauche ich später einige Angaben von Ihnen.',
+            responseTurkish: 'O zaman sizden biraz sonra bazı bilgiler almam gerekecek.',
+          },
+        ],
+      },
+      {
         type: 'say',
         speaker: 'Sekreter',
         german: 'Das tut mir leid. Können Sie morgen um neun Uhr kommen?',
@@ -813,6 +1006,27 @@ export const SCENARIOS: Scenario[] = [
         wrongOptions: [
           'Vielen Dank. Wie viele Kinder haben Sie?',
           'Vielen Dank. Ich habe die Wohnung gestern verkauft.',
+        ],
+      },
+      {
+        type: 'choice',
+        speaker: 'Ev sahibi',
+        german: 'Gern. Möchten Sie zuerst die Küche oder das Wohnzimmer sehen?',
+        turkish: 'Memnuniyetle. Önce mutfağı mı yoksa oturma odasını mı görmek istersiniz?',
+        prompt: 'Önce hangi odayı görmek istediğini seç.',
+        options: [
+          {
+            german: 'Ich möchte zuerst die Küche sehen.',
+            turkish: 'Önce mutfağı görmek istiyorum.',
+            responseGerman: 'Dann kommen Sie mit. Die Küche ist hier links und ganz neu.',
+            responseTurkish: 'O zaman gelin. Mutfak burada solda ve tamamen yeni.',
+          },
+          {
+            german: 'Ich möchte zuerst das Wohnzimmer sehen.',
+            turkish: 'Önce oturma odasını görmek istiyorum.',
+            responseGerman: 'Dann kommen Sie mit. Das Wohnzimmer ist hier rechts und sehr hell.',
+            responseTurkish: 'O zaman gelin. Oturma odası burada sağda ve çok aydınlık.',
+          },
         ],
       },
       {
@@ -900,6 +1114,27 @@ export const SCENARIOS: Scenario[] = [
         ],
       },
       {
+        type: 'choice',
+        speaker: 'Eczacı',
+        german: 'Haben Sie eine Allergie gegen Medikamente?',
+        turkish: 'İlaçlara karşı alerjiniz var mı?',
+        prompt: 'İlaç alerjin olup olmadığını seç.',
+        options: [
+          {
+            german: 'Ja, ich habe eine Allergie gegen Penicillin.',
+            turkish: 'Evet, penisiline alerjim var.',
+            responseGerman: 'Danke, das ist wichtig. Ich schreibe es auf.',
+            responseTurkish: 'Teşekkürler, bu önemli. Not alıyorum.',
+          },
+          {
+            german: 'Nein, ich habe keine Allergie.',
+            turkish: 'Hayır, alerjim yok.',
+            responseGerman: 'Gut, dann gibt es hier kein Problem.',
+            responseTurkish: 'İyi, o zaman bu konuda bir sorun yok.',
+          },
+        ],
+      },
+      {
         type: 'say',
         speaker: 'Eczacı',
         german:
@@ -971,6 +1206,27 @@ export const SCENARIOS: Scenario[] = [
         wrongOptions: [
           'Nein, ich habe beides zu Hause gelassen. Ich komme morgen wieder.',
           'Ja, ich habe beides gestern verloren. Hier sind meine Schlüssel.',
+        ],
+      },
+      {
+        type: 'choice',
+        speaker: 'Banka danışmanı',
+        german: 'Möchten Sie die Unterlagen auf Deutsch oder auf Englisch bekommen?',
+        turkish: 'Belgeleri Almanca mı yoksa İngilizce mi almak istersiniz?',
+        prompt: 'Belgelerin hangi dilde olmasını istediğini seç.',
+        options: [
+          {
+            german: 'Auf Deutsch, bitte. Ich möchte üben.',
+            turkish: 'Almanca, lütfen. Pratik yapmak istiyorum.',
+            responseGerman: 'Sehr gut. Dann gebe ich Ihnen die deutschen Unterlagen.',
+            responseTurkish: 'Çok iyi. O zaman size Almanca belgeleri veririm.',
+          },
+          {
+            german: 'Auf Englisch, bitte. Das ist einfacher für mich.',
+            turkish: 'İngilizce, lütfen. Bu benim için daha kolay.',
+            responseGerman: 'Kein Problem. Wir haben die Unterlagen auch auf Englisch.',
+            responseTurkish: 'Sorun değil. Belgelerimiz İngilizce olarak da var.',
+          },
         ],
       },
       {
@@ -1069,6 +1325,27 @@ export const SCENARIOS: Scenario[] = [
         ],
       },
       {
+        type: 'choice',
+        speaker: 'Görevli',
+        german: 'Hat Ihr Rucksack ein besonderes Zeichen, zum Beispiel einen Anhänger?',
+        turkish: 'Sırt çantanızın özel bir işareti var mı, örneğin bir süs ya da anahtarlık?',
+        prompt: 'Çantanın özel bir işareti olup olmadığını seç.',
+        options: [
+          {
+            german: 'Ja, am Reißverschluss hängt ein roter Anhänger.',
+            turkish: 'Evet, fermuarda kırmızı bir süs asılı.',
+            responseGerman: 'Das hilft mir. Ich suche nach einem roten Anhänger.',
+            responseTurkish: 'Bu bana yardımcı olur. Kırmızı bir süs arıyorum.',
+          },
+          {
+            german: 'Nein, er hat kein besonderes Zeichen.',
+            turkish: 'Hayır, özel bir işareti yok.',
+            responseGerman: 'Kein Problem. Ich prüfe dann die Beschreibung.',
+            responseTurkish: 'Sorun değil. O zaman tarifi kontrol ederim.',
+          },
+        ],
+      },
+      {
         type: 'say',
         speaker: 'Görevli',
         german:
@@ -1130,6 +1407,27 @@ export const SCENARIOS: Scenario[] = [
         wrongOptions: [
           'Ich bin gestern nach München gefahren. Heute habe ich keinen Termin.',
           'Ich möchte nach München fahren, aber ich habe keine Lust auf einen Termin.',
+        ],
+      },
+      {
+        type: 'choice',
+        speaker: 'Bilgi masası',
+        german: 'Möchten Sie die Informationen auch per SMS bekommen?',
+        turkish: 'Bilgileri SMS ile de almak ister misiniz?',
+        prompt: 'Bilgileri SMS ile isteyip istemediğini seç.',
+        options: [
+          {
+            german: 'Ja, bitte. Das ist praktisch.',
+            turkish: 'Evet, lütfen. Bu pratik.',
+            responseGerman: 'Gern. Ich brauche nur Ihre Handynummer.',
+            responseTurkish: 'Memnuniyetle. Yalnızca cep telefonu numaranıza ihtiyacım var.',
+          },
+          {
+            german: 'Nein, danke. Ich schaue auf die Anzeigetafel.',
+            turkish: 'Hayır, teşekkürler. Bilgi ekranına bakarım.',
+            responseGerman: 'Gut. Die Anzeigetafel ist dort drüben.',
+            responseTurkish: 'İyi. Bilgi ekranı şurada.',
+          },
         ],
       },
       {
@@ -1195,6 +1493,27 @@ export const SCENARIOS: Scenario[] = [
         wrongOptions: [
           'Ja, die Suppe ist sehr lecker. Ich möchte noch eine Portion.',
           'Leider nicht. Ich habe die Suppe gestern zu heiß gekocht.',
+        ],
+      },
+      {
+        type: 'choice',
+        speaker: 'Garson',
+        german: 'Moment, möchten Sie lieber an einem anderen Tisch sitzen? Hier ist es etwas kühl.',
+        turkish: 'Bir dakika, başka bir masada oturmak ister misiniz? Burası biraz serin.',
+        prompt: 'Masa değiştirip değiştirmeyeceğini seç.',
+        options: [
+          {
+            german: 'Ja, bitte. Hier ist es mir zu kühl.',
+            turkish: 'Evet, lütfen. Burası bana fazla serin.',
+            responseGerman: 'Natürlich. Der Tisch am Fenster ist frei.',
+            responseTurkish: 'Tabii. Pencere kenarındaki masa boş.',
+          },
+          {
+            german: 'Nein, danke. Ich bleibe hier.',
+            turkish: 'Hayır, teşekkürler. Burada kalıyorum.',
+            responseGerman: 'Gut. Dann bleiben Sie bitte hier.',
+            responseTurkish: 'İyi. O zaman lütfen burada kalın.',
+          },
         ],
       },
       {
@@ -1293,6 +1612,27 @@ export const SCENARIOS: Scenario[] = [
         ],
       },
       {
+        type: 'choice',
+        speaker: 'Okul danışması',
+        german: 'Möchten Sie lieber in einer kleinen oder in einer großen Gruppe lernen?',
+        turkish: 'Küçük bir grupta mı yoksa büyük bir grupta mı öğrenmeyi tercih edersiniz?',
+        prompt: 'Grup büyüklüğü tercihini seç.',
+        options: [
+          {
+            german: 'In einer kleinen Gruppe. Dann kann ich mehr sprechen.',
+            turkish: 'Küçük bir grupta. O zaman daha çok konuşabilirim.',
+            responseGerman: 'Gut. Unsere Gruppen haben höchstens zwölf Teilnehmer.',
+            responseTurkish: 'İyi. Gruplarımızda en fazla on iki katılımcı var.',
+          },
+          {
+            german: 'Das ist mir egal.',
+            turkish: 'Fark etmez.',
+            responseGerman: 'Kein Problem. Dann passt jeder Kurs zu Ihnen.',
+            responseTurkish: 'Sorun değil. O zaman her kurs size uyar.',
+          },
+        ],
+      },
+      {
         type: 'say',
         speaker: 'Okul danışması',
         german:
@@ -1370,6 +1710,27 @@ export const SCENARIOS: Scenario[] = [
         wrongOptions: [
           'Nein, danke. Ich brauche keine Hilfe, ich bin gestern schon fertig geworden.',
           'Ja, gern! Können wir das Sofa zusammen kaufen? Es ist ziemlich billig.',
+        ],
+      },
+      {
+        type: 'choice',
+        speaker: 'Komşu',
+        german: 'Soll ich noch meinen Mann holen? Zu dritt geht es leichter.',
+        turkish: 'Eşimi de çağırayım mı? Üç kişi olunca daha kolay olur.',
+        prompt: 'Yardım için bir kişi daha çağrılsın mı, seç.',
+        options: [
+          {
+            german: 'Ja, bitte. Das ist eine gute Idee.',
+            turkish: 'Evet, lütfen. Bu iyi bir fikir.',
+            responseGerman: 'Gut, ich hole ihn schnell. Dann kann es losgehen.',
+            responseTurkish: 'Tamam, hemen onu çağırırım. O zaman başlayabiliriz.',
+          },
+          {
+            german: 'Nein, danke. Zu zweit schaffen wir das.',
+            turkish: 'Hayır, teşekkürler. İkimiz bunu başarırız.',
+            responseGerman: 'Gut, dann fangen wir gleich an.',
+            responseTurkish: 'Tamam, o zaman hemen başlayalım.',
+          },
         ],
       },
       {
@@ -1451,6 +1812,27 @@ export const SCENARIOS: Scenario[] = [
         wrongOptions: [
           'Ja, ich habe zwei Jahre in einem Krankenhaus gearbeitet. Ich mag keine Kunden.',
           'Nein, ich habe noch nie gearbeitet und möchte auch nicht arbeiten.',
+        ],
+      },
+      {
+        type: 'choice',
+        speaker: 'Şirket asistanı',
+        german: 'Sprechen Sie noch andere Sprachen außer Deutsch?',
+        turkish: 'Almancanın dışında başka diller de konuşuyor musunuz?',
+        prompt: 'Hangi dilleri konuştuğunu seç.',
+        options: [
+          {
+            german: 'Ja, ich spreche Türkisch und ein bisschen Englisch.',
+            turkish: 'Evet, Türkçe ve biraz İngilizce konuşuyorum.',
+            responseGerman: 'Das ist sehr gut für unsere Kunden.',
+            responseTurkish: 'Bu müşterilerimiz için çok iyi.',
+          },
+          {
+            german: 'Ich spreche nur Deutsch und Türkisch.',
+            turkish: 'Yalnızca Almanca ve Türkçe konuşuyorum.',
+            responseGerman: 'Das reicht für die Stelle auch aus.',
+            responseTurkish: 'Bu pozisyon için o da yeterli.',
+          },
         ],
       },
       {
@@ -1544,6 +1926,27 @@ export const SCENARIOS: Scenario[] = [
           '"spielen" ve "essen" haben ile kurulur; "sind" yanlış yardımcı fiildir.',
         ],
         note: 'Perfekt: haben + Partizip II (en sonda). spielen → gespielt, essen → gegessen.',
+      },
+      {
+        type: 'choice',
+        speaker: 'Lena',
+        german: 'Und wie war das Wetter bei euch?',
+        turkish: 'Peki sizde hava nasıldı?',
+        prompt: 'Havanın nasıl olduğunu anlat.',
+        options: [
+          {
+            german: 'Es war sonnig. Wir hatten viel Glück.',
+            turkish: 'Hava güneşliydi. Çok şanslıydık.',
+            responseGerman: 'Wie schön! Bei mir hat es leider geregnet.',
+            responseTurkish: 'Ne güzel! Benim tarafta ne yazık ki yağmur yağdı.',
+          },
+          {
+            german: 'Es hat ein bisschen geregnet.',
+            turkish: 'Biraz yağmur yağdı.',
+            responseGerman: 'Oh, schade! Bei mir war es zum Glück sonnig.',
+            responseTurkish: 'Ah, yazık! Benim tarafta neyse ki hava güneşliydi.',
+          },
+        ],
       },
       {
         type: 'say',
@@ -1667,6 +2070,27 @@ export const SCENARIOS: Scenario[] = [
         ],
       },
       {
+        type: 'choice',
+        speaker: 'İK Uzmanı',
+        german: 'Würden Sie lieber in einem kleinen Team oder in einer großen Abteilung arbeiten?',
+        turkish: 'Küçük bir ekipte mi yoksa büyük bir departmanda mı çalışmayı tercih edersiniz?',
+        prompt: 'Çalışma ortamı tercihini gerekçesiyle seç.',
+        options: [
+          {
+            german: 'Ich würde lieber in einem kleinen Team arbeiten, weil man sich dort schneller abstimmen kann.',
+            turkish: 'Küçük bir ekipte çalışmayı tercih ederim, çünkü orada insan daha hızlı anlaşabilir.',
+            responseGerman: 'Das verstehe ich. Bei uns haben die meisten Teams nur fünf bis acht Mitarbeiter.',
+            responseTurkish: 'Bunu anlıyorum. Bizde çoğu ekipte yalnızca beş ila sekiz çalışan var.',
+          },
+          {
+            german: 'Ich würde lieber in einer großen Abteilung arbeiten, weil man dort mehr von anderen lernen kann.',
+            turkish: 'Büyük bir departmanda çalışmayı tercih ederim, çünkü orada insan başkalarından daha çok şey öğrenebilir.',
+            responseGerman: 'Das sehen wir ähnlich. Unsere größte Abteilung hat über vierzig Mitarbeiter.',
+            responseTurkish: 'Biz de benzer düşünüyoruz. En büyük departmanımızda kırktan fazla çalışan var.',
+          },
+        ],
+      },
+      {
         type: 'say',
         speaker: 'İK Uzmanı',
         german: 'Was sind Ihre größten Stärken?',
@@ -1739,6 +2163,27 @@ export const SCENARIOS: Scenario[] = [
         wrongOptions: [
           'Guten Tag. Ich möchte mich abmelden, weil ich nach Hause fliege.',
           'Guten Tag. Ich habe meinen Pass verloren und suche ein Hotel.',
+        ],
+      },
+      {
+        type: 'choice',
+        speaker: 'Memur',
+        german: 'Möchten Sie das Formular auf Deutsch oder auf Englisch ausfüllen?',
+        turkish: 'Formu Almanca mı yoksa İngilizce mi doldurmak istersiniz?',
+        prompt: 'Formu hangi dilde dolduracağını seç.',
+        options: [
+          {
+            german: 'Auf Deutsch, bitte. Wenn ich eine Frage habe, melde ich mich.',
+            turkish: 'Almanca, lütfen. Bir sorum olursa haber veririm.',
+            responseGerman: 'Gut, dann gebe ich Ihnen das deutsche Formular.',
+            responseTurkish: 'İyi, o zaman size Almanca formu veririm.',
+          },
+          {
+            german: 'Auf Englisch, bitte, weil ich die Wörter dann besser verstehe.',
+            turkish: 'İngilizce, lütfen, çünkü o zaman kelimeleri daha iyi anlarım.',
+            responseGerman: 'Kein Problem, wir haben das Formular auch auf Englisch.',
+            responseTurkish: 'Sorun değil, formumuz İngilizce olarak da var.',
+          },
         ],
       },
       {
@@ -1843,6 +2288,27 @@ export const SCENARIOS: Scenario[] = [
         ],
       },
       {
+        type: 'choice',
+        speaker: 'Müdür',
+        german: 'Soll ich selbst mit dem Lieferanten sprechen, oder möchten Sie das übernehmen?',
+        turkish: 'Tedarikçiyle ben mi konuşayım, yoksa bunu siz mi üstlenmek istersiniz?',
+        prompt: 'Tedarikçiyle kimin konuşacağını gerekçesiyle seç.',
+        options: [
+          {
+            german: 'Es wäre gut, wenn Sie mit ihm sprechen würden, weil er dann schneller reagiert.',
+            turkish: 'Sizin onunla konuşmanız iyi olur, çünkü o zaman daha hızlı tepki verir.',
+            responseGerman: 'Einverstanden, ich rufe ihn heute Nachmittag an.',
+            responseTurkish: 'Anlaştık, onu bugün öğleden sonra ararım.',
+          },
+          {
+            german: 'Ich würde das gern selbst übernehmen, weil ich den Lieferanten schon lange kenne.',
+            turkish: 'Bunu kendim üstlenmek isterim, çünkü tedarikçiyi uzun zamandır tanıyorum.',
+            responseGerman: 'Einverstanden, dann kümmern Sie sich bitte darum.',
+            responseTurkish: 'Anlaştık, o zaman lütfen siz ilgilenin.',
+          },
+        ],
+      },
+      {
         type: 'say',
         speaker: 'Müdür',
         german: 'Gut. Während Sie auf das Material warten, sollten Sie den Kunden informieren. Wer übernimmt das?',
@@ -1937,6 +2403,27 @@ export const SCENARIOS: Scenario[] = [
         wrongOptions: [
           'Ich habe keine Fotos gemacht, weil ich das Auto schon verkauft habe.',
           'Die Werkstatt schätzt den Schaden auf zwölf Euro, deshalb brauche ich keine Fotos.',
+        ],
+      },
+      {
+        type: 'choice',
+        speaker: 'Sigorta danışmanı',
+        german: 'Wie möchten Sie bei Rückfragen erreicht werden, per Telefon oder per E-Mail?',
+        turkish: 'Sorular çıkarsa size nasıl ulaşalım, telefonla mı yoksa e-postayla mı?',
+        prompt: 'Hangi iletişim yolunu istediğini seç.',
+        options: [
+          {
+            german: 'Am liebsten per E-Mail, weil ich tagsüber im Büro nicht telefonieren kann.',
+            turkish: 'En çok e-postayla, çünkü gün içinde ofiste telefonla konuşamıyorum.',
+            responseGerman: 'Gut, dann schreiben wir Ihnen nur per E-Mail.',
+            responseTurkish: 'İyi, o zaman size yalnızca e-postayla yazarız.',
+          },
+          {
+            german: 'Am liebsten per Telefon, weil das schneller geht.',
+            turkish: 'En çok telefonla, çünkü bu daha hızlı.',
+            responseGerman: 'Gut, dann rufen wir Sie unter Ihrer Nummer an.',
+            responseTurkish: 'İyi, o zaman numaranızdan sizi ararız.',
+          },
         ],
       },
       {
@@ -2045,6 +2532,27 @@ export const SCENARIOS: Scenario[] = [
         ],
       },
       {
+        type: 'choice',
+        speaker: 'Ev sahibi',
+        german: 'Soll ich Ihnen den Vertrag in Papierform mitgeben, oder möchten Sie ihn lieber als PDF per E-Mail bekommen?',
+        turkish: 'Sözleşmeyi size basılı olarak mı vereyim, yoksa e-postayla PDF olarak mı almak istersiniz?',
+        prompt: 'Sözleşmeyi hangi biçimde almak istediğini seç.',
+        options: [
+          {
+            german: 'Bitte in Papierform, damit ich ihn in Ruhe markieren kann.',
+            turkish: 'Lütfen basılı olarak, böylece rahatça işaretleyebilirim.',
+            responseGerman: 'Gern, ich gebe Ihnen eine Kopie mit. Das Original behalte ich hier.',
+            responseTurkish: 'Memnuniyetle, size bir kopya veririm. Aslını burada saklarım.',
+          },
+          {
+            german: 'Bitte als PDF per E-Mail, weil ich ihn dann auch am Computer lesen kann.',
+            turkish: 'Lütfen e-postayla PDF olarak, çünkü o zaman bilgisayarda da okuyabilirim.',
+            responseGerman: 'Gern, ich schicke Ihnen den Vertrag gleich per E-Mail.',
+            responseTurkish: 'Memnuniyetle, sözleşmeyi hemen size e-postayla gönderirim.',
+          },
+        ],
+      },
+      {
         type: 'say',
         speaker: 'Ev sahibi',
         german: 'Selbstverständlich. Bis morgen Abend reicht völlig.',
@@ -2091,6 +2599,27 @@ export const SCENARIOS: Scenario[] = [
         wrongOptions: [
           'In die Beine strahlt er nicht aus, aber letzte Woche ich habe schwere Kisten getragen.',
           'Ja, er strahlt in die Beine aus, deshalb habe ich letzte Woche keine Kisten getragen.',
+        ],
+      },
+      {
+        type: 'choice',
+        speaker: 'Doktor',
+        german: 'Ich würde Ihren Rücken gern kurz untersuchen. Möchten Sie sich dafür hinsetzen oder hinlegen?',
+        turkish: 'Sırtınızı kısaca muayene etmek isterim. Bunun için oturmak mı yoksa uzanmak mı istersiniz?',
+        prompt: 'Muayene için nasıl durmak istediğini seç.',
+        options: [
+          {
+            german: 'Ich setze mich lieber hin, weil das Liegen wehtut.',
+            turkish: 'Oturmayı tercih ederim, çünkü uzanmak acıtıyor.',
+            responseGerman: 'In Ordnung. Dann setzen Sie sich bitte auf den Stuhl.',
+            responseTurkish: 'Tamam. O zaman lütfen sandalyeye oturun.',
+          },
+          {
+            german: 'Ich lege mich lieber hin, weil mein Rücken dann entspannter ist.',
+            turkish: 'Uzanmayı tercih ederim, çünkü o zaman sırtım daha rahat.',
+            responseGerman: 'In Ordnung. Dann legen Sie sich bitte auf die Liege.',
+            responseTurkish: 'Tamam. O zaman lütfen muayene yatağına uzanın.',
+          },
         ],
       },
       {
@@ -2180,6 +2709,27 @@ export const SCENARIOS: Scenario[] = [
         ],
       },
       {
+        type: 'choice',
+        speaker: 'Acente çalışanı',
+        german: 'Reisen Sie allein oder mit Ihrer Familie?',
+        turkish: 'Yalnız mı seyahat ediyorsunuz, yoksa ailenizle mi?',
+        prompt: 'Kiminle seyahat edeceğini seç.',
+        options: [
+          {
+            german: 'Ich reise allein, deshalb brauche ich nur einen Platz.',
+            turkish: 'Yalnız seyahat ediyorum, bu yüzden yalnızca bir yere ihtiyacım var.',
+            responseGerman: 'Gut, dann suche ich nur einen Platz.',
+            responseTurkish: 'İyi, o zaman yalnızca bir yer ararım.',
+          },
+          {
+            german: 'Ich reise mit meinem Bruder, deshalb brauche ich zwei Plätze.',
+            turkish: 'Erkek kardeşimle seyahat ediyorum, bu yüzden iki yere ihtiyacım var.',
+            responseGerman: 'Gut, dann suche ich zwei Plätze nebeneinander.',
+            responseTurkish: 'İyi, o zaman yan yana iki yer ararım.',
+          },
+        ],
+      },
+      {
         type: 'say',
         speaker: 'Acente çalışanı',
         german:
@@ -2250,6 +2800,27 @@ export const SCENARIOS: Scenario[] = [
         wrongOptions: [
           'Ja, ich habe einen Termin. Ich möchte meine Aufenthaltserlaubnis verlängern, weil sie läuft Ende des Monats ab.',
           'Nein, ich habe keinen Termin. Ich möchte meine Aufenthaltserlaubnis abgeben, obwohl sie noch zwei Jahre gültig ist.',
+        ],
+      },
+      {
+        type: 'choice',
+        speaker: 'Memur',
+        german: 'Verstehe. Möchten Sie, dass ich langsamer spreche, oder wollen Sie die Informationen lieber schriftlich?',
+        turkish: 'Anlıyorum. Daha yavaş konuşmamı mı istersiniz, yoksa bilgileri yazılı olarak mı almak istersiniz?',
+        prompt: 'Açıklamanın nasıl yapılmasını istediğini seç.',
+        options: [
+          {
+            german: 'Bitte sprechen Sie etwas langsamer, dann verstehe ich alles.',
+            turkish: 'Lütfen biraz daha yavaş konuşun, o zaman her şeyi anlarım.',
+            responseGerman: 'Gern, ich spreche langsam und deutlich.',
+            responseTurkish: 'Memnuniyetle, yavaş ve net konuşurum.',
+          },
+          {
+            german: 'Bitte geben Sie mir die Informationen auch schriftlich.',
+            turkish: 'Lütfen bilgileri bana yazılı olarak da verin.',
+            responseGerman: 'Gern, ich schreibe Ihnen alles auf ein Blatt.',
+            responseTurkish: 'Memnuniyetle, size her şeyi bir kâğıda yazarım.',
+          },
         ],
       },
       {
@@ -2407,6 +2978,27 @@ export const SCENARIOS: Scenario[] = [
         ],
       },
       {
+        type: 'choice',
+        speaker: 'İK Uzmanı',
+        german: 'Noch eine Frage: Ab wann könnten Sie bei uns anfangen?',
+        turkish: 'Bir sorum daha var: Ne zamandan itibaren bizde başlayabilirsiniz?',
+        prompt: 'Ne zaman başlayabileceğini gerekçesiyle seç.',
+        options: [
+          {
+            german: 'Ich könnte in vier Wochen anfangen, weil meine Kündigungsfrist dann endet.',
+            turkish: 'Dört hafta sonra başlayabilirim, çünkü ihbar sürem o zaman bitiyor.',
+            responseGerman: 'Das passt gut. Wir möchten die Stelle bis zum Ersten besetzen.',
+            responseTurkish: 'Bu iyi uyuyor. Pozisyonu ayın birine kadar doldurmak istiyoruz.',
+          },
+          {
+            german: 'Ich könnte erst in zwei Monaten anfangen, weil ich noch ein Projekt abschließen muss.',
+            turkish: 'Ancak iki ay sonra başlayabilirim, çünkü önce bir projeyi bitirmem gerekiyor.',
+            responseGerman: 'Das ist kein Problem. Wir können den Starttermin später festlegen.',
+            responseTurkish: 'Sorun değil. Başlangıç tarihini daha sonra belirleyebiliriz.',
+          },
+        ],
+      },
+      {
         type: 'say',
         speaker: 'İK Uzmanı',
         german: 'Perfekt. Dann sprechen wir am Donnerstag. Einen schönen Tag noch!',
@@ -2455,6 +3047,27 @@ export const SCENARIOS: Scenario[] = [
         wrongOptions: [
           'Ich würde das gesamte Team streichen, damit wir mehr Budget haben.',
           'Ich würde mehr Broschüren drucken, obwohl niemand sie liest.',
+        ],
+      },
+      {
+        type: 'choice',
+        speaker: 'Takım lideri',
+        german: 'Interessant. Möchten Sie Ihren Vorschlag lieber mit Zahlen oder mit einem Beispiel begründen?',
+        turkish: 'İlginç. Önerinizi daha çok rakamlarla mı yoksa bir örnekle mi gerekçelendirmek istersiniz?',
+        prompt: 'Önerini nasıl gerekçelendireceğini seç.',
+        options: [
+          {
+            german: 'Ich würde ihn mit Zahlen begründen, weil das die meisten Kollegen überzeugt.',
+            turkish: 'Rakamlarla gerekçelendirirdim, çünkü bu çoğu meslektaşı ikna eder.',
+            responseGerman: 'Gute Idee. Frau Weber hat dazu aktuelle Zahlen.',
+            responseTurkish: 'İyi fikir. Weber Hanım bu konuda güncel rakamlara sahip.',
+          },
+          {
+            german: 'Ich würde ein Beispiel nennen, weil das leichter zu verstehen ist.',
+            turkish: 'Bir örnek verirdim, çünkü bu daha kolay anlaşılır.',
+            responseGerman: 'Gute Idee. Vielleicht hat Frau Weber dazu auch Zahlen.',
+            responseTurkish: 'İyi fikir. Belki Weber Hanım bu konuda rakamlara da sahiptir.',
+          },
         ],
       },
       {

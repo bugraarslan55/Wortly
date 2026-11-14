@@ -1,7 +1,10 @@
-import type { ReplyStep, Scenario, ScenarioStep } from '../constants/scenarios';
+import type { ChoiceOption, ChoiceStep, ReplyStep, Scenario, ScenarioStep } from '../constants/scenarios';
 import type { ScenarioResult } from './learning-analysis';
 
 // Senaryo oynatıcısının saf mantığı (ekran, ses ve depolama bağımlılığı yok; test edilebilir).
+//
+// Karar noktaları (`choice` adımı): doğru/yanlış değildir; iki geçerli cevaptan biri seçilir ve karşı tarafın yanıtı seçime
+// göre değişir, akış ortak devama bağlanır. Seçimler puana, yanlış listesine ve kayda GİRMEZ (ilerleme haritasından ayrıdır).
 //
 // Model: senaryolar doğrusal bir diyalogdur (say → reply → say ...). Dallanma yoktur: yanlış cevap seçenek
 // kartını devre dışı bırakır ve kullanıcı konuşmaya doğru cevapla devam eder; böylece yanlış cevap hiçbir
@@ -63,8 +66,69 @@ export function answerOption(progress: ProgressMap, index: number, option: Pick<
 
 export const isReply = (step: ScenarioStep | undefined): step is ReplyStep => step?.type === 'reply';
 
+export const isChoice = (step: ScenarioStep | undefined): step is ChoiceStep => step?.type === 'choice';
+
+/** Yalnızca puanlanan (doğru/yanlış) sorular sayılır; karar noktaları soru değildir. */
 export function countQuestions(steps: readonly ScenarioStep[]): number {
   return steps.filter(isReply).length;
+}
+
+export function countChoices(steps: readonly ScenarioStep[]): number {
+  return steps.filter(isChoice).length;
+}
+
+/** Kullanıcının seçimleri: adım indeksi → seçilen seçenek (0 ya da 1). Puan/kayıt haritasından (ProgressMap) ayrıdır. */
+export type ChoiceMap = Record<number, 0 | 1>;
+
+export interface ChoiceOutcome {
+  /** Kullanıcının seçtiği cevap (Almanca + Türkçe). */
+  chosen: Pick<ChoiceOption, 'german' | 'turkish'>;
+  /** Karşı tarafın bu seçime verdiği yanıt. */
+  response: { speaker: string; german: string; turkish: string };
+}
+
+/** Seçime göre karşı tarafın yanıtı. Seçim yoksa/geçersizse null. Saf: hiçbir şeyi kaydetmez. */
+export function choiceOutcome(step: ChoiceStep | undefined, selected: number | undefined): ChoiceOutcome | null {
+  if (!step || (selected !== 0 && selected !== 1)) return null;
+  const option = step.options[selected];
+  if (!option) return null;
+  return {
+    chosen: { german: option.german, turkish: option.turkish },
+    response: { speaker: step.speaker, german: option.responseGerman, turkish: option.responseTurkish },
+  };
+}
+
+export interface HistoryEntry {
+  key: string;
+  speaker: string;
+  german: string;
+  /** Kullanıcının söylediği satır mı? */
+  user: boolean;
+}
+
+/**
+ * Bağlam için `index`ten önceki son `count` konuşma satırı. Cevap adımı kullanıcının doğru cevabını, karar noktası ise
+ * karşı tarafın sorusunu, (seçildiyse) kullanıcının seçtiği cevabı ve karşı tarafın yanıtını verir.
+ */
+export function buildHistory(
+  steps: readonly ScenarioStep[], index: number, choices: ChoiceMap = {}, count = 2,
+): HistoryEntry[] {
+  const entries: HistoryEntry[] = [];
+  steps.slice(0, Math.max(0, index)).forEach((step, stepIndex) => {
+    if (step.type === 'say') {
+      entries.push({ key: `s${stepIndex}`, speaker: step.speaker, german: step.german, user: false });
+    } else if (step.type === 'reply') {
+      entries.push({ key: `r${stepIndex}`, speaker: 'Sen', german: step.german, user: true });
+    } else {
+      entries.push({ key: `c${stepIndex}q`, speaker: step.speaker, german: step.german, user: false });
+      const outcome = choiceOutcome(step, choices[stepIndex]);
+      if (outcome) {
+        entries.push({ key: `c${stepIndex}u`, speaker: 'Sen', german: outcome.chosen.german, user: true });
+        entries.push({ key: `c${stepIndex}a`, speaker: outcome.response.speaker, german: outcome.response.german, user: false });
+      }
+    }
+  });
+  return entries.slice(-count);
 }
 
 export interface ScenarioScore {
@@ -152,9 +216,14 @@ export function reviewPrevious(run: ReviewRun): ReviewRun {
 }
 
 /** Sonraki adıma geçilebilir mi? (Replik adımında önce doğru cevap seçilmeli.) */
-export function canContinue(step: ScenarioStep | undefined, state: StepProgress | undefined): boolean {
+export function canContinue(
+  step: ScenarioStep | undefined, state: StepProgress | undefined, choice?: number,
+): boolean {
   if (!step) return false;
-  return step.type === 'say' || !!state?.solved;
+  if (step.type === 'say') return true;
+  // Karar noktasında bir cevap seçilmeden ilerlenmez; seçim doğru/yanlış değildir.
+  if (step.type === 'choice') return choice === 0 || choice === 1;
+  return !!state?.solved;
 }
 
 /** Yarıda çıkış uyarısı gerekir mi? (İlerleme var ve senaryo bitmedi.) */
@@ -202,13 +271,36 @@ export function validateScenario(scenario: Scenario | undefined | null): string[
   let replies = 0;
   steps.forEach((step, index) => {
     const at = `adım ${index + 1}`;
-    if (!step || (step.type !== 'say' && step.type !== 'reply')) {
+    if (!step || (step.type !== 'say' && step.type !== 'reply' && step.type !== 'choice')) {
       issues.push(`${at}: geçersiz tür`);
       return;
     }
     if (!step.german?.trim() || !step.turkish?.trim()) issues.push(`${at}: Almanca/Türkçe metin eksik`);
     if (step.type === 'say') {
       if (!step.speaker?.trim()) issues.push(`${at}: konuşan yok`);
+      return;
+    }
+    if (step.type === 'choice') {
+      if (!step.speaker?.trim()) issues.push(`${at}: konuşan yok`);
+      if (!step.prompt?.trim()) issues.push(`${at}: görev metni yok`);
+      const options = step.options;
+      if (!Array.isArray(options) || options.length !== 2) {
+        issues.push(`${at}: karar noktasında iki seçenek gerekli`);
+      } else {
+        const complete = options.every(option =>
+          option?.german?.trim() && option.turkish?.trim() && option.responseGerman?.trim() && option.responseTurkish?.trim());
+        if (!complete) issues.push(`${at}: seçenek ve yanıt metinleri eksik`);
+        else {
+          const [first, second] = options;
+          if (first.german.trim().toLowerCase() === second.german.trim().toLowerCase()) issues.push(`${at}: seçenekler farklı olmalı`);
+          if (first.responseGerman.trim().toLowerCase() === second.responseGerman.trim().toLowerCase()) {
+            issues.push(`${at}: seçime göre yanıtlar farklı olmalı`);
+          }
+        }
+      }
+      // Ortak devam: karar noktasından sonra konuşma satırı gelmeli (bağlam ve "cevap replikten sonra gelir" kuralı korunur).
+      if (steps[index + 1]?.type !== 'say') issues.push(`${at}: karar noktasından sonra ortak devam (konuşma satırı) gerekli`);
+      if (steps[index - 1]?.type === 'choice') issues.push(`${at}: art arda iki karar noktası olamaz`);
       return;
     }
     replies += 1;
