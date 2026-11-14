@@ -108,6 +108,49 @@ export function learnedPhrases(steps: readonly ScenarioStep[], progress: Progres
   return phrases;
 }
 
+/**
+ * İlk denemede yanlış cevaplanan cevap adımlarının indeksleri (sonradan doğru bilinse de), senaryodaki sırasıyla.
+ * Yalnızca ana turun ilerlemesinden okunur; hiçbir şeyi değiştirmez ve kaydetmez.
+ */
+export function missedStepIndexes(steps: readonly ScenarioStep[], progress: ProgressMap): number[] {
+  const missed: number[] = [];
+  steps.forEach((step, index) => {
+    if (isReply(step) && (progress[index]?.wrongIds.length ?? 0) > 0) missed.push(index);
+  });
+  return missed;
+}
+
+/**
+ * "Yanlışlarımı Tekrar Et" turu: yalnızca yanlış cevaplanan adımlar, senaryodaki sırasıyla. Tur ayrı bir ilerleme haritasında
+ * oynanır; ana turun puanını, sonuç kaydını ve diğer verileri etkilemez.
+ */
+export interface ReviewRun {
+  /** Senaryo adımlarına indeksler (artan sırada). */
+  indexes: number[];
+  /** `indexes` içindeki konum. */
+  position: number;
+}
+
+/** Yanlış cevap yoksa null (buton gösterilmez). */
+export function startReview(steps: readonly ScenarioStep[], progress: ProgressMap): ReviewRun | null {
+  const indexes = missedStepIndexes(steps, progress);
+  return indexes.length > 0 ? { indexes, position: 0 } : null;
+}
+
+export const reviewStepIndex = (run: ReviewRun): number => run.indexes[run.position]!;
+
+export const isLastReviewStep = (run: ReviewRun): boolean => run.position >= run.indexes.length - 1;
+
+/** Sonraki yanlış adım; tur bittiyse null (sonuç ekranına dönülür). Girdiyi değiştirmez. */
+export function reviewNext(run: ReviewRun): ReviewRun | null {
+  return isLastReviewStep(run) ? null : { ...run, position: run.position + 1 };
+}
+
+/** Önceki yanlış adım; ilk adımdaysa aynı konumda kalır. Girdiyi değiştirmez. */
+export function reviewPrevious(run: ReviewRun): ReviewRun {
+  return run.position > 0 ? { ...run, position: run.position - 1 } : run;
+}
+
 /** Sonraki adıma geçilebilir mi? (Replik adımında önce doğru cevap seçilmeli.) */
 export function canContinue(step: ScenarioStep | undefined, state: StepProgress | undefined): boolean {
   if (!step) return false;

@@ -9,8 +9,9 @@ import {
   getScenarioById, getScenarioMeta, isScenarioLevelLocked, ReplyStep, Scenario, ScenarioStep,
 } from '../../constants/scenarios';
 import {
-  answerOption, buildOptions, canContinue as canContinueStep, createNavigationLock, createOnceGuard, EMPTY_PROGRESS, isPlayableScenario,
-  isReply, learnedPhrases, needsExitConfirm, Option, ProgressMap, scoreScenario,
+  answerOption, buildOptions, canContinue as canContinueStep, createNavigationLock, createOnceGuard, EMPTY_PROGRESS, isLastReviewStep,
+  isPlayableScenario, isReply, learnedPhrases, missedStepIndexes, needsExitConfirm, Option, ProgressMap, ReviewRun, reviewNext,
+  reviewPrevious, reviewStepIndex, scoreScenario, startReview,
 } from '../../utils/scenario-engine';
 import { Spacing, BorderRadius, Shadows } from '../../constants/theme';
 import { makeStyles, useColors } from '../../hooks/use-theme';
@@ -98,9 +99,16 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
   const colors = useColors();
   const navigation = useNavigation();
   const [round, setRound] = useState(0);
-  const [index, setIndex] = useState(0);
+  const [mainIndex, setIndex] = useState(0);
   const [finished, setFinished] = useState(false);
   const [progress, setProgress] = useState<ProgressMap>({});
+  // "Yanlışlarımı Tekrar Et": yalnızca yanlış adımları oynatan ayrı tur. Cevapları AYRI haritada tutulur; ana ilerleme, puan,
+  // sonuç kaydı ve seri bu turdan etkilenmez (kayıt efekti yalnızca `finished`/`round`/ana puana bağlıdır).
+  const [review, setReview] = useState<ReviewRun | null>(null);
+  const [reviewProgress, setReviewProgress] = useState<ProgressMap>({});
+  const [reviewPass, setReviewPass] = useState(0);
+  // Oynatılan adım: ana turda sıradaki adım, tekrar turunda yanlış adımlardan biri.
+  const index = review ? reviewStepIndex(review) : mainIndex;
   const [shownTranslations, setShownTranslations] = useState<Record<number, boolean>>({});
   // Ortak ses kontrolcüsü: eski istekler iptal edilir; ekran kapanınca ve arka plana geçince ses durur.
   const { speak: speakText, stop: stopSpeech, speakingRate: speakingMode } = useGermanSpeech();
@@ -114,25 +122,27 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
   const step = steps[index];
   const meta = getScenarioMeta(scenario.id);
 
-  // Seçenekler her açılışta ve "Tekrar çalış"ta yeniden karıştırılır.
+  // Seçenekler her açılışta, "Tekrar çalış"ta ve her yanlış-tekrar turunda yeniden karıştırılır.
   const optionsByStep = useMemo(() => {
     const map: Record<number, Option[]> = {};
     steps.forEach((item, stepIndex) => {
       if (isReply(item)) map[stepIndex] = buildOptions(item);
     });
     return map;
-  }, [steps, round]);
+  }, [steps, round, reviewPass]);
 
   useEffect(() => {
     stopSpeech();
-  }, [index, finished, stopSpeech]);
+  }, [index, finished, review, stopSpeech]);
 
   const speak = (text: string, mode: 'normal' | 'slow') => {
     void speakText(text, mode);
   };
 
-  const stepProgress = progress[index] ?? EMPTY_PROGRESS;
-  const canContinue = canContinueStep(step, progress[index]);
+  const activeProgress = review ? reviewProgress : progress;
+  const stepProgress = activeProgress[index] ?? EMPTY_PROGRESS;
+  const canContinue = canContinueStep(step, activeProgress[index]);
+  // Puan her zaman ANA turun ilerlemesinden hesaplanır (tekrar turu puanı değiştirmez).
   const score = scoreScenario(steps, progress);
 
   // Yarıda çıkış (geri düğmesi, kaydırma hareketi, başlık geri okları): ilerleme varsa onay iste.
@@ -181,16 +191,27 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
   }, [finished, round, session?.user.id, scenario.id, score.correct, score.total, saveScenarioResult]);
 
   const handleOptionPress = (option: Option) => {
-    setProgress(current => answerOption(current, index, option));
+    // Tekrar turundaki cevaplar yalnızca tekrar turunun haritasına yazılır (ana puan ve kayıt değişmez).
+    if (review) setReviewProgress(current => answerOption(current, index, option));
+    else setProgress(current => answerOption(current, index, option));
   };
 
   const handleNext = () => {
     if (!canContinue || !nextLock.current.tryAcquire()) return;
+    if (review) {
+      // Son yanlış adımdan sonra tekrar biter ve sonuç ekranına dönülür (reviewNext bitişte null verir).
+      setReview(reviewNext(review));
+      return;
+    }
     if (index >= steps.length - 1) setFinished(true);
     else setIndex(index + 1);
   };
 
   const handlePrevious = () => {
+    if (review) {
+      setReview(reviewPrevious(review));
+      return;
+    }
     if (index > 0) setIndex(index - 1);
   };
 
@@ -198,8 +219,25 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
     setRound(value => value + 1);
     setIndex(0);
     setProgress({});
+    setReview(null);
+    setReviewProgress({});
     setShownTranslations({});
     setFinished(false);
+  };
+
+  const handleReviewMistakes = () => {
+    const run = startReview(steps, progress);
+    if (!run) return;
+    setReviewProgress({});
+    setShownTranslations({});
+    setReviewPass(value => value + 1);
+    setReview(run);
+  };
+
+  /** Tekrar turundan sonuç ekranına döner (sonuç zaten kaydedildi; kaybolan bir şey yok). */
+  const handleLeaveReview = () => {
+    stopSpeech();
+    setReview(null);
   };
 
   const handleExit = () => {
@@ -207,8 +245,9 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
     onExit();
   };
 
-  if (finished) {
+  if (finished && !review) {
     const phrases = learnedPhrases(steps, progress);
+    const missedCount = missedStepIndexes(steps, progress).length;
     return (
       <SafeAreaView style={styles.safe}>
         <ScrollView contentContainerStyle={styles.resultContent} showsVerticalScrollIndicator={false}>
@@ -262,6 +301,15 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
             ))}
           </View>
 
+          {missedCount > 0 && (
+            <PrimaryButton
+              label="Yanlışlarımı Tekrar Et"
+              onPress={handleReviewMistakes}
+              icon="arrow.triangle.2.circlepath"
+              accessibilityHint={`İlk denemede yanlış yaptığın ${missedCount} soruyu yeniden oynatır; puanını değiştirmez`}
+              style={styles.fullWidth}
+            />
+          )}
           <PrimaryButton label="Tekrar Çalış" onPress={handleReplay} icon="arrow.clockwise" style={styles.fullWidth} />
           <SecondaryButton label="Senaryolara Dön" onPress={handleExit} style={styles.fullWidth} />
         </ScrollView>
@@ -270,45 +318,87 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
   }
 
   const options = optionsByStep[index] ?? [];
-  const showTranslation = !!shownTranslations[index];
-  const isLast = index === steps.length - 1;
+  // Tekrar turunda ilerleme yalnızca yanlış adımlar içinde sayılır.
+  const position = review ? review.position + 1 : index + 1;
+  const total = review ? review.indexes.length : steps.length;
+  const isLast = review ? isLastReviewStep(review) : index === steps.length - 1;
+  const atFirst = review ? review.position === 0 : index === 0;
   const current: ScenarioStep = step;
   const reply: ReplyStep | null = isReply(current) ? current : null;
   const lastWrongId = stepProgress.wrongIds[stepProgress.wrongIds.length - 1];
   const lastWrong = options.find(option => option.id === lastWrongId);
-  // Önceki iki konuşma satırı bağlam olarak gösterilir (konuşmanın içinde olma hissi).
-  const history = steps.slice(Math.max(0, index - 2), index);
+  // Önceki iki konuşma satırı bağlam olarak gösterilir (konuşmanın içinde olma hissi). Tekrar turunda bağlam, sorudan hemen
+  // önceki konuşma satırıdır (tam metin, dinle ve çeviri ile).
+  const history = review ? [] : steps.slice(Math.max(0, index - 2), index);
+  const contextIndex = review ? index - 1 : -1;
+  const contextStep = contextIndex >= 0 ? steps[contextIndex] : undefined;
+
+  const renderSayBubble = (item: Extract<ScenarioStep, { type: 'say' }>, itemIndex: number) => {
+    const showTranslation = !!shownTranslations[itemIndex];
+    return (
+      <View style={styles.bubbleRow}>
+        <View style={styles.avatar} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          <AppIcon name="person.crop.circle.fill" size={26} color={colors.primary} />
+        </View>
+        <View style={styles.bubble}>
+          <Text style={styles.speakerText}>{item.speaker}</Text>
+          <Text style={styles.germanText}>{item.german}</Text>
+          <ListenButtons text={item.german} speakingMode={speakingMode} onSpeak={speak} />
+          <TouchableOpacity
+            style={styles.translationToggle}
+            onPress={() => setShownTranslations(state => ({ ...state, [itemIndex]: !state[itemIndex] }))}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+          >
+            <Text style={styles.translationToggleText}>
+              {showTranslation ? 'Türkçeyi gizle' : 'Türkçeyi göster'}
+            </Text>
+          </TouchableOpacity>
+          {showTranslation && <Text style={styles.turkishText}>{item.turkish}</Text>}
+        </View>
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={handleExit}
+          onPress={review ? handleLeaveReview : handleExit}
           style={styles.headerBack}
           accessibilityRole="button"
-          accessibilityLabel="Geri"
+          accessibilityLabel={review ? 'Sonuç ekranına dön' : 'Geri'}
         >
-          <Text style={styles.headerBackText}>← Geri</Text>
+          <Text style={styles.headerBackText}>{review ? '← Sonuç' : '← Geri'}</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>{scenario.title}</Text>
         <Text
           style={styles.headerProgress}
-          accessibilityLabel={`${steps.length} adımın ${index + 1}. adımı`}
+          accessibilityLabel={`${total} adımın ${position}. adımı`}
         >
-          {index + 1} / {steps.length}
+          {position} / {total}
         </Text>
       </View>
       <View style={styles.progressWrap}>
-        <ProgressBar value={index + 1} max={steps.length} label={`Adım ${index + 1} / ${steps.length}`} />
+        <ProgressBar value={position} max={total} label={`Adım ${position} / ${total}`} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {review && (
+          <View style={styles.reviewBanner} accessibilityRole="summary">
+            <Text style={styles.reviewBannerTitle}>Yanlışlarını tekrar ediyorsun</Text>
+            <Text style={styles.reviewBannerText}>Bu turdaki cevaplar ilk sonucunu ve puanını değiştirmez.</Text>
+          </View>
+        )}
+
         <View style={styles.placeRow}>
           <AppIcon name="mappin.and.ellipse" size={12} color={colors.secondary} />
           <Text style={styles.placeText}>
             {scenario.place}{meta ? ` · ${meta.germanTitle}` : ''}
           </Text>
         </View>
+
+        {contextStep?.type === 'say' && renderSayBubble(contextStep, contextIndex)}
 
         {history.map((item, offset) => (
           <View
@@ -329,29 +419,7 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
           </View>
         )}
 
-        {current.type === 'say' && (
-          <View style={styles.bubbleRow}>
-            <View style={styles.avatar} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-              <AppIcon name="person.crop.circle.fill" size={26} color={colors.primary} />
-            </View>
-            <View style={styles.bubble}>
-              <Text style={styles.speakerText}>{current.speaker}</Text>
-              <Text style={styles.germanText}>{current.german}</Text>
-              <ListenButtons text={current.german} speakingMode={speakingMode} onSpeak={speak} />
-              <TouchableOpacity
-                style={styles.translationToggle}
-                onPress={() => setShownTranslations(state => ({ ...state, [index]: !state[index] }))}
-                activeOpacity={0.8}
-                accessibilityRole="button"
-              >
-                <Text style={styles.translationToggleText}>
-                  {showTranslation ? 'Türkçeyi gizle' : 'Türkçeyi göster'}
-                </Text>
-              </TouchableOpacity>
-              {showTranslation && <Text style={styles.turkishText}>{current.turkish}</Text>}
-            </View>
-          </View>
-        )}
+        {current.type === 'say' && renderSayBubble(current, index)}
 
         {reply && !stepProgress.solved && (
           <View style={styles.options}>
@@ -428,9 +496,9 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
 
       <View style={styles.bottomBar}>
         <TouchableOpacity
-          style={[styles.navBtn, styles.navBtnBack, index === 0 && styles.navBtnDisabled]}
+          style={[styles.navBtn, styles.navBtnBack, atFirst && styles.navBtnDisabled]}
           onPress={handlePrevious}
-          disabled={index === 0}
+          disabled={atFirst}
           activeOpacity={0.85}
           accessibilityRole="button"
           accessibilityLabel="Önceki adım"
@@ -443,9 +511,9 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
           disabled={!canContinue}
           activeOpacity={0.85}
           accessibilityRole="button"
-          accessibilityLabel={isLast ? 'Senaryoyu bitir' : 'Sonraki adım'}
+          accessibilityLabel={isLast ? (review ? 'Tekrarı bitir ve sonuca dön' : 'Senaryoyu bitir') : 'Sonraki adım'}
         >
-          <Text style={styles.navBtnNextText}>{isLast ? 'Bitir' : 'Devam →'}</Text>
+          <Text style={styles.navBtnNextText}>{isLast ? (review ? 'Sonuca dön' : 'Bitir') : 'Devam →'}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -466,6 +534,12 @@ const useStyles = makeStyles(Colors => StyleSheet.create({
   headerProgress: { minWidth: 64, textAlign: 'right', fontSize: 13, fontWeight: '700', color: Colors.secondary },
   progressWrap: { paddingHorizontal: Spacing.marginMain },
   content: { padding: Spacing.marginMain, paddingBottom: Spacing.xl, gap: Spacing.md },
+  reviewBanner: {
+    width: '100%', gap: 2, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm + 2, borderRadius: BorderRadius.lg,
+    backgroundColor: Colors.surfaceContainerLow, borderWidth: 1, borderColor: Colors.outlineVariant,
+  },
+  reviewBannerTitle: { fontSize: 13, fontWeight: '700', color: Colors.primary },
+  reviewBannerText: { fontSize: 12, lineHeight: 17, color: Colors.onSurfaceVariant },
   placeRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   placeText: { fontSize: 12, fontWeight: '600', color: Colors.onSurfaceVariant, flexShrink: 1 },
   historyBubble: {
