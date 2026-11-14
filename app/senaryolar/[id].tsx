@@ -6,11 +6,11 @@ import { useSessionStore, useUserStore } from '../../store';
 import { useGermanSpeech } from '../../utils/use-german-speech';
 import { useAuthStore } from '../../store/auth';
 import {
-  getScenarioById, getScenarioMeta, isScenarioLevelLocked, ReplyStep, Scenario, ScenarioStep,
+  ChoiceStep, getScenarioById, getScenarioMeta, isScenarioLevelLocked, ReplyStep, Scenario, ScenarioStep,
 } from '../../constants/scenarios';
 import {
-  answerOption, buildOptions, canContinue as canContinueStep, createNavigationLock, createOnceGuard, EMPTY_PROGRESS, isLastReviewStep,
-  isPlayableScenario, isReply, learnedPhrases, missedStepIndexes, needsExitConfirm, Option, ProgressMap, ReviewRun, reviewNext,
+  answerOption, buildHistory, buildOptions, canContinue as canContinueStep, ChoiceMap, choiceOutcome, createNavigationLock,
+  createOnceGuard, EMPTY_PROGRESS, isLastReviewStep, isPlayableScenario, isReply, learnedPhrases, missedStepIndexes, needsExitConfirm, Option, ProgressMap, ReviewRun, reviewNext,
   reviewPrevious, reviewStepIndex, scoreScenario, startReview,
 } from '../../utils/scenario-engine';
 import { Spacing, BorderRadius, Shadows } from '../../constants/theme';
@@ -107,6 +107,8 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
   const [review, setReview] = useState<ReviewRun | null>(null);
   const [reviewProgress, setReviewProgress] = useState<ProgressMap>({});
   const [reviewPass, setReviewPass] = useState(0);
+  // Karar noktası seçimleri: puan/kayıt haritasından (progress) AYRIDIR; doğru/yanlış değildir ve hiçbir yere kaydedilmez.
+  const [choices, setChoices] = useState<ChoiceMap>({});
   // Oynatılan adım: ana turda sıradaki adım, tekrar turunda yanlış adımlardan biri.
   const index = review ? reviewStepIndex(review) : mainIndex;
   const [shownTranslations, setShownTranslations] = useState<Record<number, boolean>>({});
@@ -141,7 +143,7 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
 
   const activeProgress = review ? reviewProgress : progress;
   const stepProgress = activeProgress[index] ?? EMPTY_PROGRESS;
-  const canContinue = canContinueStep(step, activeProgress[index]);
+  const canContinue = canContinueStep(step, activeProgress[index], choices[index]);
   // Puan her zaman ANA turun ilerlemesinden hesaplanır (tekrar turu puanı değiştirmez).
   const score = scoreScenario(steps, progress);
 
@@ -196,6 +198,11 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
     else setProgress(current => answerOption(current, index, option));
   };
 
+  /** Karar noktasında bir cevap seçer (değiştirilebilir). Puanı, yanlış listesini ve kaydı etkilemez. */
+  const handleChoicePress = (selected: 0 | 1) => {
+    setChoices(current => (current[index] === selected ? current : { ...current, [index]: selected }));
+  };
+
   const handleNext = () => {
     if (!canContinue || !nextLock.current.tryAcquire()) return;
     if (review) {
@@ -219,6 +226,7 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
     setRound(value => value + 1);
     setIndex(0);
     setProgress({});
+    setChoices({});
     setReview(null);
     setReviewProgress({});
     setShownTranslations({});
@@ -329,11 +337,11 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
   const lastWrong = options.find(option => option.id === lastWrongId);
   // Önceki iki konuşma satırı bağlam olarak gösterilir (konuşmanın içinde olma hissi). Tekrar turunda bağlam, sorudan hemen
   // önceki konuşma satırıdır (tam metin, dinle ve çeviri ile).
-  const history = review ? [] : steps.slice(Math.max(0, index - 2), index);
+  const history = review ? [] : buildHistory(steps, index, choices, 2);
   const contextIndex = review ? index - 1 : -1;
   const contextStep = contextIndex >= 0 ? steps[contextIndex] : undefined;
 
-  const renderSayBubble = (item: Extract<ScenarioStep, { type: 'say' }>, itemIndex: number) => {
+  const renderSayBubble = (item: { speaker: string; german: string; turkish: string }, itemIndex: number) => {
     const showTranslation = !!shownTranslations[itemIndex];
     return (
       <View style={styles.bubbleRow}>
@@ -357,6 +365,62 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
           {showTranslation && <Text style={styles.turkishText}>{item.turkish}</Text>}
         </View>
       </View>
+    );
+  };
+
+  // Karar noktası: iki doğal cevap, seçime göre değişen karşı taraf yanıtı. Doğru/yanlış yok; puana ve kayda girmez.
+  const renderChoice = (item: ChoiceStep) => {
+    const selected = choices[index];
+    const outcome = choiceOutcome(item, selected);
+    return (
+      <>
+        {renderSayBubble(item, index)}
+        <View style={styles.promptCard}>
+          <Text style={styles.promptLabel}>Senin görevin</Text>
+          <Text style={styles.promptText}>{item.prompt}</Text>
+        </View>
+        <View style={styles.options} accessibilityLabel="Cevap seçenekleri">
+          {item.options.map((option, optionIndex) => {
+            const chosen = selected === optionIndex;
+            return (
+              <TouchableOpacity
+                key={optionIndex}
+                style={[styles.option, chosen && styles.optionChosen]}
+                onPress={() => handleChoicePress(optionIndex === 0 ? 0 : 1)}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel={`Cevap ${OPTION_LETTERS[optionIndex]}: ${option.german}. ${option.turkish}`}
+                accessibilityHint="Bu cevap puanı etkilemez; karşı tarafın yanıtı seçimine göre değişir"
+                accessibilityState={{ selected: chosen }}
+              >
+                <View style={[styles.optionLetter, chosen && styles.optionLetterChosen]}>
+                  <Text style={styles.optionLetterText}>{OPTION_LETTERS[optionIndex]}</Text>
+                </View>
+                <View style={styles.choiceTexts}>
+                  <Text style={styles.choiceGerman}>{option.german}</Text>
+                  <Text style={styles.choiceTurkish}>{option.turkish}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {outcome && (
+          <>
+            <View style={[styles.bubbleRow, styles.bubbleRowUser]}>
+              <View style={[styles.bubble, styles.bubbleUser]}>
+                <Text style={styles.speakerText}>Sen</Text>
+                <Text style={styles.germanText}>{outcome.chosen.german}</Text>
+                <ListenButtons text={outcome.chosen.german} speakingMode={speakingMode} onSpeak={speak} />
+              </View>
+            </View>
+            {renderSayBubble(outcome.response, 1000 + index)}
+            <Text style={styles.choiceNote} accessibilityLiveRegion="polite">
+              İki cevap da doğal ve doğru. Diğerini seçip karşı tarafın yanıtını da görebilirsin; bu seçim puanını etkilemez.
+            </Text>
+          </>
+        )}
+      </>
     );
   };
 
@@ -400,14 +464,14 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
 
         {contextStep?.type === 'say' && renderSayBubble(contextStep, contextIndex)}
 
-        {history.map((item, offset) => (
+        {history.map(item => (
           <View
-            key={`h-${index - history.length + offset}`}
-            style={[styles.historyBubble, item.type === 'reply' && styles.historyBubbleUser]}
+            key={`h-${item.key}`}
+            style={[styles.historyBubble, item.user && styles.historyBubbleUser]}
             accessibilityElementsHidden
             importantForAccessibility="no-hide-descendants"
           >
-            <Text style={styles.historySpeaker}>{item.type === 'say' ? item.speaker : 'Sen'}</Text>
+            <Text style={styles.historySpeaker}>{item.speaker}</Text>
             <Text style={styles.historyText} numberOfLines={2}>{item.german}</Text>
           </View>
         ))}
@@ -420,6 +484,7 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
         )}
 
         {current.type === 'say' && renderSayBubble(current, index)}
+        {current.type === 'choice' && renderChoice(current)}
 
         {reply && !stepProgress.solved && (
           <View style={styles.options}>
@@ -586,6 +651,12 @@ const useStyles = makeStyles(Colors => StyleSheet.create({
     padding: Spacing.md, borderWidth: 1.5, borderColor: Colors.outlineVariant, ...Shadows.level1,
   },
   optionWrong: { backgroundColor: Colors.errorContainer, borderColor: Colors.error },
+  optionChosen: { borderColor: Colors.golden },
+  optionLetterChosen: { backgroundColor: Colors.golden },
+  choiceTexts: { flex: 1, gap: 2 },
+  choiceGerman: { fontSize: 16, fontWeight: '600', color: Colors.primary, lineHeight: 22 },
+  choiceTurkish: { fontSize: 13, color: Colors.onSurfaceVariant, lineHeight: 18 },
+  choiceNote: { fontSize: 12, lineHeight: 17, color: Colors.onSurfaceVariant, textAlign: 'center' },
   optionLetter: {
     width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.surfaceContainer,
     alignItems: 'center', justifyContent: 'center',
