@@ -1,7 +1,7 @@
 import type { ComponentType } from 'react';
 import { StyleProp, View, ViewStyle } from 'react-native';
 import {
-  ArrowRight, AudioLines, BadgeCheck, Bell, BookOpen, Briefcase, Bus, ChartColumn,
+  ArrowRight, AudioLines, BadgeCheck, Bell, BookOpen, Bookmark, Briefcase, Bus, ChartColumn,
   ChevronLeft, ChevronRight, Circle, CircleCheck, CircleQuestionMark, CircleUser, CircleX,
   CalendarCheck, Check, Compass, Contrast, Copy, Eye, EyeOff, Flame, Footprints, GraduationCap, Medal, Hand, Hash, House, Inbox, Layers, Library, Lightbulb, List, Lock,
   Mail, MapPin, MessagesSquare, Mic, Moon, Palette, Pause, PencilLine, Play, Plus, Quote, RefreshCw,
@@ -55,6 +55,8 @@ const ICONS: Record<string, IconDef> = {
   'medal': { Icon: Medal },
   'xmark': { Icon: X },
   'trash': { Icon: Trash },
+  'bookmark': { Icon: Bookmark },
+  'bookmark.fill': { Icon: Bookmark, solid: true },
   'square.and.pencil': { Icon: SquarePen },
   'pencil.line': { Icon: PencilLine },
   'rectangle.on.rectangle.angled': { Icon: Copy },
