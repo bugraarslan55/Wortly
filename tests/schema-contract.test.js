@@ -99,12 +99,20 @@ const csv = (text) => text.split(',').map(s => s.trim()).filter(Boolean);
 const stringConst = (name) => store.match(new RegExp(`const ${name} = '([^']*)'`))[1];
 const unionValues = (typeName) => Array.from(read('types', 'index.ts').match(new RegExp(`export type ${typeName} = ([^;]*);`))[1].matchAll(/'([^']*)'/g)).map(m => m[1]);
 
-test('migration dosyaları zaman damgasına göre sıralı ve benzersiz; beklenen 7 dosya var', () => {
-  assert.equal(migrationFiles.length, 7);
+test('migration dosyaları zaman damgasına göre sıralı ve benzersiz; beklenen 8 dosya var', () => {
+  assert.equal(migrationFiles.length, 8);
   const stamps = migrationFiles.map(f => f.split('_')[0]);
   assert.deepEqual([...stamps].sort(), stamps);
   assert.equal(new Set(stamps).size, stamps.length);
   assert.ok(stamps.every(s => /^\d{14}$/.test(s)));
+});
+
+test('uygulanmış tombstone migration değişmez; yarış kilidi ayrı migration ile eklenir', () => {
+  const base = sqlOf('20261101090000_user_word_tombstones.sql');
+  const patch = sqlOf('20261115090000_user_word_tombstone_serialization.sql');
+  assert.doesNotMatch(base, /pg_advisory_xact_lock/);
+  assert.equal((patch.match(/pg_advisory_xact_lock\(/g) || []).length, 2);
+  assert.match(patch, /from public\.user_words w[\s\S]*?for update;[\s\S]*?pg_advisory_xact_lock/);
 });
 
 test('uygulamanın kullandığı her tablo migration\'larda tanımlı; kod dışı tek tablo tombstone (tetikleyiciyle dolar)', () => {

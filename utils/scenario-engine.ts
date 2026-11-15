@@ -1,4 +1,5 @@
 import type { ChoiceOption, ChoiceStep, ReplyStep, Scenario, ScenarioStep } from '../constants/scenarios';
+import { overlappingCandidates } from './speech-answer';
 import type { ScenarioResult } from './learning-analysis';
 
 // Senaryo oynatıcısının saf mantığı (ekran, ses ve depolama bağımlılığı yok; test edilebilir).
@@ -295,6 +296,14 @@ export function validateScenario(scenario: Scenario | undefined | null): string[
           if (first.german.trim().toLowerCase() === second.german.trim().toLowerCase()) issues.push(`${at}: seçenekler farklı olmalı`);
           if (first.responseGerman.trim().toLowerCase() === second.responseGerman.trim().toLowerCase()) {
             issues.push(`${at}: seçime göre yanıtlar farklı olmalı`);
+          }
+          if (step.voice === true) {
+            const accepted = options.map(option => option.accepted);
+            if (accepted.some(list => list !== undefined && (!Array.isArray(list) || list.some(text => typeof text !== 'string' || !text.trim())))) {
+              issues.push(`${at}: sesli cevap alternatifleri geçerli metin olmalı`);
+            } else if (overlappingCandidates(options).length > 0) {
+              issues.push(`${at}: sesli cevap alternatifleri seçenekler arasında çakışmamalı`);
+            }
           }
         }
       }

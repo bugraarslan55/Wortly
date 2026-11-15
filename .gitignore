@@ -45,3 +45,14 @@ yarn-error.*
 
 # local env files (secrets)
 .env
+
+# Local tooling and project bindings
+/.codex/
+/.mcp.json
+/supabase/config.toml
+
+# Unrelated local .NET project and build output
+/Bussgeldkatalogrechner.cs
+/Bussgeldkatalogrechner.csproj
+/bin/
+/obj/

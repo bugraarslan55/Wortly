@@ -10,9 +10,11 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.wortly.app",
-      "buildNumber": "6",
+      "buildNumber": "12",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "Wortly’nin dosya sistemi, uygulamaya bir fotoğraf kitaplığı dosya adresi verildiğinde bu öğeyi okuyabilir. Ses kayıtların ve öğrenme verilerin uygulamanın kendi alanında saklanır.",
+        "NSSpeechRecognitionUsageDescription": "Wortly, senaryolarda Almanca cevabını sesle söylediğinde konuşmanı yazıya çevirmek için konuşma tanımayı kullanır. Tanıma yalnızca cihazında yapılır; ses ve metin cihazından çıkmaz."
       }
     },
     "android": {
@@ -43,7 +45,6 @@
           }
         }
       ],
-      "expo-image",
       [
         "expo-splash-screen",
         {
@@ -62,7 +63,7 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "Wortly, Almanca telaffuzunu kaydedip tekrar dinleyebilmen için mikrofonuna erişmek istiyor."
+          "microphonePermission": "Wortly mikrofonu Almanca telaffuzunu kaydetmek ve senaryolarda Almanca cevap vermek için kullanır. Sesli cevap tanıması cihazında yapılır."
         }
       ],
       "expo-asset"

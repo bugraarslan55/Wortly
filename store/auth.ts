@@ -9,6 +9,7 @@ import { cancelReviewReminders, revokeReminderOwner, setReminderOwner } from '..
 import { runSignOut, type SignOutResult } from '../utils/sign-out-flow';
 import { useWordStore, useUserStore, useSessionStore } from './index';
 import { useAchievementStore } from './achievements';
+import { usePhrasebookStore } from './phrasebook';
 
 type AuthResult =
   | { ok: true; session: Session | null }
@@ -162,6 +163,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
           useUserStore.getState().resetLocal(),
           useSessionStore.getState().resetLocal(),
           Promise.resolve(useAchievementStore.getState().reset()),
+          Promise.resolve(usePhrasebookStore.getState().reset()),
           clearPronunciationRecordings(previousUserId),
           cancelReviewReminders(),
         ]);

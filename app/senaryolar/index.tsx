@@ -52,6 +52,17 @@ export default function ScenariosScreen() {
         >
           <Text style={styles.backText}>← Geri</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => router.push('/ifade-defterim' as any)}
+          style={styles.phrasebookButton}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="İfade Defterim"
+          accessibilityHint="Senaryolardan kaydettiğin ifadeleri açar"
+        >
+          <AppIcon name="bookmark.fill" size={15} color={colors.primary} />
+          <Text style={styles.phrasebookText}>İfade Defterim</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.header}>
@@ -148,7 +159,14 @@ function ScenarioCard({ scenario, history, onPress }: { scenario: Scenario; hist
 
 const useStyles = makeStyles(Colors => StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.warmWhite },
-  topBar: { paddingHorizontal: Spacing.marginMain, height: 48, justifyContent: 'center' },
+  topBar: {
+    paddingHorizontal: Spacing.marginMain, height: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  },
+  phrasebookButton: {
+    minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.lg, backgroundColor: Colors.surfaceContainer,
+  },
+  phrasebookText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
   backButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
   backText: { fontSize: 15, fontWeight: '600', color: Colors.onSurfaceVariant },
   header: { paddingHorizontal: Spacing.marginMain, paddingBottom: Spacing.md },

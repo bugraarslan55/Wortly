@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["WortlySpeechRecognitionModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.wortlyspeechrecognition.WortlySpeechRecognitionModule"]
+  }
+}

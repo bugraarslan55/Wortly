@@ -1,6 +1,6 @@
-# Supabase test ortamında tombstone migration testi (hazırlık)
+# Supabase test ortamında tombstone migration testi
 
-Durum: HAZIRLIK. Hiçbir veritabanına bağlanılmadı, migration uygulanmadı.
+Durum (2026-11-15): `Wortly-Staging` projesinde `20261101090000_user_word_tombstones` migration'ının uygulandığı migration geçmişinden doğrulandı. Bu kontrol sırasında yalnızca SELECT çalıştırıldı; veritabanı değiştirilmedi. Yarış kilidi düzeltmesi `20261115090000_user_word_tombstone_serialization.sql` dosyasına taşındı ve staging'e henüz uygulanmadı.
 
 ## Kural
 Üretim projesine (uygulamanın `.env` dosyasındaki proje) migration uygulanmaz, test kullanıcısı
@@ -19,9 +19,10 @@ Ayrı proje en güvenlisi: yanlışlıkla üretime bağlanma riski yalnızca iki
 1. Yeni (boş) Supabase projesi aç; Project Settings > API'den URL, publishable key ve service_role key'i al. service_role key yalnızca bu testte, ortam değişkeni olarak kullanılır; mobil uygulamaya veya repoya konmaz.
 2. Mevcut migration'ları SQL Editor'de ya da `supabase db push` ile sırayla uygula, **tombstone migration hariç**: `20261021153000`, `20261021160000`, `20261021170000`, `20261023210000`.
 3. **Taban çizgisi:** `PHASE=before` ile testi çalıştır (dirilme BEKLENİR).
-4. Tombstone migration'ını uygula: `20261101090000_user_word_tombstones.sql`.
-5. `PHASE=after` ile testi çalıştır (dirilme ENGELLENMELİ).
-6. Uygulamayı test projesine bağla (aşağıda) ve cihaz senaryolarını çalıştır.
+4. Taban tombstone migration'ını uygula: `20261101090000_user_word_tombstones.sql`.
+5. Yarış kilidi düzeltmesini uygula: `20261115090000_user_word_tombstone_serialization.sql`.
+6. `PHASE=after` ile testi çalıştır (dirilme ENGELLENMELİ).
+7. Uygulamayı test projesine bağla (aşağıda) ve cihaz senaryolarını çalıştır.
 
 ## Komutlar
 ```powershell
@@ -78,8 +79,9 @@ Durum: HAZIRLIK. Gerçek bir test projesi olmadan bu testler çalıştırılmaz 
 - Gerçek kullanıcı hesabıyla test yapılmaz; mobil uygulamaya service_role konmaz.
 
 ### Sıra
-1. Test projesinde migration'ları sırayla uygula: 20261021153000, 20261021160000, 20261021170000,
-   20261023210000, 20261101090000 (tombstone), 20261102090000 (user_word_progress), 20261102091000 (scenario_results).
+1. Temiz test projesinde migration'ları sırayla uygula: 20261021153000, 20261021160000, 20261021170000,
+   20261023210000, 20261101090000 (tombstone), 20261102090000 (user_word_progress),
+   20261102091000 (scenario_results), 20261115090000 (tombstone yarış kilidi).
 2. PowerShell (proje kökünde; değerler yalnızca TEST projesinden):
 ```powershell
 $env:STAGING_URL = "https://<test-proje-ref>.supabase.co"

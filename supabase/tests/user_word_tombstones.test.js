@@ -23,7 +23,8 @@ if (!pgliteDir) {
 const { PGlite } = require(path.join(pgliteDir, 'node_modules', '@electric-sql/pglite'));
 
 const root = path.resolve(__dirname, '..', 'migrations');
-const migrationUnderTest = process.env.MIGRATION || '20261101090000_user_word_tombstones.sql';
+const baseMigration = '20261101090000_user_word_tombstones.sql';
+const migrationUnderTest = process.env.MIGRATION || '20261115090000_user_word_tombstone_serialization.sql';
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 
 const A = '00000000-0000-0000-0000-00000000000a';
@@ -75,7 +76,8 @@ const fails = async (fn) => { try { await fn(); } catch (e) { return e.message; 
 const results = [];
 async function test(name, fn) {
   const db = await bootstrap();
-  await db.exec(read(migrationUnderTest));
+  await db.exec(read(baseMigration));
+  if (migrationUnderTest !== baseMigration) await db.exec(read(migrationUnderTest));
   try {
     await fn(db);
     results.push([name, 'GEÇTİ']);

@@ -27,6 +27,7 @@ const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const PROGRESS = '20261102090000_user_word_progress.sql';
 const SCENARIO = '20261102091000_scenario_results.sql';
 const TOMBSTONE = '20261101090000_user_word_tombstones.sql';
+const TOMBSTONE_SERIALIZATION = '20261115090000_user_word_tombstone_serialization.sql';
 
 const A = '00000000-0000-0000-0000-00000000000a';
 const B = '00000000-0000-0000-0000-00000000000b';
@@ -53,6 +54,7 @@ async function bootstrap({ withTombstone = false, order = 'new-last' } = {}) {
     await apply('20261021160000_create_user_words.sql');
     if (order === 'new-first') { await apply(PROGRESS); await apply(SCENARIO); await apply(TOMBSTONE); }
     else { await apply(TOMBSTONE); await apply(PROGRESS); await apply(SCENARIO); }
+    await apply(TOMBSTONE_SERIALIZATION);
   } else {
     await apply(PROGRESS);
     await apply(SCENARIO);

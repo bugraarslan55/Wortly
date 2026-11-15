@@ -28,6 +28,11 @@ export type ChoiceOption = {
   /** Karşı tarafın BU seçime verdiği yanıt (konuşan, adımın `speaker` alanıdır). */
   responseGerman: string;
   responseTurkish: string;
+  /**
+   * Yalnızca sesli cevap açık karar noktalarında: `german` dışında, söylendiğinde AYNI dalı seçen kısa/doğal alternatifler.
+   * Seçenekler arasında çakışmamalıdır (validateScenario denetler).
+   */
+  accepted?: string[];
 };
 
 /**
@@ -43,6 +48,11 @@ export type ChoiceStep = {
   turkish: string;
   /** Kullanıcıya görev metni (Türkçe). */
   prompt: string;
+  /**
+   * İsteğe bağlı pilot: true ise kullanıcı iki seçenekten birini cihaz içi Almanca tanımayla SÖYLEYEBİLİR. Dokunarak seçim
+   * her zaman kullanılabilir kalır; tanıma yoksa/başarısızsa yalnızca seçenekler çalışır. Puanlamayı etkilemez.
+   */
+  voice?: boolean;
   options: [ChoiceOption, ChoiceOption];
 };
 
@@ -90,18 +100,21 @@ export const SCENARIOS: Scenario[] = [
         german: 'Möchten Sie Ihren Kaffee mit Milch?',
         turkish: 'Kahvenizi sütlü ister misiniz?',
         prompt: 'Kahveni sütlü mü sütsüz mü istediğini seç.',
+        voice: true,
         options: [
           {
             german: 'Ja, mit Milch, bitte.',
             turkish: 'Evet, sütlü olsun, lütfen.',
             responseGerman: 'Alles klar, ein Kaffee mit Milch.',
             responseTurkish: 'Tamam, sütlü bir kahve.',
+            accepted: ['Mit Milch, bitte.', 'Ja, bitte.', 'Mit Milch.'],
           },
           {
             german: 'Nein, ohne Milch, bitte.',
             turkish: 'Hayır, sütsüz olsun, lütfen.',
             responseGerman: 'Alles klar, ein schwarzer Kaffee.',
             responseTurkish: 'Tamam, sade bir kahve.',
+            accepted: ['Ohne Milch, bitte.', 'Nein, danke.', 'Ohne Milch.'],
           },
         ],
       },
@@ -191,18 +204,21 @@ export const SCENARIOS: Scenario[] = [
         german: 'Fahren Sie einfach oder hin und zurück?',
         turkish: 'Tek yön mü gidiyorsunuz, yoksa gidiş-dönüş mü?',
         prompt: 'Nasıl bir bilet istediğini seç.',
+        voice: true,
         options: [
           {
             german: 'Nur einfach, bitte.',
             turkish: 'Sadece tek yön, lütfen.',
             responseGerman: 'Gut, dann brauchen Sie eine einfache Fahrkarte.',
             responseTurkish: 'İyi, o zaman tek yön bir bilete ihtiyacınız var.',
+            accepted: ['Einfach, bitte.', 'Nur einfach.', 'Eine einfache Fahrkarte, bitte.'],
           },
           {
             german: 'Hin und zurück, bitte.',
             turkish: 'Gidiş-dönüş, lütfen.',
             responseGerman: 'Gut, dann brauchen Sie eine Rückfahrkarte.',
             responseTurkish: 'İyi, o zaman gidiş-dönüş bir bilete ihtiyacınız var.',
+            accepted: ['Hin und zurück.', 'Eine Rückfahrkarte, bitte.', 'Rückfahrkarte, bitte.'],
           },
         ],
       },
@@ -324,18 +340,21 @@ export const SCENARIOS: Scenario[] = [
         german: 'Brauchen Sie eine Tüte?',
         turkish: 'Poşet ister misiniz?',
         prompt: 'Poşet isteyip istemediğini seç.',
+        voice: true,
         options: [
           {
             german: 'Ja, bitte. Eine Tüte.',
             turkish: 'Evet, lütfen. Bir poşet.',
             responseGerman: 'Gern. Die Tüte kostet zehn Cent.',
             responseTurkish: 'Tabii. Poşet on sent.',
+            accepted: ['Ja, bitte.', 'Eine Tüte, bitte.'],
           },
           {
             german: 'Nein, danke. Ich habe eine Tasche.',
             turkish: 'Hayır, teşekkürler. Çantam var.',
             responseGerman: 'Sehr gut. Das ist gut für die Umwelt.',
             responseTurkish: 'Çok iyi. Bu çevre için iyi.',
+            accepted: ['Nein, danke.', 'Ich habe eine Tasche.', 'Ich brauche keine Tüte.'],
           },
         ],
       },

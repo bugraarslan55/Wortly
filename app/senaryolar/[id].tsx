@@ -18,6 +18,9 @@ import { makeStyles, useColors } from '../../hooks/use-theme';
 import { Level } from '../../types';
 import { AppIcon } from '../../components/app-icon';
 import { PrimaryButton, ProgressBar, SecondaryButton } from '../../components/ui';
+import { VoiceAnswerPanel } from '../../components/voice-answer-panel';
+import { PhraseSaveButton } from '../../components/phrase-save-button';
+import type { PhraseInput } from '../../utils/phrasebook';
 
 /** "Devam" düğmesine art arda hızlı dokunuşlar bir adımı atlamasın. */
 const NEXT_LOCK_MS = 350;
@@ -64,8 +67,12 @@ function MessageScreen({ text, onBack, icon = 'lock.fill' }: { text: string; onB
 }
 
 function ListenButtons({
-  text, speakingMode, onSpeak,
-}: { text: string; speakingMode: 'normal' | 'slow' | null; onSpeak: (text: string, mode: 'normal' | 'slow') => void }) {
+  text, speakingMode, onSpeak, save,
+}: {
+  text: string; speakingMode: 'normal' | 'slow' | null; onSpeak: (text: string, mode: 'normal' | 'slow') => void;
+  /** Verilirse satırın yanında "İfade Defterim'e kaydet/kaldır" düğmesi çıkar. */
+  save?: PhraseInput;
+}) {
   const styles = useStyles();
   const colors = useColors();
   return (
@@ -90,6 +97,7 @@ function ListenButtons({
         <AppIcon name="tortoise.fill" size={16} color={colors.primary} />
         <Text style={styles.listenBtnText} maxFontSizeMultiplier={1.4}>Yavaş</Text>
       </TouchableOpacity>
+      {save && <PhraseSaveButton phrase={save} />}
     </View>
   );
 }
@@ -140,6 +148,12 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
   const speak = (text: string, mode: 'normal' | 'slow') => {
     void speakText(text, mode);
   };
+
+  /** İfade Defterim kaydı: metinler kaydedilirken kopyalanır (senaryo sonradan değişse de kayıt aynı kalır). */
+  const phraseOf = (item: { german: string; turkish: string }, speaker: string): PhraseInput => ({
+    german: item.german, turkish: item.turkish, speaker,
+    scenarioId: scenario.id, scenarioTitle: scenario.title, level: scenario.level,
+  });
 
   const activeProgress = review ? reviewProgress : progress;
   const stepProgress = activeProgress[index] ?? EMPTY_PROGRESS;
@@ -351,7 +365,7 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
         <View style={styles.bubble}>
           <Text style={styles.speakerText}>{item.speaker}</Text>
           <Text style={styles.germanText}>{item.german}</Text>
-          <ListenButtons text={item.german} speakingMode={speakingMode} onSpeak={speak} />
+          <ListenButtons text={item.german} speakingMode={speakingMode} onSpeak={speak} save={phraseOf(item, item.speaker)} />
           <TouchableOpacity
             style={styles.translationToggle}
             onPress={() => setShownTranslations(state => ({ ...state, [itemIndex]: !state[itemIndex] }))}
@@ -379,28 +393,34 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
           <Text style={styles.promptLabel}>Senin görevin</Text>
           <Text style={styles.promptText}>{item.prompt}</Text>
         </View>
+        {item.voice && (
+          // Adım başına ayrı örnek: adım değişince/ekran kapanınca dinleme durur. Sesle eşleşme dokunarak seçimle aynı yolu kullanır.
+          <VoiceAnswerPanel key={`voice-${index}`} options={item.options} selected={selected} onMatch={handleChoicePress} />
+        )}
         <View style={styles.options} accessibilityLabel="Cevap seçenekleri">
           {item.options.map((option, optionIndex) => {
             const chosen = selected === optionIndex;
             return (
-              <TouchableOpacity
-                key={optionIndex}
-                style={[styles.option, chosen && styles.optionChosen]}
-                onPress={() => handleChoicePress(optionIndex === 0 ? 0 : 1)}
-                activeOpacity={0.85}
-                accessibilityRole="button"
-                accessibilityLabel={`Cevap ${OPTION_LETTERS[optionIndex]}: ${option.german}. ${option.turkish}`}
-                accessibilityHint="Bu cevap puanı etkilemez; karşı tarafın yanıtı seçimine göre değişir"
-                accessibilityState={{ selected: chosen }}
-              >
-                <View style={[styles.optionLetter, chosen && styles.optionLetterChosen]}>
-                  <Text style={styles.optionLetterText}>{OPTION_LETTERS[optionIndex]}</Text>
-                </View>
-                <View style={styles.choiceTexts}>
-                  <Text style={styles.choiceGerman}>{option.german}</Text>
-                  <Text style={styles.choiceTurkish}>{option.turkish}</Text>
-                </View>
-              </TouchableOpacity>
+              <View key={optionIndex} style={styles.optionRow}>
+                <TouchableOpacity
+                  style={[styles.option, styles.optionGrow, chosen && styles.optionChosen]}
+                  onPress={() => handleChoicePress(optionIndex === 0 ? 0 : 1)}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Cevap ${OPTION_LETTERS[optionIndex]}: ${option.german}. ${option.turkish}`}
+                  accessibilityHint="Bu cevap puanı etkilemez; karşı tarafın yanıtı seçimine göre değişir"
+                  accessibilityState={{ selected: chosen }}
+                >
+                  <View style={[styles.optionLetter, chosen && styles.optionLetterChosen]}>
+                    <Text style={styles.optionLetterText}>{OPTION_LETTERS[optionIndex]}</Text>
+                  </View>
+                  <View style={styles.choiceTexts}>
+                    <Text style={styles.choiceGerman}>{option.german}</Text>
+                    <Text style={styles.choiceTurkish}>{option.turkish}</Text>
+                  </View>
+                </TouchableOpacity>
+                <PhraseSaveButton phrase={phraseOf(option, 'Sen')} />
+              </View>
             );
           })}
         </View>
@@ -411,7 +431,7 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
               <View style={[styles.bubble, styles.bubbleUser]}>
                 <Text style={styles.speakerText}>Sen</Text>
                 <Text style={styles.germanText}>{outcome.chosen.german}</Text>
-                <ListenButtons text={outcome.chosen.german} speakingMode={speakingMode} onSpeak={speak} />
+                <ListenButtons text={outcome.chosen.german} speakingMode={speakingMode} onSpeak={speak} save={phraseOf(outcome.chosen, 'Sen')} />
               </View>
             </View>
             {renderSayBubble(outcome.response, 1000 + index)}
@@ -536,7 +556,7 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
               <View style={[styles.bubble, styles.bubbleUser]}>
                 <Text style={styles.speakerText}>Sen</Text>
                 <Text style={styles.germanText}>{reply.german}</Text>
-                <ListenButtons text={reply.german} speakingMode={speakingMode} onSpeak={speak} />
+                <ListenButtons text={reply.german} speakingMode={speakingMode} onSpeak={speak} save={phraseOf(reply, 'Sen')} />
               </View>
             </View>
             <View style={styles.feedbackCorrect} accessibilityLiveRegion="polite">
@@ -633,10 +653,12 @@ const useStyles = makeStyles(Colors => StyleSheet.create({
   bubbleUser: { flexGrow: 0, maxWidth: '92%', borderTopLeftRadius: BorderRadius.xl, borderTopRightRadius: 6, borderWidth: 1.5, borderColor: Colors.golden },
   speakerText: { fontSize: 12, fontWeight: '700', color: Colors.secondary, textTransform: 'uppercase' },
   germanText: { fontSize: 20, fontWeight: '700', color: Colors.primary, lineHeight: 28 },
-  listenRow: { flexDirection: 'row', gap: Spacing.sm },
+  // Kısa cümlede balon içeriğe göre daralır: düğmeler kendi içerik genişliğini korur (flexShrink: 0), kalan boşluğu paylaşır
+  // (flexGrow: 1) ve sığmazsa (dar ekran, büyük yazı) alt satıra sarılır; üst üste binmez.
+  listenRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   listenBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
-    minHeight: 44, borderRadius: BorderRadius.lg, backgroundColor: Colors.surfaceContainer,
+    flexGrow: 1, flexShrink: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+    minHeight: 44, paddingHorizontal: Spacing.md, borderRadius: BorderRadius.lg, backgroundColor: Colors.surfaceContainer,
     borderWidth: 1.5, borderColor: 'transparent',
   },
   listenBtnActive: { backgroundColor: Colors.secondaryContainer, borderColor: Colors.golden },
@@ -650,6 +672,8 @@ const useStyles = makeStyles(Colors => StyleSheet.create({
     backgroundColor: Colors.surfaceContainerLowest, borderRadius: BorderRadius.lg,
     padding: Spacing.md, borderWidth: 1.5, borderColor: Colors.outlineVariant, ...Shadows.level1,
   },
+  optionRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  optionGrow: { flex: 1 },
   optionWrong: { backgroundColor: Colors.errorContainer, borderColor: Colors.error },
   optionChosen: { borderColor: Colors.golden },
   optionLetterChosen: { backgroundColor: Colors.golden },
