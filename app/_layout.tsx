@@ -12,6 +12,7 @@ import {
 } from '../store';
 import { useAuthStore } from '../store/auth';
 import { useAchievementStore } from '../store/achievements';
+import { usePhrasebookStore } from '../store/phrasebook';
 import { AchievementTracker } from '../components/use-achievements';
 import { BrandMark } from '../components/ui';
 import { useThemeStore } from '../store/theme';
@@ -144,6 +145,13 @@ function AppRoot() {
     if (!isAuthLoaded || !session?.user.id) return;
     void loadAchievements(session.user.id);
   }, [isAuthLoaded, session?.user.id, loadAchievements]);
+
+  // İfade Defterim: kaydedilen ifadelerin yerel kaydı (kullanıcıya özel; çevrimdışı çalışır, buluta gönderilmez).
+  const loadPhrasebook = usePhrasebookStore(state => state.load);
+  useEffect(() => {
+    if (!isAuthLoaded || !session?.user.id) return;
+    void loadPhrasebook(session.user.id);
+  }, [isAuthLoaded, session?.user.id, loadPhrasebook]);
 
   // Oturum açık bir kullanıcı varsa, o kullanıcı için profil/kelime/geçmiş
   // senkronizasyonu en az bir kez tamamlanana kadar uygulamayı render etme.
@@ -407,6 +415,10 @@ function AppRoot() {
         />
         <Stack.Screen
           name="senaryolar/[id]"
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
+          name="ifade-defterim"
           options={{ animation: 'slide_from_right' }}
         />
         <Stack.Screen
