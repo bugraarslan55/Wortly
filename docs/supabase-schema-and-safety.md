@@ -38,7 +38,7 @@ istemciye gereksiz yetki (silme/güncelleme) verilmemiş; `SECURITY DEFINER` iş
 ## 4. Bilinen riskler ve eksikler
 1. **Production'da hangi migration'ların uygulandığı doğrulanmadı.** Tombstone migration'ı depoda "uygulanmadı" olarak işaretli; uygulanmamışsa uygulama çalışır ama silinen kelimelerin eski cihazdan dirilmesine karşı koruma yoktur. Yeni progress/senaryo tabloları yoksa bayrak kapalı kalmalıdır.
 2. **Eski üç tabloda (`profiles`, `user_words`, `study_sessions`) `anon` için açık `REVOKE` yok**; yalnızca RLS koruyor (yeni tablolar anon'u açıkça kapatıyor). RLS doğru olduğu sürece erişim yok, ama derinlemesine savunma için ileride ayrı bir migration ile `REVOKE ... FROM anon` önerilir (**uygulanmadı**).
-3. **Hesap silme akışı yok** (uygulama içinde ve sunucuda). Hesap oluşturulabilen uygulamalarda App Store 5.1.1(v) uygulama içi silme ister; `ON DELETE CASCADE` verileri temizler ama tetikleyecek güvenli bir uç (ör. kullanıcıyı silen Edge Function) tasarlanmadı. Yayın öncesi karar gerekir.
+3. **Hesap silme:** uygulama içi akış ve `supabase/functions/delete-account` Edge Function'ı **koda eklendi, dağıtılmadı/canlıda denenmedi** (ayrıntı ve dağıtım adımları: `docs/account-deletion.md`). Migration gerekmez (tüm kullanıcı tabloları `ON DELETE CASCADE`; yerel PGlite testi: `supabase/tests/account_deletion.test.js`).
 4. `study_sessions.total >= 0` (0 mümkün); istemci tarafında geçersiz kayıtlar sayılmaz, ama şemada `total >= 1` değil.
 5. `handle_new_user_profile` `search_path = public`; diğer tetikleyiciler `''` kullanıyor. Tutarlılık için `''` önerilir (uygulanmadı).
 6. Staging projesi olmadığından RLS/tetikleyici davranışı yalnızca yerel PGlite ve sahte bulutla denendi.

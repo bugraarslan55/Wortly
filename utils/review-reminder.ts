@@ -203,18 +203,22 @@ async function cancelOwnNotifications() {
   );
 }
 
-// Bildirim merkezinde duran Wortly bildirimlerinden, "keepUserId" dışındaki hesaplara ait olanları kaldırır.
+// Bildirim merkezinde duran Wortly bildirimlerinden, "keepUserId" dışındaki hesaplara ait olanları kaldırır. Hata fırlatır.
+async function dismissPresentedForeign(keepUserId: string | null) {
+  const presented = await Notifications.getPresentedNotificationsAsync();
+  await Promise.all(
+    presented
+      .filter(item => {
+        const data = item.request.content.data;
+        return isManagedReminderData(data) && (keepUserId === null || data?.userId !== keepUserId);
+      })
+      .map(item => Notifications.dismissNotificationAsync(item.request.identifier)),
+  );
+}
+
 async function dismissForeignNotifications(keepUserId: string | null) {
   try {
-    const presented = await Notifications.getPresentedNotificationsAsync();
-    await Promise.all(
-      presented
-        .filter(item => {
-          const data = item.request.content.data;
-          return isManagedReminderData(data) && (keepUserId === null || data?.userId !== keepUserId);
-        })
-        .map(item => Notifications.dismissNotificationAsync(item.request.identifier)),
-    );
+    await dismissPresentedForeign(keepUserId);
   } catch {
     // Bazı ortamlarda desteklenmeyebilir; zamanlanmış bildirimlerin iptali yine yapılır.
   }
@@ -264,18 +268,29 @@ export function applyReminderPlan(userId: string, plan: PlannedReminder[], isVal
   });
 }
 
-/** Tüm Wortly hatırlatmalarını iptal eder ve sahipliği geri alır (çıkış / oturum yok). */
-export function cancelReviewReminders(): Promise<void> {
+/**
+ * Tüm Wortly hatırlatmalarını iptal eder ve sahipliği geri alır (çıkış / oturum yok). Hata fırlatmaz; iptalin/kaldırmanın
+ * TAMAMLANIP tamamlanmadığını döndürür (çıkış akışı bunu yok sayar, hesap silme eksik temizlik olarak bildirir).
+ */
+export function cancelReviewReminders(): Promise<boolean> {
   // Önce senkron geçersiz kıl: sırada bekleyen/süren planlamalar bundan sonra bildirim kuramaz.
   revokeReminderOwner();
-  if (!isReminderSupported) return Promise.resolve();
+  if (!isReminderSupported) return Promise.resolve(true);
   return enqueue(async () => {
+    let complete = true;
     try {
       await cancelOwnNotifications();
-      await dismissForeignNotifications(null);
     } catch (error) {
+      complete = false;
       console.warn('[Wortly] Hatırlatma iptal edilemedi:', error);
     }
+    try {
+      await dismissPresentedForeign(null);
+    } catch (error) {
+      complete = false;
+      console.warn('[Wortly] Bildirim merkezindeki hatırlatmalar kaldırılamadı:', error);
+    }
+    return complete;
   });
 }
 

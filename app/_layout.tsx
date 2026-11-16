@@ -422,6 +422,10 @@ function AppRoot() {
           options={{ animation: 'slide_from_right' }}
         />
         <Stack.Screen
+          name="hesabi-sil"
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
           name="(tabs)"
           options={{ animation: 'fade' }}
         />

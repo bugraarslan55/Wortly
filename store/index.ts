@@ -27,6 +27,7 @@ import {
 } from '../utils/learning-sync';
 import { createProgressTransport, createScenarioTransport } from '../utils/learning-transports';
 import { createSyncSerializer } from '../utils/sync-serializer';
+import { isSafeUserId, removeDeviceAccount, removeUserPending, selectAccountStorageKeys } from '../utils/account-deletion';
 
 // ─── STORAGE KEYS ───────────────────────────────────────────────────────────
 const KEYS = {
@@ -326,6 +327,48 @@ async function recordDeviceAccount(userId: string): Promise<void> {
   } catch {
     // Yazılamazsa teklif "bekletme" durumunda kalır (güvenli taraf).
   }
+}
+
+/**
+ * HESAP SİLME: yalnızca BU hesabın kalıcı yerel kayıtlarını siler (başka hesaplara, cihaz geneli ayarlara ve Supabase
+ * oturumuna dokunmaz): kullanıcıya özel anahtarlar (ifade defteri, rozetler, senaryo sonuçları, hatırlatma ayarı, telaffuz
+ * haritası, park edilmiş/bozuk yedekler), bekleyen eşitleme kayıtları ve cihazdaki hesap geçmişi girişi. Her adım denenir;
+ * herhangi biri doğrulanamazsa sonunda hata fırlatılır (çağıran "yerel temizlik eksik kaldı" bilgisini gösterir).
+ * Bellekteki store'ların resetLocal/reset işlemleri bundan ÖNCE çağrılmalıdır (geç yazmalar silinen veriyi geri getirmesin).
+ */
+export async function purgeAccountStorage(userId: string): Promise<void> {
+  if (!isSafeUserId(userId)) throw new Error('Geçersiz kullanıcı kimliği');
+  const failures: string[] = [];
+
+  try {
+    await updatePendingChanges(changes => removeUserPending(changes, userId));
+    const left = (await readPendingChanges()).filter(change => change.userId === userId);
+    if (left.length > 0) failures.push('bekleyen kayıtlar');
+  } catch {
+    failures.push('bekleyen kayıtlar');
+  }
+
+  try {
+    const accounts = await readDeviceAccounts();
+    if (accounts !== null && accounts.includes(userId)) {
+      await asyncStorageAdapter.setItem(DEVICE_ACCOUNTS_KEY, JSON.stringify(removeDeviceAccount(accounts, userId)));
+    }
+  } catch {
+    failures.push('hesap geçmişi');
+  }
+
+  try {
+    const keys = selectAccountStorageKeys(await asyncStorageAdapter.getAllKeys(), userId);
+    if (keys.length > 0) {
+      const removed = await withTimeout(AsyncStorage.multiRemove(keys).then(() => 'ok' as const), 'timeout' as const, STORAGE_TIMEOUT_MS);
+      if (removed !== 'ok') throw new Error('timeout');
+    }
+    if (selectAccountStorageKeys(await asyncStorageAdapter.getAllKeys(), userId).length > 0) failures.push('yerel kayıtlar');
+  } catch {
+    failures.push('yerel kayıtlar');
+  }
+
+  if (failures.length > 0) throw new Error(`Yerel temizlik tamamlanamadı: ${failures.join(', ')}`);
 }
 
 async function reconcileWordData(userId: string, set: (partial: any) => void, get: () => WordStore): Promise<boolean> {
@@ -936,7 +979,11 @@ interface UserStore {
   syncedUserId: string | null;
   loadProfile: () => Promise<void>;
   syncProfile: (userId: string) => Promise<void>;
-  resetLocal: () => Promise<void>;
+  /**
+   * Çıkış: bekleyen TÜM profil kayıtları silinir. Hesap silme: `pendingOwnerId` verilirse yalnızca o kullanıcının bekleyen
+   * profil kaydı silinir (başka hesabın ve sahibi bilinmeyen kayıtlar korunur).
+   */
+  resetLocal: (options?: { pendingOwnerId?: string }) => Promise<void>;
   setProfile: (profile: UserProfile) => Promise<void>;
   updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
   completeOnboarding: (name: string, level: Level) => Promise<void>;
@@ -1136,13 +1183,19 @@ export const useUserStore = create<UserStore>((set, get) => ({
     }
   }),
 
-  resetLocal: async () => {
+  resetLocal: async (options) => {
     set({ profile: DEFAULT_PROFILE, profileOwner: null, syncedUserId: null });
     await drainWrites();
     await safeMultiRemove([KEYS.PROFILE, KEYS.PROFILE_OWNER]);
     // Yerel profil silindi; bekleyen profil kaydı kalırsa bir sonraki girişte
     // varsayılan profil buluttaki gerçek profilin üzerine yazılırdı.
-    await clearPendingChangesForEntity('profile');
+    const pendingOwnerId = options?.pendingOwnerId;
+    if (pendingOwnerId) {
+      // Hesap silme: yalnızca silinen kullanıcının kaydı; başkasının ve sahibi bilinmeyen kayıtlar kuyrukta kalır.
+      await updatePendingChanges(changes => changes.filter(item => !(item.entity === 'profile' && item.userId === pendingOwnerId)));
+    } else {
+      await clearPendingChangesForEntity('profile');
+    }
   },
 
   setProfile: (profile) => withWrite(async () => {

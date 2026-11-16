@@ -21,28 +21,37 @@ function withTimeout<T>(promise: Promise<T>): Promise<T> {
   ]);
 }
 
-type StrictRead = { ok: true; map: Record<string, string> } | { ok: false };
+type StrictRead = { ok: true; map: Record<string, string>; corrupt?: boolean } | { ok: false };
 
-// Okuma HATASI ile "kayıt yok" ayrılır: hata varsa güncelleme yapılmaz (aksi halde boş haritanın üzerine
-// yazmak diğer kelimelerin eşlemelerini kaybettirirdi). Bozuk JSON, üzerine yazılmadan önce yedeklenir.
-async function readStrict(userId: string): Promise<StrictRead> {
+// Salt okunur okuma (hiçbir şey yazmaz): okuma HATASI { ok: false }, bozuk JSON { ok: true, map: {}, corrupt: true }.
+type MapRead = { ok: true; map: Record<string, string>; corrupt: boolean; raw: string | null } | { ok: false };
+
+async function readMap(userId: string): Promise<MapRead> {
   let raw: string | null;
   try {
     raw = await withTimeout(AsyncStorage.getItem(pronunciationStorageKey(userId)));
   } catch {
     return { ok: false };
   }
-  if (!raw) return { ok: true, map: {} };
+  if (!raw) return { ok: true, map: {}, corrupt: false, raw: null };
   try {
-    return { ok: true, map: sanitizeRecordingMap(JSON.parse(raw)) };
+    return { ok: true, map: sanitizeRecordingMap(JSON.parse(raw)), corrupt: false, raw };
   } catch {
-    try {
-      await withTimeout(AsyncStorage.setItem(corruptBackupKey(userId), raw));
-    } catch {
-      return { ok: false };
-    }
-    return { ok: true, map: {} };
+    return { ok: true, map: {}, corrupt: true, raw };
   }
+}
+
+// Okuma HATASI ile "kayıt yok" ayrılır: hata varsa güncelleme yapılmaz (aksi halde boş haritanın üzerine
+// yazmak diğer kelimelerin eşlemelerini kaybettirirdi). Bozuk JSON, üzerine yazılmadan önce yedeklenir.
+async function readStrict(userId: string): Promise<StrictRead> {
+  const read = await readMap(userId);
+  if (!read.ok || !read.corrupt) return read.ok ? { ok: true, map: read.map } : read;
+  try {
+    await withTimeout(AsyncStorage.setItem(corruptBackupKey(userId), read.raw as string));
+  } catch {
+    return { ok: false };
+  }
+  return { ok: true, map: {}, corrupt: true };
 }
 
 // Bozuk/beklenmeyen JSON ({}, null, dizi...) çökme yapmaz; geçerli girdiler korunur.
@@ -76,14 +85,25 @@ export function updatePronunciationRecordings(
   return run;
 }
 
-export function deletePronunciationFile(uri: string | null | undefined) {
-  if (!uri || Platform.OS === 'web') return;
+/** Dosyayı siler; dosya artık yoksa true (zaten yoktu veya silindi), silinemediyse false döner. Fırlatmaz. */
+function removePronunciationFile(uri: string | null | undefined): boolean {
+  if (!uri || Platform.OS === 'web') return true;
   try {
     const file = new File(uri);
-    if (file.exists) file.delete();
+    if (!file.exists) return true;
+    file.delete();
+    return !file.exists;
   } catch {
-    // Dosya zaten yoksa sessizce geç.
+    try {
+      return !new File(uri).exists;
+    } catch {
+      return false;
+    }
   }
+}
+
+export function deletePronunciationFile(uri: string | null | undefined) {
+  removePronunciationFile(uri); // Dosya zaten yoksa/silinemezse sessizce geç.
 }
 
 export function pronunciationFileExists(uri: string): boolean {
@@ -138,21 +158,71 @@ export async function measureRecordingDuration(uri: string, timeoutMs = 3000): P
   }
 }
 
-// Çıkış: yalnızca bu kullanıcının kayıtları silinir. Harita okunamazsa HİÇBİR ŞEY silinmez (kayıtlar kullanıcıya
-// özel anahtarda kalır, başka kullanıcıya görünmez).
-export async function clearPronunciationRecordings(userId: string | null | undefined) {
-  if (!userId || userId === 'guest' || Platform.OS === 'web') return;
+/**
+ * Başka kullanıcıların haritalarındaki dosyalar. Salt okunur (başka kullanıcının verisine yazmaz, yedek bile almaz).
+ * Herhangi bir harita okunamaz/bozuksa sahiplik doğrulanamaz: complete=false.
+ */
+async function readOtherUsersFiles(userId: string): Promise<{ files: Set<string>; complete: boolean }> {
+  const referenced = new Set<string>();
+  try {
+    const keys = await withTimeout(AsyncStorage.getAllKeys());
+    for (const key of keys) {
+      const otherId = parseMapKeyUserId(key);
+      if (!otherId || otherId === userId) continue;
+      const read = await readMap(otherId);
+      if (!read.ok || read.corrupt) return { files: referenced, complete: false };
+      Object.values(read.map).forEach(uri => referenced.add(uri));
+    }
+    return { files: referenced, complete: true };
+  } catch {
+    return { files: referenced, complete: false };
+  }
+}
+
+/**
+ * Kullanıcının telaffuz kayıtlarını (dosyalar + harita) siler. Yalnızca bu kullanıcının kayıtları silinir; harita
+ * okunamazsa HİÇBİR ŞEY silinmez (kayıtlar kullanıcıya özel anahtarda kalır, başka kullanıcıya görünmez).
+ * Hata fırlatmaz; temizliğin TAMAMLANIP tamamlanmadığını döndürür (çıkış akışı bunu yok sayar, hesap silme bildirir).
+ *
+ * `strict` (hesap silme): bir dosyanın başka kullanıcıya ait olma ihtimali varsa silinmez ve temizlik eksik sayılır:
+ * dosya başka bir haritada da geçiyorsa, başka bir harita okunamıyor/bozuksa veya kendi haritası bozuksa (hangi
+ * dosyaların bu kullanıcıya ait olduğu bilinemez).
+ */
+export async function clearPronunciationRecordings(
+  userId: string | null | undefined,
+  options: { strict?: boolean } = {},
+): Promise<boolean> {
+  if (!userId || userId === 'guest' || Platform.OS === 'web') return true;
 
   const current = await readStrict(userId);
-  if (!current.ok) return;
-  Object.values(current.map).forEach(deletePronunciationFile);
+  if (!current.ok) return false;
+
+  let complete = !(options.strict && current.corrupt);
+  const uris = Object.values(current.map);
+  let ownedByOthers = new Set<string>();
+  let deletable = true;
+  if (options.strict && uris.length > 0) {
+    const others = await readOtherUsersFiles(userId);
+    ownedByOthers = others.files;
+    deletable = others.complete;
+    if (!others.complete) complete = false;
+  }
+  for (const uri of uris) {
+    if (!deletable || ownedByOthers.has(uri)) {
+      complete = false;
+      continue;
+    }
+    if (!removePronunciationFile(uri)) complete = false;
+  }
 
   try {
     await withTimeout(AsyncStorage.removeItem(pronunciationStorageKey(userId)));
     await withTimeout(AsyncStorage.removeItem(keptRecordingsKey(userId)));
   } catch {
-    // Yerel temizlik başarısız olursa çıkış işlemi yine tamamlanır.
+    // Çıkış işlemi yine tamamlanır; hesap silme akışı eksik temizlik olarak bildirir.
+    complete = false;
   }
+  return complete;
 }
 
 // ─── Kelime silme ve yetim kayıt temizliği (yalnızca kullanıcı onayıyla çağrılır) ──────────────────────────

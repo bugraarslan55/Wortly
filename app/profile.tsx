@@ -328,6 +328,12 @@ export default function ProfileScreen() {
         {/* Hesap */}
         <SectionTitle>Hesap</SectionTitle>
         <SecondaryButton label="Çıkış Yap" onPress={handleSignOut} tone="danger" />
+        <SecondaryButton
+          label="Hesabımı Sil"
+          onPress={() => router.push('/hesabi-sil' as any)}
+          tone="danger"
+          accessibilityHint="Hesabını ve tüm verilerini kalıcı olarak silme ekranını açar"
+        />
         {!!email && <Text style={styles.signedInAs} numberOfLines={1}>{email} olarak giriş yapıldı</Text>}
       </ScrollView>
     </SafeAreaView>

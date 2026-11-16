@@ -248,11 +248,10 @@ test('eski üç tabloda (profiles/user_words/study_sessions) anon için açık R
   }
 });
 
-test('hesap silme: uygulamada hesap silme akışı yok (App Store 5.1.1(v) için gerekli olabilir) — mevcut durumun kaydı', () => {
-  const files = ['app', 'components', 'store', 'utils'].flatMap(dir => {
-    const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
-    return walk(path.join(ROOT, dir));
-  });
-  const hasDeletion = files.some(f => /deleteUser|hesabı sil|delete.?account/i.test(fs.readFileSync(f, 'utf8')));
-  assert.equal(hasDeletion, false, 'Hesap silme eklenirse bu test ve docs/supabase-schema-and-safety.md güncellenmeli');
+test('hesap silme sözleşmesi: auth.users\'a bağlı HER tablo ON DELETE CASCADE kullanır (Edge Function yalnızca kullanıcıyı siler)', () => {
+  const references = allSql.match(/references auth\.users\(id\)[^,\n)]*/gi) ?? [];
+  assert.ok(references.length >= 6, 'profiles, user_words, study_sessions, tombstones, progress, scenario_results');
+  for (const reference of references) assert.match(reference, /on delete cascade/i, reference);
+  // Sunucu işlevi var; service_role istemci kodunda yok (ayrıntılı denetim: tests/account-deletion.test.js).
+  assert.ok(fs.existsSync(path.join(ROOT, 'supabase', 'functions', 'delete-account', 'handler.ts')));
 });

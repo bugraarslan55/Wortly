@@ -7,9 +7,13 @@ import { supabase } from '../utils/supabase';
 import { clearPronunciationRecordings } from '../utils/pronunciation-storage';
 import { cancelReviewReminders, revokeReminderOwner, setReminderOwner } from '../utils/review-reminder';
 import { runSignOut, type SignOutResult } from '../utils/sign-out-flow';
-import { useWordStore, useUserStore, useSessionStore } from './index';
+import { useWordStore, useUserStore, useSessionStore, purgeAccountStorage } from './index';
 import { useAchievementStore } from './achievements';
 import { usePhrasebookStore } from './phrasebook';
+import {
+  ACCOUNT_DELETE_CONFIRM_VALUE, interpretDeleteResponse, runAccountDeletion, type AccountDeletionResult,
+} from '../utils/account-deletion';
+import { isServerReachable } from '../utils/connectivity';
 
 type AuthResult =
   | { ok: true; session: Session | null }
@@ -29,7 +33,12 @@ interface AuthStore {
   resetPasswordForEmail: (email: string) => Promise<PasswordResetResult>;
   handleAuthUrl: (url: string) => Promise<boolean>;
   signOut: () => Promise<SignOutResult>;
+  /** Hesabı sunucuda kalıcı siler (kimlik doğrulaması sunucuda yapılır), sonra yalnızca bu hesabın yerel verisini temizler. */
+  deleteAccount: () => Promise<AccountDeletionResult>;
 }
+
+/** Sunucudaki silme isteği zaman aşımı (ms). */
+const DELETE_ACCOUNT_TIMEOUT_MS = 30000;
 
 let listenerStarted = false;
 
@@ -167,6 +176,57 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
           clearPronunciationRecordings(previousUserId),
           cancelReviewReminders(),
         ]);
+      },
+      clearSession: () => set({ session: null }),
+    });
+  },
+
+  deleteAccount: async () => {
+    const userId = get().session?.user.id;
+    return runAccountDeletion(userId, {
+      isOnline: () => isServerReachable(
+        process.env.EXPO_PUBLIC_SUPABASE_URL,
+        process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+      ),
+      revokeOwner: revokeReminderOwner,
+      restoreOwner: setReminderOwner,
+      // Silinecek hesap istemciden gönderilmez: sunucu, isteğin erişim belirtecinden kullanıcıyı kendisi doğrular.
+      remoteDelete: async () => {
+        try {
+          return interpretDeleteResponse(await supabase.functions.invoke('delete-account', {
+            body: { confirm: ACCOUNT_DELETE_CONFIRM_VALUE },
+            timeout: DELETE_ACCOUNT_TIMEOUT_MS,
+          }));
+        } catch {
+          return { ok: false, reason: 'network' };
+        }
+      },
+      wipeLocal: async (deletedUserId) => {
+        // Önce bellekteki store'lar (geç yazmalar silinen veriyi geri getirmesin), sonra kalıcı anahtarlar.
+        // Profil bekleyen kaydı yalnızca bu kullanıcınınkiyle sınırlıdır; telaffuz temizliği sahipliği doğrulayamadığı
+        // dosyayı silmez. `false` dönen adım (telaffuz/bildirim) tamamlanamamış temizliktir.
+        const steps = await Promise.allSettled([
+          useWordStore.getState().resetLocal(),
+          useUserStore.getState().resetLocal({ pendingOwnerId: deletedUserId }),
+          useSessionStore.getState().resetLocal(),
+          Promise.resolve(useAchievementStore.getState().reset()),
+          Promise.resolve(usePhrasebookStore.getState().reset()),
+          clearPronunciationRecordings(deletedUserId, { strict: true }),
+          cancelReviewReminders(),
+        ]);
+        let purgeError: unknown = null;
+        try {
+          await purgeAccountStorage(deletedUserId);
+        } catch (error) {
+          purgeError = error;
+        }
+        const incomplete = steps.some(step => step.status === 'rejected' || (step.status === 'fulfilled' && step.value === false));
+        if (purgeError || incomplete) throw purgeError ?? new Error('Yerel temizlik eksik kaldı');
+      },
+      // Sunucuda hesap artık yok: ağ çağrısı yapmadan yalnızca yerel oturum kaydı silinir.
+      endSession: async () => {
+        const { error } = await supabase.auth.signOut({ scope: 'local' });
+        if (error) throw error;
       },
       clearSession: () => set({ session: null }),
     });
