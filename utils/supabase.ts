@@ -42,6 +42,9 @@ export const supabase: SupabaseClient = connectionVerdict.allow
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,
+      // PKCE: e-posta bağlantıları ham belirteç yerine tek kullanımlık kod taşır; kod yalnızca akışı başlatan cihazın yerel
+      // doğrulayıcısıyla değiştirilir (derin bağlantıyla başkasının oturumu açılamaz). Bkz. docs/auth-links.md.
+      flowType: 'pkce',
     },
   })
   : (createBlockedClient() as SupabaseClient);

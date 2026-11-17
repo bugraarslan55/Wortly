@@ -124,6 +124,14 @@ function AppRoot() {
     void syncProfile(session.user.id);
   }, [isAuthLoaded, isLoaded, session?.user.id, syncProfile]);
 
+  // Şifre sıfırlama: auth/reset, Stack.Protected ile YALNIZCA oturum varken açıktır. Kod değişimi oturumu kurar kurmaz yapılan
+  // anlık bir router.replace, koruma henüz güncellenmediği için ana ekrana düşerdi; bu yüzden yönlendirme, oturum ve koruma
+  // güncellendikten SONRA (bu efektte) yapılır. Ekran yine de kapıdan geçmeden şifre formunu göstermez (utils/recovery-gate.ts).
+  const recoveryReady = useAuthStore(state => state.recoveryStatus === 'ready' && !!state.session && state.recoveryUserId === state.session.user.id);
+  useEffect(() => {
+    if (recoveryReady) router.replace('/auth/reset' as any);
+  }, [recoveryReady, router]);
+
   useEffect(() => {
     if (!isAuthLoaded || !areWordsLoaded || !session?.user.id) return;
     void syncWords(session.user.id);
@@ -377,106 +385,45 @@ function AppRoot() {
         <AchievementTracker />
         <ThemeProvider value={navigationTheme}>
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.warmWhite } }}>
-        <Stack.Screen
-          name="auth"
-          options={{ animation: 'fade' }}
-        />
-        <Stack.Screen
-          name="onboarding"
-          options={{ animation: 'fade' }}
-        />
-        <Stack.Screen
-          name="profile"
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="oturum-arsivi"
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="basarilarim"
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="mini-quiz"
-          options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
-        />
-        <Stack.Screen
-          name="analiz"
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="plan"
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="senaryolar/index"
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="senaryolar/[id]"
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="ifade-defterim"
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="hesabi-sil"
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="(tabs)"
-          options={{ animation: 'fade' }}
-        />
-        <Stack.Screen
-          name="konu/[id]/flashcard"
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="konu/[id]/kelimeler"
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="konu/[id]/alistirma"
-          options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
-        />
-        <Stack.Screen
-          name="alistirma/dogru-yanlis"
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="alistirma/dinle-sec"
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="alistirma/dinle-yaz"
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="alistirma/yazma"
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="alistirma/cumle"
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="alistirma/sonuc"
-          options={{ animation: 'fade' }}
-        />
-        <Stack.Screen
-          name="kelime/ekle"
-          options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
-        />
-        <Stack.Screen
-          name="kelime/calis"
-          options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
-        />
-        <Stack.Screen
-          name="kelime/[id]"
-          options={{ animation: 'slide_from_right' }}
-        />
+        {/* Index karar ekranıdır: oturum yoksa auth'a, oturum varsa uygulamaya gider. */}
+        <Stack.Screen name="index" />
+
+        {/* Doğrulama deep link'i oturum kurulmadan açılmalıdır. */}
+        <Stack.Screen name="auth/callback" options={{ animation: 'fade' }} />
+
+        {/* Oturumsuzken yalnızca giriş/kayıt ekranı açıktır. */}
+        <Stack.Protected guard={!session?.user.id}>
+          <Stack.Screen name="auth" options={{ animation: 'fade' }} />
+        </Stack.Protected>
+
+        {/* Oturum yoksa hiçbir özel ekran, doğrudan URL/deep link ile açılamaz. */}
+        <Stack.Protected guard={!!session?.user.id}>
+          <Stack.Screen name="auth/reset" options={{ animation: 'fade' }} />
+          <Stack.Screen name="onboarding" options={{ animation: 'fade' }} />
+          <Stack.Screen name="profile" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="oturum-arsivi" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="basarilarim" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="mini-quiz" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+          <Stack.Screen name="analiz" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="plan" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="senaryolar/index" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="senaryolar/[id]" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="ifade-defterim" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="hesabi-sil" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
+          <Stack.Screen name="konu/[id]/flashcard" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="konu/[id]/kelimeler" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="konu/[id]/alistirma" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+          <Stack.Screen name="alistirma/dogru-yanlis" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="alistirma/dinle-sec" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="alistirma/dinle-yaz" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="alistirma/yazma" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="alistirma/cumle" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="alistirma/sonuc" options={{ animation: 'fade' }} />
+          <Stack.Screen name="kelime/ekle" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+          <Stack.Screen name="kelime/calis" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+          <Stack.Screen name="kelime/[id]" options={{ animation: 'slide_from_right' }} />
+        </Stack.Protected>
         </Stack>
         </ThemeProvider>
       </SafeAreaProvider>

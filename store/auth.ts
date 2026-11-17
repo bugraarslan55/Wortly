@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import type { Session } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 import * as Linking from 'expo-linking';
-import { router } from 'expo-router';
 import { supabase } from '../utils/supabase';
 import { clearPronunciationRecordings } from '../utils/pronunciation-storage';
 import { cancelReviewReminders, revokeReminderOwner, setReminderOwner } from '../utils/review-reminder';
@@ -14,6 +13,8 @@ import {
   ACCOUNT_DELETE_CONFIRM_VALUE, interpretDeleteResponse, runAccountDeletion, type AccountDeletionResult,
 } from '../utils/account-deletion';
 import { isServerReachable } from '../utils/connectivity';
+import { APP_SCHEME, parseAuthLink } from '../utils/auth-link';
+import type { RecoveryStatus } from '../utils/recovery-gate';
 
 type AuthResult =
   | { ok: true; session: Session | null }
@@ -25,6 +26,15 @@ type PasswordResetResult =
 
 interface AuthStore {
   session: Session | null;
+  /**
+   * Şifre sıfırlama kapısı (utils/recovery-gate.ts): yeni şifre YALNIZCA bu cihazda doğrulanmış sıfırlama oturumunun hesabına
+   * uygulanır. `updateUser` açık oturumun hesabını güncellediğinden, doğrulanmamış bir bağlantıyla açık gmail oturumunun
+   * şifresi yanlışlıkla değiştirilebilirdi.
+   */
+  recoveryStatus: RecoveryStatus;
+  recoveryUserId: string | null;
+  /** Şifre güncellendi: sıfırlama yetkisini tüketir. */
+  finishRecovery: () => void;
   isLoaded: boolean;
   isBusy: boolean;
   initialize: () => Promise<void>;
@@ -42,6 +52,10 @@ const DELETE_ACCOUNT_TIMEOUT_MS = 30000;
 
 let listenerStarted = false;
 
+/** İşlenen PKCE kodları (aynı bağlantı bir oturumda bir kez değiştirilir). */
+const handledCodes = new Map<string, Promise<boolean>>();
+const MAX_HANDLED_CODES = 20;
+
 const getAuthMessage = (message: string) => {
   const normalized = message.toLowerCase();
   if (normalized.includes('invalid login credentials')) return 'E-posta veya şifre hatalı.';
@@ -54,6 +68,9 @@ const getAuthMessage = (message: string) => {
 
 export const useAuthStore = create<AuthStore>((set, get) => ({
   session: null,
+  recoveryStatus: 'none',
+  recoveryUserId: null,
+  finishRecovery: () => set({ recoveryStatus: 'none', recoveryUserId: null }),
   isLoaded: false,
   isBusy: false,
 
@@ -70,12 +87,19 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     if (!listenerStarted) {
       listenerStarted = true;
       supabase.auth.onAuthStateChange((event, session) => {
-        set({ session });
-        // Şifre kurtarma bağlantısı açıldığında Supabase bu olayı tetikler;
-        // kullanıcıyı doğrudan yeni şifre belirleme ekranına yönlendir.
-        if (event === 'PASSWORD_RECOVERY') {
-          router.replace('/auth/reset');
-        }
+        set(state => {
+          // Şifre kurtarma bağlantısı değiştirildiğinde Supabase bu olayı OLAYI TAŞIYAN oturumla tetikler: sıfırlama yetkisi o
+          // hesaba bağlanır. Oturum başka hesaba geçerse/kapanırsa eski yetki düşer (aynı hesabın jeton yenilemesi korur).
+          if (event === 'PASSWORD_RECOVERY' && session) {
+            return { session, recoveryStatus: 'ready' as const, recoveryUserId: session.user.id };
+          }
+          const keep = !!session && session.user.id === state.recoveryUserId;
+          return {
+            session,
+            recoveryUserId: keep ? state.recoveryUserId : null,
+            recoveryStatus: keep ? state.recoveryStatus : (state.recoveryStatus === 'verifying' ? 'verifying' : 'none'),
+          };
+        });
       });
     }
   },
@@ -86,7 +110,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     set({ isBusy: false });
 
     if (error) return { ok: false, message: getAuthMessage(error.message) };
-    set({ session: data.session });
+    set({ session: data.session, recoveryStatus: 'none', recoveryUserId: null });
     return { ok: true, session: data.session };
   },
 
@@ -102,7 +126,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     set({ isBusy: false });
 
     if (error) return { ok: false, message: getAuthMessage(error.message) };
-    set({ session: data.session });
+    set({ session: data.session, recoveryStatus: 'none', recoveryUserId: null });
     return { ok: true, session: data.session };
   },
 
@@ -119,42 +143,52 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   handleAuthUrl: async (url) => {
-    const { queryParams } = Linking.parse(url);
-    const getQueryParam = (name: string) => {
-      const value = queryParams?.[name];
-      if (Array.isArray(value)) return value[0] ?? null;
-      return typeof value === 'string' ? value : null;
-    };
+    // Tek geçit: yalnızca uygulamanın kendi ürettiği auth/callback ve auth/reset bağlantılarındaki tek kullanımlık PKCE kodu
+    // kabul edilir. Ham belirteç taşıyan HİÇBİR bağlantı oturum kuramaz (belirteçle oturum kurma yolu kaldırıldı); başka
+    // yol/şema reddedilir (utils/auth-link.ts). Kod, akışı başlatan cihazın yerel doğrulayıcısıyla değiştirilir; doğrulayıcı
+    // yoksa/uyuşmuyorsa değişim başarısız olur ve mevcut oturum DEĞİŞMEZ.
+    const link = parseAuthLink(url, {
+      appScheme: APP_SCHEME,
+      allowExpoDev: typeof __DEV__ !== 'undefined' && __DEV__,
+      webOrigin: Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.origin : null,
+    });
+    if (!link) return false;
 
-    // Supabase password-recovery links return the session in the URL hash
-    // (`access_token`, `refresh_token`, `type=recovery`). The client has
-    // detectSessionInUrl disabled, so consume that hash explicitly.
-    const hash = url.includes('#') ? url.slice(url.indexOf('#') + 1) : '';
-    const hashParams = new URLSearchParams(hash);
-    const accessToken = hashParams.get('access_token') ?? getQueryParam('access_token');
-    const refreshToken = hashParams.get('refresh_token') ?? getQueryParam('refresh_token');
-    const authType = hashParams.get('type') ?? getQueryParam('type');
+    // Aynı bağlantıyı layout ve callback ekranı birlikte işleyebilir; tek kullanımlık kod bir kez gönderilir (ikinci deneme,
+    // başka bir bekleyen akışın doğrulayıcısıyla eşleşip onu tüketebilirdi).
+    const known = handledCodes.get(link.code);
+    if (known) return known;
 
-    if (accessToken && refreshToken) {
-      const { data, error } = await supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken,
-      });
-      if (error) return false;
+    // Şifre sıfırlama yolu: kod değişimi bitene dek form "doğrulanıyor" durumundadır; başarısızlıkta açık oturumun hesabına
+    // şifre YAZILMASIN diye durum 'failed' olur (utils/recovery-gate.ts).
+    if (link.route === 'reset') set({ recoveryStatus: 'verifying', recoveryUserId: null });
 
-      set({ session: data.session });
-      if (authType === 'recovery') router.replace('/auth/reset');
-      return true;
-    }
-
-    const code = getQueryParam('code');
-    if (!code) return false;
-
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-    if (error) return false;
-
-    set({ session: data.session });
-    return true;
+    const exchange = (async () => {
+      try {
+        const { data, error } = await supabase.auth.exchangeCodeForSession(link.code);
+        if (error || !data?.session) {
+          if (link.route === 'reset') set({ recoveryStatus: 'failed', recoveryUserId: null });
+          return false;
+        }
+        // (supabase-js `redirectType`'ı çalışma zamanında döndürür; tip tanımında yoktur.)
+        const { redirectType } = data as typeof data & { redirectType?: string | null };
+        // Şifre sıfırlamayı başlatan istek doğrulayıcıyı "recovery" olarak işaretler; yönlendirme ve şifre yetkisi URL'ye değil
+        // buna bağlıdır. Yetki, kodu değiştirerek kurulan oturumun hesabına verilir (açık eski oturuma değil).
+        if (redirectType === 'recovery') {
+          // Yönlendirme burada DEĞİL, app/_layout.tsx içinde (oturum ve Stack.Protected güncellendikten sonra) yapılır.
+          set({ session: data.session, recoveryStatus: 'ready', recoveryUserId: data.session.user.id });
+        } else {
+          set({ session: data.session, recoveryStatus: link.route === 'reset' ? 'failed' : 'none', recoveryUserId: null });
+        }
+        return true;
+      } catch {
+        if (link.route === 'reset') set({ recoveryStatus: 'failed', recoveryUserId: null });
+        return false;
+      }
+    })();
+    handledCodes.set(link.code, exchange);
+    if (handledCodes.size > MAX_HANDLED_CODES) handledCodes.delete(handledCodes.keys().next().value as string);
+    return exchange;
   },
 
   signOut: async () => {
@@ -177,7 +211,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
           cancelReviewReminders(),
         ]);
       },
-      clearSession: () => set({ session: null }),
+      clearSession: () => set({ session: null, recoveryStatus: 'none', recoveryUserId: null }),
     });
   },
 
@@ -228,7 +262,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         const { error } = await supabase.auth.signOut({ scope: 'local' });
         if (error) throw error;
       },
-      clearSession: () => set({ session: null }),
+      clearSession: () => set({ session: null, recoveryStatus: 'none', recoveryUserId: null }),
     });
   },
 }));
