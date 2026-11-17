@@ -20,6 +20,16 @@
         "EXPO_PUBLIC_BUILD_PROFILE": "preview"
       }
     },
+    "staging": {
+      "distribution": "store",
+      "environment": "preview",
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+      "env": {
+        "EXPO_PUBLIC_BUILD_PROFILE": "preview"
+      }
+    },
     "production": {
       "ios": {
         "resourceClass": "m-medium"

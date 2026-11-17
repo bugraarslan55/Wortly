@@ -10,7 +10,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.wortly.app",
-      "buildNumber": "12",
+      "buildNumber": "13",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "Wortly’nin dosya sistemi, uygulamaya bir fotoğraf kitaplığı dosya adresi verildiğinde bu öğeyi okuyabilir. Ses kayıtların ve öğrenme verilerin uygulamanın kendi alanında saklanır.",
