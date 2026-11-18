@@ -14,6 +14,7 @@ export function validateGrammarCatalog(): string[] {
     }
     for (const [index, question] of lesson.questions.entries()) {
       if (!question.prompt.trim() || !question.explanation.trim()) errors.push(`${lesson.id}/${index}: eksik soru açıklaması`);
+      if (!question.prompt.includes('___')) errors.push(`${lesson.id}/${index}: soru metninde boşluk (___) yok`);
       if (question.correctIndex < 0 || question.correctIndex >= question.options.length) errors.push(`${lesson.id}/${index}: geçersiz doğru seçenek`);
       if (question.options.some(option => !option.trim()) || new Set(question.options).size !== question.options.length) {
         errors.push(`${lesson.id}/${index}: boş veya yinelenen seçenek`);
