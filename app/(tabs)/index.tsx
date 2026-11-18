@@ -140,6 +140,22 @@ export default function HomeScreen() {
           <AppIcon name="chevron.right" size={14} color={colors.golden} />
         </TouchableOpacity>
 
+        <TouchableOpacity
+          style={styles.linkCard}
+          onPress={() => router.push('/gramer' as any)}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="Gramer Rehberi"
+          accessibilityHint="Sıfat ve edat derslerini açar"
+        >
+          <IconTile name="graduationcap" size={40} />
+          <View style={styles.linkText}>
+            <Text style={styles.linkTitle}>Gramer Rehberi</Text>
+            <Text style={styles.linkSubtitle}>Sıfatlar ve edatlar · kısa dersler</Text>
+          </View>
+          <AppIcon name="chevron.right" size={14} color={colors.outline} />
+        </TouchableOpacity>
+
         {customWordCount > 0 && (
           <TouchableOpacity
             style={styles.linkCard}

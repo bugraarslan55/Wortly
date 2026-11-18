@@ -406,6 +406,8 @@ function AppRoot() {
           <Stack.Screen name="mini-quiz" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
           <Stack.Screen name="analiz" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="plan" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="gramer/index" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="gramer/[id]" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="senaryolar/index" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="senaryolar/[id]" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="ifade-defterim" options={{ animation: 'slide_from_right' }} />
