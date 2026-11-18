@@ -104,7 +104,7 @@ export function PrimaryButton({ label, onPress, disabled, loading, icon, accessi
       accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled: !!inactive, busy: !!loading }}
     >
-      <Text style={styles.primaryButtonText} numberOfLines={1}>{label}</Text>
+      <Text style={styles.primaryButtonText}>{label}</Text>
       {icon && <AppIcon name={icon} size={15} color={colors.onGolden} />}
     </TouchableOpacity>
   );
@@ -128,7 +128,7 @@ export function SecondaryButton({
       accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled: !!disabled }}
     >
-      <Text style={[styles.secondaryButtonText, { color }]} numberOfLines={1}>{label}</Text>
+      <Text style={[styles.secondaryButtonText, { color }]}>{label}</Text>
     </TouchableOpacity>
   );
 }
@@ -400,12 +400,12 @@ const useStyles = makeStyles(Colors => StyleSheet.create({
 
   button: {
     minHeight: 52, borderRadius: BorderRadius.lg, borderCurve: 'continuous',
-    paddingHorizontal: Spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm,
+    paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm,
   },
   primaryButton: { backgroundColor: Colors.golden, ...Shadows.level1 },
-  primaryButtonText: { fontSize: 16, fontWeight: '700', color: Colors.onGolden },
+  primaryButtonText: { flexShrink: 1, textAlign: 'center', fontSize: 16, fontWeight: '700', color: Colors.onGolden },
   secondaryButton: { borderWidth: 1.5, backgroundColor: 'transparent' },
-  secondaryButtonText: { fontSize: 15, fontWeight: '600' },
+  secondaryButtonText: { flexShrink: 1, textAlign: 'center', fontSize: 15, fontWeight: '600' },
   buttonInactive: { opacity: 0.45 },
 
   segmentTrack: {
@@ -423,7 +423,7 @@ const useStyles = makeStyles(Colors => StyleSheet.create({
   segmentSub: { fontSize: 11, color: Colors.onSurfaceVariant, marginTop: 1 },
 
   chip: {
-    minHeight: 40, paddingLeft: 14, paddingRight: 8, flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    minHeight: Spacing.touchTargetMin, paddingLeft: 14, paddingRight: 8, flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
     borderRadius: BorderRadius.full, backgroundColor: Colors.surfaceContainerLowest,
     borderWidth: 1, borderColor: Colors.outlineVariant,
   },

@@ -234,6 +234,9 @@ export default function KelimeDetayScreen() {
                         setArticle(art);
                         setErrors(current => ({ ...current, duplicate: undefined }));
                       }}
+                      accessibilityRole="button"
+                      accessibilityLabel={art ? `Artikel ${art}` : 'Artikel yok'}
+                      accessibilityState={{ selected: isActive }}
                     >
                       <Text style={[styles.articleBtnText, isActive && { color: palette.foreground }]}>
                         {art || 'Yok'}
@@ -394,7 +397,7 @@ const useStyles = makeStyles(Colors => StyleSheet.create({
   editForm: { width: '100%', gap: Spacing.sm },
   editLabel: { fontSize: 13, fontWeight: '600', color: Colors.primary },
   articleRow: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.sm },
-  articleBtn: { flex: 1, height: 40, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.surfaceContainer, borderRadius: 10, borderWidth: 1.5, borderColor: 'transparent' },
+  articleBtn: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.surfaceContainer, borderRadius: 10, borderWidth: 1.5, borderColor: 'transparent' },
   articleBtnText: { fontSize: 13, fontWeight: '600', color: Colors.onSurfaceVariant },
   editInput: { backgroundColor: Colors.surfaceContainer, borderRadius: 12, padding: Spacing.md, fontSize: 15, color: Colors.primary },
   editInputError: { borderWidth: 1.5, borderColor: Colors.error, backgroundColor: Colors.errorContainer },

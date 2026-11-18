@@ -154,7 +154,7 @@ export default function DogruYanlisScreen() {
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
           <Text style={styles.emptyText}>Kelime bulunamadı</Text>
-          <TouchableOpacity style={styles.backBtn} onPress={() => goBack(router)}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => goBack(router)} accessibilityRole="button" accessibilityLabel="Geri">
             <Text style={styles.backBtnText}>Geri</Text>
           </TouchableOpacity>
         </View>
@@ -219,6 +219,8 @@ export default function DogruYanlisScreen() {
             style={[styles.answerBtn, styles.wrongBtn]}
             onPress={() => handleAnswer(false)}
             activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Yanlış"
           >
             <Text style={styles.answerBtnEmoji}>✗</Text>
             <Text style={styles.answerBtnText}>Yanlış</Text>
@@ -227,13 +229,21 @@ export default function DogruYanlisScreen() {
             style={[styles.answerBtn, styles.correctBtn]}
             onPress={() => handleAnswer(true)}
             activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Doğru"
           >
             <Text style={styles.answerBtnEmoji}>✓</Text>
             <Text style={styles.answerBtnText}>Doğru</Text>
           </TouchableOpacity>
         </View>
       ) : (
-        <TouchableOpacity style={styles.nextBtn} onPress={handleNext} activeOpacity={0.85}>
+        <TouchableOpacity
+          style={styles.nextBtn}
+          onPress={handleNext}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel={currentIndex + 1 >= quizItems.length ? 'Sonuçları Gör' : 'Devam Et'}
+        >
           <Text style={styles.nextBtnText}>
             {currentIndex + 1 >= quizItems.length ? 'Sonuçları Gör' : 'Devam Et'}
           </Text>
@@ -271,15 +281,15 @@ const useStyles = makeStyles(Colors => StyleSheet.create({
   correctAnswerText: { fontSize: 16, fontWeight: '700', color: Colors.success },
   resultEmoji: { marginTop: Spacing.md, fontSize: 18, fontWeight: '700', color: Colors.primary },
   buttonRow: { flexDirection: 'row', paddingHorizontal: Spacing.marginMain, paddingBottom: 32, gap: Spacing.md },
-  answerBtn: { flex: 1, height: 64, borderRadius: BorderRadius.xl, alignItems: 'center', justifyContent: 'center', gap: 4 },
+  answerBtn: { flex: 1, minHeight: 64, paddingVertical: Spacing.sm, borderRadius: BorderRadius.xl, alignItems: 'center', justifyContent: 'center', gap: 4 },
   wrongBtn: { backgroundColor: Colors.errorContainer },
   correctBtn: { backgroundColor: Colors.successContainer },
   answerBtnEmoji: { fontSize: 22, color: Colors.primary },
   answerBtnText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
-  nextBtn: { marginHorizontal: Spacing.marginMain, marginBottom: 32, height: 54, backgroundColor: Colors.golden, borderRadius: BorderRadius.lg, alignItems: 'center', justifyContent: 'center' },
-  nextBtnText: { fontSize: 16, fontWeight: '700', color: Colors.onGolden },
+  nextBtn: { marginHorizontal: Spacing.marginMain, marginBottom: 32, minHeight: 54, paddingVertical: Spacing.sm, backgroundColor: Colors.golden, borderRadius: BorderRadius.lg, alignItems: 'center', justifyContent: 'center' },
+  nextBtnText: { textAlign: 'center', fontSize: 16, fontWeight: '700', color: Colors.onGolden },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl, gap: Spacing.md },
   emptyText: { fontSize: 16, color: Colors.onSurfaceVariant },
-  backBtn: { backgroundColor: Colors.golden, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12 },
+  backBtn: { minHeight: 44, justifyContent: 'center', backgroundColor: Colors.golden, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12 },
   backBtnText: { fontSize: 14, fontWeight: '700', color: Colors.onGolden },
 }));
