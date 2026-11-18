@@ -412,7 +412,7 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
                   accessibilityState={{ selected: chosen }}
                 >
                   <View style={[styles.optionLetter, chosen && styles.optionLetterChosen]}>
-                    <Text style={styles.optionLetterText}>{OPTION_LETTERS[optionIndex]}</Text>
+                    <Text style={[styles.optionLetterText, chosen && styles.optionLetterTextChosen]}>{OPTION_LETTERS[optionIndex]}</Text>
                   </View>
                   <View style={styles.choiceTexts}>
                     <Text style={styles.choiceGerman}>{option.german}</Text>
@@ -687,6 +687,7 @@ const useStyles = makeStyles(Colors => StyleSheet.create({
   },
   optionLetterWrong: { backgroundColor: Colors.surfaceContainerLowest },
   optionLetterText: { fontSize: 13, fontWeight: '700', color: Colors.primary },
+  optionLetterTextChosen: { color: Colors.onGolden },
   optionText: { flex: 1, fontSize: 16, fontWeight: '600', color: Colors.primary, lineHeight: 22 },
   optionTextWrong: { color: Colors.onErrorContainer },
   feedbackHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },

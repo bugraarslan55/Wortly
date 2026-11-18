@@ -436,7 +436,7 @@ const useStyles = makeStyles(Colors => StyleSheet.create({
   },
   chipCountSelected: { backgroundColor: Colors.golden },
   chipCountText: { fontSize: 11, fontWeight: '700', color: Colors.onSurfaceVariant, fontVariant: ['tabular-nums'] },
-  chipCountTextSelected: { color: Colors.primary },
+  chipCountTextSelected: { color: Colors.onGolden },
 
   search: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, minHeight: 48,

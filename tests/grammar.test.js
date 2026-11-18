@@ -2,6 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
+const fs = require('node:fs');
 
 const out = process.env.UTILS_OUT;
 if (!out) throw new Error('Bu testleri npm test ile çalıştırın.');
@@ -134,4 +135,35 @@ test('cevapsız ilerlenmez; son sorudan sonra sonuç gösterilir ve tekrar sıf�
   assert.equal(state.finished, true);
   assert.equal(state.correctCount, 1);
   assert.deepEqual(startGrammarQuiz(), { questionIndex: 0, selectedIndex: null, correctCount: 0, finished: false });
+});
+
+test('bozuk veya bilinmeyen kullanıcı seviyesi A1 sayılır; A1 dersi asla kilitlenmez, üst seviyeler kilitli kalır', () => {
+  for (const bad of ['C1', '', 'a1', 42, {}]) {
+    assert.equal(isGrammarLevelLocked('A1', bad), false, `A1 açık kalmalı (${String(bad)})`);
+    assert.equal(isGrammarLevelLocked('A2', bad), true);
+    assert.equal(isGrammarLevelLocked('B1', bad), true);
+  }
+  assert.equal(isGrammarLevelLocked('B1', null), true);
+  assert.equal(isGrammarLevelLocked('B1', 'B1'), false);
+});
+
+test('ders ekranı seviye kilidini doğrudan bağlantıda da uygular; liste kilitli seviyeyi göstermez', () => {
+  const root = path.resolve(__dirname, '..');
+  const lesson = fs.readFileSync(path.join(root, 'app', 'gramer', '[id].tsx'), 'utf8');
+  const list = fs.readFileSync(path.join(root, 'app', 'gramer', 'index.tsx'), 'utf8');
+  assert.match(lesson, /isGrammarLevelLocked\(lesson\.level, userLevel\)/, 'ders ekranı kilidi denetlemeli');
+  assert.ok(lesson.indexOf('isGrammarLevelLocked(lesson.level, userLevel)') < lesson.indexOf('startGrammarQuiz()'),
+    'kilit kontrolü quiz başlatmadan önce gelmeli');
+  assert.match(list, /isGrammarLevelLocked\(activeLevel, userLevel\)/, 'liste kilitli seviyeyi seçtirmemeli');
+});
+
+test('gramer bölümü hiçbir kalıcı depoya, eşitlemeye, seriye veya kelime ilerlemesine yazmaz', () => {
+  const root = path.resolve(__dirname, '..');
+  const files = ['app/gramer/index.tsx', 'app/gramer/[id].tsx', 'utils/grammar-quiz.ts', 'utils/grammar-validation.ts', 'constants/grammar.ts'];
+  const forbidden = [/async-storage/i, /mmkv/i, /supabase/i, /saveScenarioResult/, /updateStreak/, /useSessionStore/, /useWordStore/,
+    /useAchievementStore/, /usePhrasebookStore/, /expo-file-system/, /expo-notifications/];
+  for (const file of files) {
+    const source = fs.readFileSync(path.join(root, file), 'utf8');
+    for (const pattern of forbidden) assert.ok(!pattern.test(source), `${file}: ${pattern} içermemeli`);
+  }
 });
