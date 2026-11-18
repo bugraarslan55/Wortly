@@ -15,7 +15,7 @@ const VOICE_IDS = ['kafede-siparis', 'tren-istasyonu', 'markette-alisveris'];
 const choiceOf = (scenario) => scenario.steps.find(step => step.type === 'choice');
 const voiceScenarios = () => S.SCENARIOS.filter(scenario => choiceOf(scenario)?.voice === true);
 
-test('sesle cevap yalnızca seçili 3 A1 karar noktasında açık; diğer 25 senaryoda kapalı', () => {
+test('sesle cevap yalnızca seçili 3 A1 karar noktasında açık; diğer 48 senaryoda kapalı', () => {
   assert.deepEqual(voiceScenarios().map(scenario => scenario.id).sort(), [...VOICE_IDS].sort());
   for (const scenario of voiceScenarios()) assert.equal(scenario.level, 'A1', scenario.id);
   for (const scenario of S.SCENARIOS.filter(item => !VOICE_IDS.includes(item.id))) {
@@ -27,7 +27,7 @@ test('sesle cevap yalnızca seçili 3 A1 karar noktasında açık; diğer 25 sen
 test('sesli karar noktaları yapısal doğrulamadan geçer ve soru sayısı/puanlama etkilenmez', () => {
   for (const scenario of S.SCENARIOS) assert.deepEqual(E.validateScenario(scenario), [], scenario.id);
   const questions = S.SCENARIOS.reduce((sum, scenario) => sum + E.countQuestions(scenario.steps), 0);
-  assert.equal(questions, 119);
+  assert.equal(questions, 247);
   for (const scenario of voiceScenarios()) {
     const steps = scenario.steps;
     assert.equal(E.scoreScenario(steps, {}).total, steps.filter(step => step.type === 'reply').length);

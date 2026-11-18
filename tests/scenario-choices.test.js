@@ -16,14 +16,14 @@ const choiceIndexOf = (scenario) => scenario.steps.findIndex(step => step.type =
 const byLevel = (level) => S.SCENARIOS.filter(scenario => scenario.level === level);
 
 // ─── Kapsam: TÜM seviyeler ───────────────────────────────────────────────────
-test('tüm 28 senaryoda (A1, A2, B1) tam olarak bir karar noktası var', () => {
-  assert.equal(S.SCENARIOS.length, 28);
+test('tüm 51 senaryoda (A1, A2, B1) tam olarak bir karar noktası var', () => {
+  assert.equal(S.SCENARIOS.length, 51);
   for (const scenario of S.SCENARIOS) {
     assert.equal(E.countChoices(scenario.steps), 1, `${scenario.id}: tam bir karar noktası olmalı`);
   }
-  assert.equal(byLevel('A1').length, 7);
-  assert.equal(byLevel('A2').length, 11);
-  assert.equal(byLevel('B1').length, 10);
+  assert.equal(byLevel('A1').length, 15);
+  assert.equal(byLevel('A2').length, 20);
+  assert.equal(byLevel('B1').length, 16);
 });
 
 test('her senaryo yapısal doğrulamadan geçer (karar noktası dahil) ve oynanabilir', () => {
@@ -183,9 +183,9 @@ const solveAll = (steps, wrongAt = []) => {
   return progress;
 };
 
-test('karar noktaları soru sayılmaz: soru sayısı (119) ve her senaryonun puanlanan soru sayısı değişmez', () => {
+test('karar noktaları soru sayılmaz: soru sayısı (247) ve her senaryonun puanlanan soru sayısı değişmez', () => {
   const questions = S.SCENARIOS.reduce((sum, scenario) => sum + E.countQuestions(scenario.steps), 0);
-  assert.equal(questions, 119);
+  assert.equal(questions, 247);
   for (const scenario of S.SCENARIOS) {
     assert.equal(E.countQuestions(scenario.steps), scenario.steps.filter(step => step.type === 'reply').length);
     assert.equal(E.scoreScenario(scenario.steps, {}).total, E.countQuestions(scenario.steps));
@@ -285,7 +285,7 @@ test('bozuk karar noktası verisi oynanamaz sayılır (aynı seçenek, aynı yan
 
 test('seviye kilitleri, senaryo sayısı ve kimlikler korunur', () => {
   const ids = S.SCENARIOS.map(scenario => scenario.id);
-  assert.equal(new Set(ids).size, 28);
+  assert.equal(new Set(ids).size, 51);
   assert.equal(S.getScenarioById('kafede-siparis').level, 'A1');
   assert.equal(S.getScenarioById('doktor-randevu').level, 'A2');
   assert.equal(S.getScenarioById('is-gorusmesi').level, 'B1');

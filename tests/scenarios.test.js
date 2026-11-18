@@ -394,8 +394,8 @@ test('düzeltilen akış: markette kasiyer son cevaba uygun karşılık verir; r
   assert.equal(restaurant[serving - 1].type, 'reply');
 });
 
-test('senaryo ve soru sayıları: 28 senaryo, 119 soru', () => {
-  assert.equal(S.SCENARIOS.length, 28);
+test('senaryo ve soru sayıları: 51 senaryo, 247 soru', () => {
+  assert.equal(S.SCENARIOS.length, 51);
   const questions = S.SCENARIOS.reduce((sum, scenario) => sum + scenario.steps.filter(step => step.type === 'reply').length, 0);
-  assert.equal(questions, 119);
+  assert.equal(questions, 247);
 });

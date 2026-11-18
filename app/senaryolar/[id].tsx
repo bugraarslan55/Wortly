@@ -455,7 +455,7 @@ function ScenarioPlayer({ scenario, onExit }: { scenario: Scenario; onExit: () =
         >
           <Text style={styles.headerBackText}>{review ? '← Sonuç' : '← Geri'}</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>{scenario.title}</Text>
+        <Text style={styles.headerTitle} numberOfLines={2}>{scenario.title}</Text>
         <Text
           style={styles.headerProgress}
           accessibilityLabel={`${total} adımın ${position}. adımı`}
@@ -611,7 +611,7 @@ const useStyles = makeStyles(Colors => StyleSheet.create({
   messageText: { fontSize: 15, color: Colors.onSurfaceVariant, textAlign: 'center', lineHeight: 21 },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: Spacing.marginMain, height: 52, gap: Spacing.sm,
+    paddingHorizontal: Spacing.marginMain, minHeight: 52, paddingVertical: 4, gap: Spacing.sm,
   },
   headerBack: { minHeight: 44, minWidth: 64, justifyContent: 'center' },
   headerBackText: { fontSize: 15, fontWeight: '600', color: Colors.onSurfaceVariant },
