@@ -10,7 +10,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.wortly.app",
-      "buildNumber": "13",
+      "buildNumber": "14",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSSpeechRecognitionUsageDescription": "Wortly, senaryolarda Almanca cevabını sesle söylediğinde konuşmanı yazıya çevirmek için konuşma tanımayı kullanır. Tanıma yalnızca cihazında yapılır; ses ve metin cihazından çıkmaz."
