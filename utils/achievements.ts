@@ -68,6 +68,8 @@ export interface LearningSnapshot {
   profile: { streak?: number; lastStudyDate?: string } | null | undefined;
   /** Bulutta kayıtlı toplam oturum sayısı biliniyorsa (yerel liste 100 ile sınırlı olduğu için). */
   knownSessionTotal?: number | null;
+  /** Bulutta kayıtlı toplam senaryo sonucu sayısı biliniyorsa (öğrenme senkronu açık ve doğrulanmışsa). */
+  knownScenarioTotal?: number | null;
   /** Gün tanımı; verilmezse cihaz yerel günü. */
   dayKey?: DayKeyOf;
   /** Verilirse "öğrenilen kelime" sayımı yalnızca bilinen kelime kimliklerini sayar. */

@@ -101,6 +101,7 @@ export function useLearningSnapshot(now: number): LearningSnapshot {
   const sessions = useOwnSessions();
   const scenarioResults = useOwnScenarioResults();
   const sessionTotal = useSessionStore(state => state.sessionTotal);
+  const scenarioTotal = useSessionStore(state => state.scenarioTotal);
 
   // Silinmiş kelimelerin kalıntı ilerleme kayıtları "öğrenilen kelime" sayısına ve rozetlere girmesin.
   const isKnownWordId = useMemo(() => makeIsKnownWordId(words, isStaticWordId), [words]);
@@ -113,8 +114,9 @@ export function useLearningSnapshot(now: number): LearningSnapshot {
     words,
     profile,
     knownSessionTotal: sessionTotal && sessionTotal.userId === userId ? sessionTotal.count : null,
+    knownScenarioTotal: scenarioTotal && scenarioTotal.userId === userId ? scenarioTotal.count : null,
     isKnownWordId,
-  }), [now, sessions, scenarioResults, reviewStates, words, profile, sessionTotal, userId, isKnownWordId]);
+  }), [now, sessions, scenarioResults, reviewStates, words, profile, sessionTotal, scenarioTotal, userId, isKnownWordId]);
 }
 
 export function useDailyTasks(): DailyTask[] {
